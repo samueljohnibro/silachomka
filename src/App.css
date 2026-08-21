@@ -3132,9 +3132,9 @@ footer span { color: var(--muted); }
 .exclusive-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(8, 6, 16, 0.38);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(4, 3, 8, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   z-index: 9999;
   display: grid;
   place-items: center;
@@ -3148,27 +3148,26 @@ footer span { color: var(--muted); }
 }
 
 .exclusive-modal-content {
-  background: rgba(20, 16, 36, 0.58);
-  border: 1px solid rgba(223, 194, 125, 0.45);
+  background: #0d0a17;
+  background: linear-gradient(180deg, #181329 0%, #0c0a15 100%);
+  border: 1px solid rgba(223, 194, 125, 0.38);
   border-radius: 12px;
   max-width: 780px;
   width: 100%;
   max-height: 88vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45), 0 0 35px rgba(223, 194, 125, 0.18), inset 0 1px 2px rgba(255, 255, 255, 0.15);
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.95), 0 0 45px rgba(223, 194, 125, 0.2), inset 0 1px 2px rgba(255, 255, 255, 0.12);
   overflow: hidden;
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
 .exclusive-modal-header {
   padding: 24px 28px;
-  border-bottom: 1px solid rgba(223, 194, 125, 0.25);
+  border-bottom: 1px solid rgba(223, 194, 125, 0.22);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  background: rgba(223, 194, 125, 0.08);
+  background: rgba(223, 194, 125, 0.06);
 }
 
 .exclusive-modal-title {
@@ -3216,22 +3215,20 @@ footer span { color: var(--muted); }
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  padding: 14px 18px;
+  background: rgba(22, 18, 36, 0.95);
+  border: 1px solid rgba(223, 194, 125, 0.18);
+  border-radius: 8px;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
   transition: all var(--transition-fast) ease;
 }
 
 .exclusive-modal-item:hover {
-  background: rgba(223, 194, 125, 0.14);
+  background: rgba(35, 28, 58, 0.98);
   border-color: var(--gold);
   transform: translateX(4px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), 0 0 15px var(--gold-glow-soft);
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.5), 0 0 20px var(--gold-glow-soft);
 }
 
 .exclusive-modal-thumb {
