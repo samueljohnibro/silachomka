@@ -122,7 +122,7 @@ const releases = [
     edition: 3,
     date: "2025-11-07",
     displayDate: "Friday, 7th November, 2025",
-    cover: "/covers/item5.jpeg",
+    cover: "/covers/item5.jpg",
     platforms: {
       spotify: "https://open.spotify.com/album/1zQDrUyahKBQRmaQJIXlwr?si=gAkkiwg7TRuDzL4GX-S9iw",
       appleMusic: "https://music.apple.com/us/album/item5-single/1849706971",
@@ -274,7 +274,7 @@ const releases = [
     edition: 3,
     date: "2025-03-07",
     displayDate: "Friday, 7th March, 2025",
-    cover: "/covers/savage.png",
+    cover: "/covers/savage.jpg",
     platforms: {
       spotify: "https://open.spotify.com/album/4cnno3w3u69MfOevcaP6PB?si=efRouRczTwuU5H0G_oBkNg",
       appleMusic: "https://music.apple.com/us/album/savage-ep/1798338197",
