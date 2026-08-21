@@ -7,11 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "publish": "node scripts/publish.js",
+    "add:post": "node scripts/publish.js post",
+    "add:beat": "node scripts/publish.js beat"
   },
   "dependencies": {
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

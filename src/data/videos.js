@@ -1,0 +1,105 @@
+// src/data/videos.js
+
+const videos = [
+  {
+    id: "facto-visualizer",
+    title: "facto (Official Visualizer)",
+    subtitle: "Track 4 off NOISEMAKER EP",
+    category: "Visualizer",
+    youtubeId: "sVA_MkT8D3c",
+    youtubeUrl: "https://youtu.be/sVA_MkT8D3c?si=vHC8XzLZrs6_SmXj",
+    aspectRatio: "16:9",
+    featuring: [],
+    links: {
+      youtube: "https://youtu.be/sVA_MkT8D3c?si=vHC8XzLZrs6_SmXj",
+    },
+  },
+  {
+    id: "im-the-man-portrait",
+    title: "I'm the Man (Visualizer: Portrait)",
+    subtitle: "feat. Skazz & MLT • SAVAGE. EP",
+    category: "Visualizer",
+    youtubeId: "3fu-qmt_NSs",
+    youtubeUrl: "https://youtu.be/3fu-qmt_NSs?si=2h0ePShUI-k_jNCR",
+    aspectRatio: "9:16",
+    featuring: ["Skazz", "MLT"],
+    links: {
+      youtube: "https://youtu.be/3fu-qmt_NSs?si=2h0ePShUI-k_jNCR",
+    },
+  },
+  {
+    id: "im-the-man-visualizer",
+    title: "I'm the Man (Official Visualizer)",
+    subtitle: "feat. Skazz & MLT • SAVAGE. EP",
+    category: "Visualizer",
+    youtubeId: "Nbxvy6lnnrw",
+    youtubeUrl: "https://youtu.be/Nbxvy6lnnrw?si=-369CD9r97q5-HfC",
+    aspectRatio: "16:9",
+    featuring: ["Skazz", "MLT"],
+    links: {
+      youtube: "https://youtu.be/Nbxvy6lnnrw?si=-369CD9r97q5-HfC",
+    },
+  },
+  {
+    id: "t4p-lyrics-video",
+    title: "T4P (Talford Ongolo Jnr for SGA President)",
+    subtitle: "Official Lyrics Video & Anthem",
+    category: "Lyric Video",
+    youtubeId: "aG0p_RcJ02g",
+    youtubeUrl: "https://youtu.be/aG0p_RcJ02g?si=UiwffxO0ZKfk3-b7",
+    aspectRatio: "16:9",
+    featuring: [],
+    links: {
+      youtube: "https://youtu.be/aG0p_RcJ02g?si=UiwffxO0ZKfk3-b7",
+      audiomack: "https://audiomack.com/silachomka/song/t4p-talford-ongolo-jnr-for-sga-president",
+      soundcloud: "https://soundcloud.com/silachomka/t4p-talford-ongolo-jnr-for-sga-president",
+    },
+  },
+  {
+    id: "prettyboy-do-different-cover",
+    title: "It's Different — Prettyboy D-O (Cover)",
+    subtitle: "Vocal Performance & Sound Flip",
+    category: "Vocal Cover",
+    youtubeId: "SMoESsUwhxc",
+    youtubeUrl: "https://youtu.be/SMoESsUwhxc?si=8pAYxHMFcy7dWtLO",
+    aspectRatio: "16:9",
+    featuring: [],
+    links: {
+      youtube: "https://youtu.be/SMoESsUwhxc?si=8pAYxHMFcy7dWtLO",
+      audiomack: "https://audiomack.com/silachomka/song/its-different-by-prettyboy-d-o-cover",
+      soundcloud: "https://soundcloud.com/silachomka/its-different-by-prettyboy-d-o-cover",
+    },
+  },
+  {
+    id: "headie-one-pound-signs-cover",
+    title: "Pound Signs — Headie One (Cover)",
+    subtitle: "UK Drill into Afro-Fusion Reimagination",
+    category: "Vocal Cover",
+    youtubeId: "9BjLFd2rhvQ",
+    youtubeUrl: "https://youtu.be/9BjLFd2rhvQ?si=7MI8TrYB92Fz-6m_",
+    aspectRatio: "16:9",
+    featuring: [],
+    links: {
+      youtube: "https://youtu.be/9BjLFd2rhvQ?si=7MI8TrYB92Fz-6m_",
+      audiomack: "https://audiomack.com/silachomka/song/pound-signs-by-headie-one-cover",
+      soundcloud: "https://soundcloud.com/silachomka/pound-signs-by-headie-one-cover",
+    },
+  },
+  {
+    id: "drake-whats-next-cover",
+    title: "What's Next — Drake (Cover)",
+    subtitle: "Freestyle & Studio Vocal Exercise",
+    category: "Freestyle Cover",
+    youtubeId: "kraEKDO08PE",
+    youtubeUrl: "https://youtu.be/kraEKDO08PE?si=6DmSMElLNz8w9Z8m",
+    aspectRatio: "16:9",
+    featuring: [],
+    links: {
+      youtube: "https://youtu.be/kraEKDO08PE?si=6DmSMElLNz8w9Z8m",
+      audiomack: "https://audiomack.com/silachomka/song/whats-next-by-drake-cover",
+      soundcloud: "https://soundcloud.com/silachomka/whats-next-by-drake-cover",
+    },
+  },
+];
+
+export default videos;
