@@ -12,7 +12,7 @@ import {
 
 import { useChomkaStore } from "./data/store";
 import { ARTIST_SOCIALS, ECOSYSTEM_SOCIALS } from "./data/socials";
-import { DEFAULT_SOURCE, getReleaseSource, getTrackProducer } from "./data/credits";
+import { DEFAULT_SOURCE } from "./data/credits";
 
 import MediaSlideshow from "./components/MediaSlideshow";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
@@ -440,9 +440,6 @@ function ReleaseCard({
             {release.displayDate}
           </p>
 
-          <p className="credit-line">
-            <span>Source: {getReleaseSource(release)}</span>
-          </p>
         </div>
 
         <Link
@@ -654,8 +651,6 @@ function LatestReleaseSection({
             {trackCount === 1
               ? "track"
               : "tracks"}
-            <span className="credit-dot">·</span>
-            <span className="credit-line-inline">Source: {getReleaseSource(release)}</span>
           </p>
 
           <ol>
@@ -666,9 +661,6 @@ function LatestReleaseSection({
                 >
                   <span>
                     {track.title}
-                    <small className="track-producer">
-                      Produced by {getTrackProducer(track)}
-                    </small>
                   </span>
 
                   {track.featuring?.length > 0 && (

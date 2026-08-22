@@ -186,6 +186,8 @@ export default function StudioPublisherPage() {
      2. MUSIC RELEASE FORM STATE
      ========================================================= */
   const [releaseTitle, setReleaseTitle] = useState("");
+  const [releaseSources, setReleaseSources] = useState(["chomkaMUSIC™"]);
+  const [newSourceInput, setNewSourceInput] = useState("");
   const [releaseEdition, setReleaseEdition] = useState("1");
   const [releaseDate, setReleaseDate] = useState(todayStr);
   const [releaseDisplayDate, setReleaseDisplayDate] = useState(todayDisplay);
@@ -234,6 +236,8 @@ export default function StudioPublisherPage() {
       title: "Track 1",
       featuring: [],
       newFeatInput: "",
+      producers: ["silachomka"],
+      newProducerInput: "",
       platforms: {
         spotify: "",
         appleMusic: "",
@@ -245,6 +249,17 @@ export default function StudioPublisherPage() {
     },
   ]);
 
+  const handleAddSource = () => {
+    const src = newSourceInput.trim();
+    if (!src) return;
+    setReleaseSources((prev) => [...prev, src]);
+    setNewSourceInput("");
+  };
+
+  const handleRemoveSource = (index) => {
+    setReleaseSources((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleAddTrack = () => {
     setTracks((prev) => [
       ...prev,
@@ -252,6 +267,8 @@ export default function StudioPublisherPage() {
         title: `Track ${prev.length + 1}`,
         featuring: [],
         newFeatInput: "",
+        producers: ["silachomka"],
+        newProducerInput: "",
         platforms: {
           spotify: "",
           appleMusic: "",
@@ -309,6 +326,36 @@ export default function StudioPublisherPage() {
           ? {
               ...t,
               featuring: t.featuring.filter((_, fIdx) => fIdx !== featIndex),
+            }
+          : t
+      )
+    );
+  };
+
+  const handleAddProducer = (trackIndex) => {
+    const track = tracks[trackIndex];
+    const prod = track.newProducerInput.trim();
+    if (!prod) return;
+    setTracks((prev) =>
+      prev.map((t, i) =>
+        i === trackIndex
+          ? {
+              ...t,
+              producers: [...t.producers, prod],
+              newProducerInput: "",
+            }
+          : t
+      )
+    );
+  };
+
+  const handleRemoveProducer = (trackIndex, prodIndex) => {
+    setTracks((prev) =>
+      prev.map((t, i) =>
+        i === trackIndex
+          ? {
+              ...t,
+              producers: t.producers.filter((_, pIdx) => pIdx !== prodIndex),
             }
           : t
       )
@@ -399,6 +446,7 @@ export default function StudioPublisherPage() {
         const cleanTracks = tracks.map((t) => ({
           title: t.title,
           featuring: t.featuring,
+          producers: t.producers,
           platforms: Object.fromEntries(
             Object.entries(t.platforms).filter(([, val]) => Boolean(val.trim()))
           ),
@@ -417,6 +465,7 @@ export default function StudioPublisherPage() {
           displayDate: releaseDisplayDate || todayDisplay,
           cover: releaseCover,
           description: releaseDesc,
+          sources: releaseSources,
           platforms: {
             ...(releaseSpotify ? { spotify: releaseSpotify } : {}),
             ...(releaseApple ? { appleMusic: releaseApple } : {}),
@@ -1182,6 +1231,49 @@ export default function StudioPublisherPage() {
                   />
                 </div>
 
+                <div className="studio-field">
+                  <label>Project Sources</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+                    {releaseSources.map((src, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          background: "var(--surface)",
+                          border: "1px solid var(--line-gold)",
+                          padding: "4px 10px",
+                          borderRadius: "16px",
+                          fontSize: "12px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        {src}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSource(idx)}
+                          style={{ background: "none", border: "none", color: "#ff6b6b", cursor: "pointer", fontSize: "10px", padding: 0 }}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. chomkaMUSIC™"
+                      value={newSourceInput}
+                      onChange={(e) => setNewSourceInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSource())}
+                      className="studio-input"
+                    />
+                    <button type="button" onClick={handleAddSource} className="primary-button" style={{ padding: "0 16px" }}>
+                      +
+                    </button>
+                  </div>
+                </div>
+
                 <h3 style={{ fontSize: "14px", color: "var(--gold)", margin: "24px 0 12px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                   Project-Level Platform Links
                 </h3>
@@ -1383,6 +1475,56 @@ export default function StudioPublisherPage() {
                           <button
                             type="button"
                             onClick={() => handleAddFeature(tIdx)}
+                            className="primary-button"
+                            style={{ minHeight: "36px", padding: "0 16px" }}
+                          >
+                            + Add
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="studio-field">
+                        <label>Producers</label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+                          {track.producers?.map((prod, pIdx) => (
+                            <span
+                              key={pIdx}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "4px 10px",
+                                background: "var(--surface)",
+                                border: "1px solid var(--line-gold)",
+                                color: "var(--text)",
+                                borderRadius: "20px",
+                                fontSize: "11px",
+                              }}
+                            >
+                              {prod}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveProducer(tIdx, pIdx)}
+                                style={{ background: "none", border: "none", color: "#ff6b6b", cursor: "pointer", fontWeight: 700 }}
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+
+                        <div style={{ display: "flex", gap: "10px" }}>
+                          <input
+                            type="text"
+                            placeholder="Add producer..."
+                            value={track.newProducerInput || ""}
+                            onChange={(e) => handleTrackFieldChange(tIdx, "newProducerInput", e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddProducer(tIdx))}
+                            className="studio-input"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddProducer(tIdx)}
                             className="primary-button"
                             style={{ minHeight: "36px", padding: "0 16px" }}
                           >

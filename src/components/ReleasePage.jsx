@@ -5,8 +5,8 @@ import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
 import {
   absoluteUrl,
-  getReleaseSource,
-  getTrackProducer,
+  getReleaseSourceString,
+  getTrackProducerString,
 } from "../data/credits";
 
 /* =========================================================
@@ -82,9 +82,6 @@ function TrackRow({ track, index }) {
           </span>
           <span className="track-name-stack">
             <span className="track-name-text">{track.title}</span>
-            <span className="track-producer">
-              Produced by {getTrackProducer(track)}
-            </span>
           </span>
         </div>
 
@@ -106,18 +103,23 @@ function TrackRow({ track, index }) {
       {/* Expanded Links Dropdown */}
       {hasLinks && (
         <div className="track-dropdown-content">
-          {availablePlatforms.map((platform) => (
-            <a
-              key={platform.key}
-              href={trackPlatforms[platform.key]}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="track-platform-btn"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {platform.name} ↗
-            </a>
-          ))}
+          <div className="track-dropdown-producer">
+            Produced by <strong style={{ color: "var(--gold)" }}>{getTrackProducerString(track)}</strong>
+          </div>
+          <div className="track-platform-grid">
+            {availablePlatforms.map((platform) => (
+              <a
+                key={platform.key}
+                href={trackPlatforms[platform.key]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="track-platform-btn"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {platform.name} ↗
+              </a>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -211,8 +213,6 @@ export default function ReleasePage({ release }) {
             <span>
               {trackCount} {trackCount === 1 ? "Track" : "Tracks"}
             </span>
-            <span>•</span>
-            <span className="release-source-credit">Source: {source}</span>
           </div>
 
           <p className="release-description-text">
@@ -283,6 +283,10 @@ export default function ReleasePage({ release }) {
                 />
               ))}
             </div>
+          </div>
+          
+          <div className="release-source-footer" style={{ marginTop: "30px", textAlign: "center", color: "var(--muted)", fontSize: "13px" }}>
+            Project Source: <strong style={{ color: "var(--text)" }}>{getReleaseSourceString(release)}</strong>
           </div>
         </div>
       </div>
