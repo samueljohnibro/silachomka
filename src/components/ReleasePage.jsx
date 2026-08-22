@@ -1,7 +1,13 @@
 // src/components/ReleasePage.jsx
 
-import { useState } from "react";
 import { Link } from "react-router-dom";
+import SeoHead from "./SeoHead";
+import ShareLinkBox from "./ShareLinkBox";
+import {
+  absoluteUrl,
+  getReleaseSource,
+  getTrackProducer,
+} from "../data/credits";
 
 /* =========================================================
    HELPERS & PLATFORM CONFIG
@@ -74,7 +80,12 @@ function TrackRow({ track, index }) {
           <span className="track-idx">
             {String(index + 1).padStart(2, "0")}
           </span>
-          <span className="track-name-text">{track.title}</span>
+          <span className="track-name-stack">
+            <span className="track-name-text">{track.title}</span>
+            <span className="track-producer">
+              Produced by {getTrackProducer(track)}
+            </span>
+          </span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -118,8 +129,6 @@ function TrackRow({ track, index }) {
    ========================================================= */
 
 export default function ReleasePage({ release }) {
-  const [copied, setCopied] = useState(false);
-
   /* Fallback for missing release */
   if (!release) {
     return (
@@ -142,25 +151,22 @@ export default function ReleasePage({ release }) {
   const tracks = release.tracks || [];
   const trackCount = tracks.length;
   const releaseNumber = String(release.number ?? "").padStart(2, "0");
-  const currentUrl =
-    typeof window !== "undefined"
-      ? window.location.href
-      : `https://silachomka.com/release/${release.slug}`;
-      
+  const currentUrl = absoluteUrl(`/release/${release.slug}`);
+  const source = getReleaseSource(release);
   const spotifyEmbedUrl = getSpotifyEmbedUrl(platforms.spotify);
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(currentUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      // Fallback
-    }
-  };
 
   return (
     <main className="release-page-view">
+      <SeoHead
+        title={`${release.title} | silachomka`}
+        description={
+          release.description ||
+          `${release.title} is an official studio release by silachomka published under chomkaMUSIC™.`
+        }
+        path={`/release/${release.slug}`}
+        image={release.cover || "/og-image.png"}
+        imageAlt={`${release.title} official cover art`}
+      />
       {/* Breadcrumb Navigation */}
       <Link className="release-breadcrumb" to="/#music">
         ← All Music
@@ -205,6 +211,8 @@ export default function ReleasePage({ release }) {
             <span>
               {trackCount} {trackCount === 1 ? "Track" : "Tracks"}
             </span>
+            <span>•</span>
+            <span className="release-source-credit">Source: {source}</span>
           </div>
 
           <p className="release-description-text">
@@ -261,27 +269,7 @@ export default function ReleasePage({ release }) {
             </div>
           </div>
 
-          {/* Share & Copy Link Bar */}
-          <div className="share-link-box">
-            <span style={{ color: "var(--gold)", fontSize: "11px", fontWeight: 700 }}>
-              SHARE:
-            </span>
-            <input
-              type="text"
-              readOnly
-              value={currentUrl}
-              className="share-link-input"
-              aria-label="Direct release share link"
-            />
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              className="share-copy-btn"
-              aria-live="polite"
-            >
-              {copied ? "✓ Copied!" : "Copy Link"}
-            </button>
-          </div>
+          <ShareLinkBox url={currentUrl} />
 
           {/* Tracklist Card (Interactive) */}
           <div className="tracklist-card">

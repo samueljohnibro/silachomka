@@ -171,6 +171,8 @@ function normalizeBeat(beat, index) {
     id: beat.id ?? beat.slug ?? `beat-${index + 1}`,
     title: typeof beat.title === "string" ? beat.title : "",
     genre: typeof beat.genre === "string" ? beat.genre : "",
+    producer: beat.producer || "silachomka",
+    source: beat.source || "chomkaMUSIC™",
     video,
   };
 }

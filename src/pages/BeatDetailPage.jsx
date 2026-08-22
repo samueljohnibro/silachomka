@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
+import SeoHead from "../components/SeoHead";
+import ShareLinkBox from "../components/ShareLinkBox";
+import {
+  absoluteUrl,
+  getBeatProducer,
+  getBeatSource,
+} from "../data/credits";
 
 export default function BeatDetailPage() {
   const { id } = useParams();
@@ -189,6 +196,13 @@ export default function BeatDetailPage() {
 
   return (
     <main className="beat-detail-view">
+      <SeoHead
+        title={`${beat.title} | chomkaMUSIC™ Studio Beats | Silachomka`}
+        description={`${beat.title} is an original${beat.genre ? ` ${beat.genre}` : ""} instrumental by silachomka, available to listen to and license through chomkaMUSIC™ Studio.`}
+        path={`/beats/${beat.id}`}
+        image={beat.video ? beat.video.replace('.mp4', '.jpg') : (beat.ogImage || beat.image || beat.cover || beat.thumbnail || beat.poster || "/og-image.png")}
+        imageAlt={`${beat.title} beat by silachomka`}
+      />
       {/* Breadcrumb Navigation */}
       <Link className="release-breadcrumb" to="/beats">
         ← All Beats
@@ -203,6 +217,7 @@ export default function BeatDetailPage() {
             {beat.video ? (
               <video
                 src={beat.video}
+                poster={beat.video.replace('.mp4', '.jpg')}
                 autoPlay
                 muted
                 loop
@@ -321,9 +336,17 @@ export default function BeatDetailPage() {
 
           <h1 className="beat-detail-title">{beat.title}</h1>
 
+          <p className="credit-line beat-detail-credits">
+            Produced by {getBeatProducer(beat)}
+            <span className="credit-dot">·</span>
+            Source: {getBeatSource(beat)}
+          </p>
+
           <p style={{ color: "var(--gold)", fontSize: "15px", fontWeight: 700, margin: "10px 0 20px" }}>
             Studio Production × Custom Licensing
           </p>
+
+          <ShareLinkBox url={absoluteUrl(`/beats/${beat.id}`)} />
 
           <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: "1.7", marginBottom: "30px" }}>
             Original studio production composed and engineered by <strong>silachomka</strong> under chomkaMUSIC™. Suitable for commercial release, sync licensing, broadcast, and artist collaborations.
@@ -412,15 +435,17 @@ export default function BeatDetailPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 const subject = encodeURIComponent(`chomkaMUSIC Studio Inquiry: ${beat.title} (${activeLicenseData.name})`);
+                const beatUrl = absoluteUrl(`/beats/${beat.id}`);
                 const body = encodeURIComponent(
                   `Artist / Name: ${offerName || "N/A"}\n` +
                   `Email: ${offerEmail || "N/A"}\n` +
                   `Beat: ${beat.title}\n` +
+                  `Beat URL: ${beatUrl}\n` +
                   `License Requested: ${activeLicenseData.name}\n` +
                   `Proposed Offer / Budget: ${offerAmount || "Standard Inquiry"}\n\n` +
                   `Project Details:\n${offerMessage || "N/A"}`
                 );
-                window.location.href = `mailto:contact@silachomka.com?subject=${subject}&body=${body}`;
+                window.location.href = `mailto:chomkamusicstudio@gmail.com?subject=${subject}&body=${body}`;
               }}
               className="negotiation-form"
             >

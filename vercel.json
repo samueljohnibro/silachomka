@@ -1,6 +1,22 @@
 {
   "rewrites": [
     {
+      "source": "/beats",
+      "destination": "/beats/index.html"
+    },
+    {
+      "source": "/beats/:id",
+      "destination": "/beats/:id/index.html"
+    },
+    {
+      "source": "/gallery/:id",
+      "destination": "/gallery/:id/index.html"
+    },
+    {
+      "source": "/release/:slug",
+      "destination": "/release/:slug/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

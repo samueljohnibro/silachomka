@@ -1431,6 +1431,7 @@ a:focus-visible {
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  justify-content: center;
   gap: 24px;
   margin-top: 50px;
   padding-top: 35px;
@@ -2135,6 +2136,7 @@ a:focus-visible {
 .release-meta-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 18px;
   color: var(--gold);
   font-size: 11px;
@@ -2294,11 +2296,23 @@ a:focus-visible {
   font-weight: 700;
 }
 
+.track-name-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .track-name-text {
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
   transition: color var(--transition-fast) ease;
+}
+
+.track-producer {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .track-item-row:hover .track-name-text {
@@ -3071,14 +3085,211 @@ a:focus-visible {
   transform: translateY(0);
 }
 
+.license-price-tag {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--gold);
+  margin-bottom: 16px;
+  font-family: var(--font-display);
+  text-align: center;
+}
+
+.license-perks-list {
+  margin: 0 auto 28px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  width: 100%;
+}
+
+.license-perks-list li {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.license-buy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  min-height: 50px;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #fae2a0 0%, #dfc27d 40%, #b38938 100%);
+  color: #0c0a14 !important;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: 0 4px 20px var(--gold-glow-soft);
+  transition: all var(--transition-fast) ease;
+}
+
+.license-buy-btn:hover {
+  background: linear-gradient(135deg, #ffffff 0%, #fae2a0 40%, #dfc27d 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px var(--gold-glow);
+}
+
+/* =========================================================
+   NEGOTIATION FORM
+   ========================================================= */
+
+.negotiation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.negotiation-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.negotiation-input,
+.negotiation-textarea {
+  width: 100%;
+  padding: 14px 18px;
+  background: var(--bg);
+  border: 1px solid var(--line-gold);
+  border-radius: 3px;
+  color: var(--text);
+  outline: none;
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color var(--transition-fast) ease, box-shadow var(--transition-fast) ease;
+}
+
+.negotiation-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.negotiation-input:focus,
+.negotiation-textarea:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold-glow);
+}
+
+/* =========================================================
+   EXCLUSIVE LICENSING SECTION
+   ========================================================= */
+
+.exclusive-wrapper {
+  padding: 80px 7vw 120px;
+}
+
+.exclusive-section {
+  position: relative;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 70px 5vw;
+  text-align: center;
+  border: 1px solid var(--line-gold);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(223, 194, 125, 0.12) 0%, transparent 60%),
+    var(--surface-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    0 25px 60px rgba(0, 0, 0, 0.6),
+    0 0 40px var(--gold-glow-soft);
+  overflow: hidden;
+}
+
+.exclusive-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0.5;
+}
+
+.exclusive-section h2 {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  font-size: clamp(40px, 6vw, 75px);
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  text-shadow: 0 0 30px var(--gold-glow);
+}
+
+.exclusive-section > p:not(.eyebrow) {
+  position: relative;
+  z-index: 2;
+  max-width: 600px;
+  margin: 25px auto 35px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.exclusive-section .eyebrow {
+  position: relative;
+  z-index: 2;
+}
+
+.exclusive-link {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 28px;
+  border: 1px solid var(--gold);
+  border-radius: 2px;
+  background: var(--gold);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: all var(--transition-base) ease;
+}
+
+.exclusive-link:hover {
+  background: transparent;
+  color: var(--gold);
+  border-color: var(--gold);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px var(--gold-glow);
+}
+
+.exclusive-link:active {
+  transform: translateY(0);
+}
+
 /* =========================================================
    FOOTER
    ========================================================= */
 
-footer {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 30px;
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px 36px;
   padding: 52px 7vw 58px;
   color: var(--muted);
   font-size: 10px;
@@ -3087,18 +3298,25 @@ footer {
   border-top: 0;
 }
 
-footer div {
+.site-footer > div,
+.footer-social-links {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
 }
 
-footer div:nth-child(2) { align-items: center; }
-footer div:last-child { align-items: flex-end; }
-footer strong { color: var(--text); font-weight: 700; }
-footer a { transition: color var(--transition-fast) ease, transform var(--transition-fast) var(--ease-out); }
-footer a:hover { color: var(--gold); transform: translateY(-1px); }
-footer span { color: var(--muted); }
+.footer-branding { flex: 1 1 420px; }
+.footer-affiliation { flex: 0 1 auto; justify-content: center; }
+.footer-legal { flex: 0 1 auto; justify-content: flex-end; margin-left: auto; }
+.footer-social-links { flex: 0 1 auto; }
+.footer-secret-link { cursor: default; user-select: none; }
+
+.site-footer strong { color: var(--text); font-weight: 700; }
+.site-footer a { transition: color var(--transition-fast) ease, transform var(--transition-fast) var(--ease-out); }
+.site-footer a:hover { color: var(--gold); transform: translateY(-1px); }
+.site-footer span { color: var(--muted); }
 
 /* =========================================================
    EXCLUSIVE BEAT SELECTOR MODAL & CTA
@@ -3807,8 +4025,10 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   .release-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 15px; }
   .beats-grid { grid-template-columns: 1fr; padding: 20px 5vw 40px; gap: 24px; }
 
-  footer { grid-template-columns: 1fr; gap: 24px; padding: 40px 6vw 45px; }
-  footer div:nth-child(2), footer div:last-child { align-items: flex-start; }
+  .site-footer { align-items: flex-start; gap: 16px 24px; padding: 40px 6vw 45px; }
+  .footer-branding { flex-basis: 100%; }
+  .footer-affiliation,
+  .footer-legal { flex: 1 1 240px; justify-content: flex-start; margin-left: 0; }
 }
 
 /* =========================================================

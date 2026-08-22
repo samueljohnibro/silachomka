@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/generate-social-pages.js",
+    "build:app": "vite build",
+    "generate:social-pages": "node scripts/generate-social-pages.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "publish": "node scripts/publish.js",
@@ -15,6 +17,7 @@
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-helmet-async": "^3.0.0",
     "react-router-dom": "^7.18.2"
   },
   "devDependencies": {

@@ -12,6 +12,9 @@ import { Link } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import BeatHeroSlideshow from "../components/BeatHeroSlideshow";
 import ExclusiveBeatModal from "../components/ExclusiveBeatModal";
+import SeoHead from "../components/SeoHead";
+import ShareLinkBox from "../components/ShareLinkBox";
+import { absoluteUrl, getBeatProducer, getBeatSource } from "../data/credits";
 
 const PREVIEW_LENGTH = 60;
 
@@ -103,6 +106,7 @@ function BeatCard({ beat, isPlaying, progress, onPlay }) {
           ref={videoRef}
           className="beat-video"
           src={beat.video}
+          poster={beat.video.replace('.mp4', '.jpg')}
           muted
           autoPlay
           playsInline
@@ -146,6 +150,11 @@ function BeatCard({ beat, isPlaying, progress, onPlay }) {
         <div>
           <p className="beat-name">{beat.title}</p>
           <p className="beat-type">{beat.genre}</p>
+          <p className="credit-line">
+            Produced by {getBeatProducer(beat)}
+            <span className="credit-dot">·</span>
+            Source: {getBeatSource(beat)}
+          </p>
         </div>
 
         <p className="beat-price">
@@ -153,14 +162,16 @@ function BeatCard({ beat, isPlaying, progress, onPlay }) {
         </p>
       </div>
 
-      {/* Connected React Router Link */}
-      <Link
-        className="beat-link"
-        to={`/beats/${beat.id}`}
-        aria-label={`View details and Selar licensing for ${beat.title}`}
-      >
-        License Beat →
-      </Link>
+      <div className="beat-card-actions">
+        <ShareLinkBox url={absoluteUrl(`/beats/${beat.id}`)} compact />
+        <Link
+          className="beat-link"
+          to={`/beats/${beat.id}`}
+          aria-label={`View details and Selar licensing for ${beat.title}`}
+        >
+          License Beat →
+        </Link>
+      </div>
     </article>
   );
 }
@@ -499,6 +510,13 @@ export default function BeatsPage() {
 
   return (
     <main className="beats-page">
+      <SeoHead
+        title="chomkaMUSIC™ Studio Beats | Silachomka"
+        description="Explore original studio beats by silachomka. Listen, license on Selar, and craft your next release with chomkaMUSIC™ Studio."
+        path="/beats"
+        image="/og-image.png"
+        imageAlt="chomkaMUSIC™ Studio Beats by silachomka"
+      />
       {/* =================================================
           HERO (CONSTRAINED & ATMOSPHERIC)
           ================================================= */}

@@ -1,5 +1,7 @@
 // src/data/releases.js
 
+import { DEFAULT_PRODUCER, DEFAULT_SOURCE } from "./credits.js";
+
 /**
  * Global Artist Profiles
  */
@@ -21,6 +23,7 @@ const createRelease = ({
   displayDate,
   cover,
   description,
+  source = DEFAULT_SOURCE,
   platforms = {},
   tracks = [],
 }) => ({
@@ -31,13 +34,17 @@ const createRelease = ({
   date,
   displayDate,
   cover,
+  source,
   description:
     description ||
     `${title} is an official studio release by silachomka published under chomkaMUSIC™.`,
   platforms: {
     ...platforms,
   },
-  tracks,
+  tracks: tracks.map((track) => ({
+    ...track,
+    producer: track.producer || DEFAULT_PRODUCER,
+  })),
 });
 
 const releases = [

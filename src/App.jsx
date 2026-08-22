@@ -12,6 +12,7 @@ import {
 
 import { useChomkaStore } from "./data/store";
 import { ARTIST_SOCIALS, ECOSYSTEM_SOCIALS } from "./data/socials";
+import { DEFAULT_SOURCE, getReleaseSource, getTrackProducer } from "./data/credits";
 
 import MediaSlideshow from "./components/MediaSlideshow";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
@@ -21,6 +22,8 @@ import VideosSection from "./components/VideosSection";
 import BeatsPage from "./pages/BeatsPage";
 import BeatDetailPage from "./pages/BeatDetailPage";
 import StudioPublisherPage from "./pages/StudioPublisherPage";
+import GalleryPostPage from "./pages/GalleryPostPage";
+import SeoHead from "./components/SeoHead";
 
 import "./App.css";
 
@@ -336,54 +339,37 @@ function SiteFooter() {
   };
 
   return (
-    <footer id="label">
-      <div>
-        <strong className="footer-brand">
+    <footer id="label" className="site-footer">
+      <div className="footer-meta">
+        <strong className="footer-brand" onClick={handleSecretClick} title="Chomka Nation">
           silachomka
         </strong>
-
-        <span className="footer-label">
-          Official Artist & Media Hub
-        </span>
-
-        <div className="footer-social-links" style={{ marginTop: "12px", display: "flex", flexWrap: "wrap", gap: "10px" }}>
-          {ARTIST_SOCIALS.slice(0, 5).map((s) => (
-            <a
-              key={s.id}
-              href={s.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="footer-social-tag"
-            >
-              {s.name}
-            </a>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <span>
-          A chomkaMUSIC™ artist
-        </span>
-
-        <span>
-          Part of Chomka Nation
-        </span>
-      </div>
-
-      <div>
+        <span>Official Artist & Media Hub</span>
+        <span>A chomkaMUSIC™ artist</span>
+        <span>Part of Chomka Nation</span>
         <span
+          className="footer-secret-link"
           onClick={handleSecretClick}
-          style={{ cursor: "default", userSelect: "none" }}
           title="Chomka Nation"
         >
           © {new Date().getFullYear()} Chomka Nation
         </span>
-
-        <span className="footer-label">
-          All rights reserved
-        </span>
+        <span>All rights reserved</span>
       </div>
+
+      <nav className="footer-social-links" aria-label="Artist social links">
+        {ARTIST_SOCIALS.slice(0, 5).map((s) => (
+          <a
+            key={s.id}
+            href={s.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="footer-social-tag"
+          >
+            {s.name}
+          </a>
+        ))}
+      </nav>
     </footer>
   );
 }
@@ -452,6 +438,10 @@ function ReleaseCard({
 
           <p>
             {release.displayDate}
+          </p>
+
+          <p className="credit-line">
+            <span>Source: {getReleaseSource(release)}</span>
           </p>
         </div>
 
@@ -664,6 +654,8 @@ function LatestReleaseSection({
             {trackCount === 1
               ? "track"
               : "tracks"}
+            <span className="credit-dot">·</span>
+            <span className="credit-line-inline">Source: {getReleaseSource(release)}</span>
           </p>
 
           <ol>
@@ -674,6 +666,9 @@ function LatestReleaseSection({
                 >
                   <span>
                     {track.title}
+                    <small className="track-producer">
+                      Produced by {getTrackProducer(track)}
+                    </small>
                   </span>
 
                   {track.featuring?.length > 0 && (
@@ -949,6 +944,11 @@ function AboutSection() {
         <p>
           The music lives under <strong>chomkaMUSIC™</strong>, while the wider creative, technology and sports ecosystem sits under <strong>Chomka Nation</strong>.
         </p>
+
+        <div className="creator-credits">
+          <span>Produced by silachomka</span>
+          <span>Source: {DEFAULT_SOURCE}</span>
+        </div>
       </div>
     </section>
   );
@@ -1133,6 +1133,13 @@ function HomePage() {
 
   return (
     <>
+      <SeoHead
+        title="silachomka — Official Home"
+        description="Official artist website of silachomka. Music, visuals, beat store, and everything in between — part of chomkaMUSIC™ and Chomka Nation."
+        path="/"
+        image="/og-image.png"
+        imageAlt="silachomka official logo"
+      />
       <SiteHeader />
 
       <main id="top">
@@ -1208,6 +1215,20 @@ function StudioRoute() {
 
       <StudioPublisherPage />
 
+      <SiteFooter />
+    </>
+  );
+}
+
+/* =========================================================
+   GALLERY POST ROUTE (/gallery/:id)
+   ========================================================= */
+
+function GalleryPostRoute() {
+  return (
+    <>
+      <SiteHeader beatsPage />
+      <GalleryPostPage />
       <SiteFooter />
     </>
   );
@@ -1336,6 +1357,13 @@ function App() {
           path="/studio"
           element={
             <StudioRoute />
+          }
+        />
+
+        <Route
+          path="/gallery/:id"
+          element={
+            <GalleryPostRoute />
           }
         />
 

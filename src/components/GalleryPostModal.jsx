@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
+import ShareLinkBox from "./ShareLinkBox";
+import { absoluteUrl, DEFAULT_SOURCE } from "../data/credits";
 
 function isVideoSrc(src) {
   if (!src || typeof src !== "string") return false;
@@ -10,7 +12,15 @@ function isVideoSrc(src) {
   return ["mp4", "webm", "ogg", "mov", "m4v"].includes(ext);
 }
 
-export default function GalleryPostModal({ post, onClose, onPrev, onNext, hasPrev, hasNext }) {
+export default function GalleryPostModal({
+  post,
+  onClose,
+  onPrev,
+  onNext,
+  hasPrev,
+  hasNext,
+  embedded = false,
+}) {
   const [activeSlide, setActiveSlide] = useState(0);
   const [prevPostId, setPrevPostId] = useState(post?.id);
 
@@ -34,13 +44,14 @@ export default function GalleryPostModal({ post, onClose, onPrev, onNext, hasPre
   );
 
   useEffect(() => {
+    if (embedded) return undefined;
     window.addEventListener("keydown", handleKeyDown);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
     };
-  }, [handleKeyDown]);
+  }, [handleKeyDown, embedded]);
 
   if (!post) return null;
 
@@ -53,10 +64,14 @@ export default function GalleryPostModal({ post, onClose, onPrev, onNext, hasPre
     isVideoSrc(currentSlideSrc) ||
     post.slideTypes?.[activeSlide] === "video";
 
-  return (
-    <div className="gallery-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="gallery-modal-dialog" onClick={(e) => e.stopPropagation()}>
-        {/* Close Button */}
+  const shareUrl = absoluteUrl(`/gallery/${post.id}`);
+
+  const dialog = (
+      <div
+        className={`gallery-modal-dialog ${embedded ? "is-embedded" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {!embedded && (
         <button
           type="button"
           className="gallery-modal-close"
@@ -65,9 +80,9 @@ export default function GalleryPostModal({ post, onClose, onPrev, onNext, hasPre
         >
           ✕
         </button>
+        )}
 
-        {/* Prev / Next navigation arrows */}
-        {hasPrev && (
+        {!embedded && hasPrev && (
           <button
             type="button"
             className="gallery-modal-nav gallery-modal-nav-prev"
@@ -78,7 +93,7 @@ export default function GalleryPostModal({ post, onClose, onPrev, onNext, hasPre
           </button>
         )}
 
-        {hasNext && (
+        {!embedded && hasNext && (
           <button
             type="button"
             className="gallery-modal-nav gallery-modal-nav-next"
@@ -186,7 +201,9 @@ export default function GalleryPostModal({ post, onClose, onPrev, onNext, hasPre
                     <span>silachomka</span>
                     <span className="gallery-verified-badge" title="Official Archive">✓</span>
                   </div>
-                  <span className="gallery-author-sub">{post.category}</span>
+                  <span className="gallery-author-sub">
+                    {post.category} · Source: {post.source || DEFAULT_SOURCE}
+                  </span>
                 </div>
               </div>
               <span className="gallery-modal-date">{post.displayDate || post.date}</span>
@@ -216,6 +233,7 @@ export default function GalleryPostModal({ post, onClose, onPrev, onNext, hasPre
 
             {/* Footer / Connected Link */}
             <div className="gallery-sidebar-footer">
+              <ShareLinkBox url={shareUrl} />
               {post.link ? (
                 <Link to={post.link} className="gallery-modal-cta-btn" onClick={onClose}>
                   Open Release Project →
@@ -234,6 +252,15 @@ export default function GalleryPostModal({ post, onClose, onPrev, onNext, hasPre
           </div>
         </div>
       </div>
+  );
+
+  if (embedded) {
+    return <div className="gallery-embedded-shell">{dialog}</div>;
+  }
+
+  return (
+    <div className="gallery-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+      {dialog}
     </div>
   );
 }
