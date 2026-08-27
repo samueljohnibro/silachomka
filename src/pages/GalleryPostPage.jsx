@@ -6,12 +6,25 @@ import { useChomkaStore } from "../data/store";
 import { DEFAULT_SOURCE } from "../data/credits";
 
 function rasterImage(post) {
-  const candidates = [post?.ogImage, post?.image, post?.src, ...(post?.slides || [])];
-  return candidates.find(
-    (value) =>
-      typeof value === "string" &&
-      /\.(?:avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(value)
-  ) || "/og-image.png";
+  const videoPoster =
+    post?.src && post.src.endsWith(".mp4")
+      ? post.src.replace(".mp4", ".jpg")
+      : null;
+  const candidates = [
+    post?.ogImage,
+    post?.image,
+    post?.src,
+    videoPoster,
+    ...(post?.slides || []),
+    post?.videoSrc,
+  ];
+  return (
+    candidates.find(
+      (value) =>
+        typeof value === "string" &&
+        /\.(?:avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(value)
+    ) || "/og-image.png"
+  );
 }
 
 export default function GalleryPostPage() {

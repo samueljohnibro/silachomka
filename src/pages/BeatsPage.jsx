@@ -52,7 +52,7 @@ function ProgressRing({ progress, isPlaying }) {
    BEAT CARD
    ========================================================= */
 
-function BeatCard({ beat, isPlaying, progress, onPlay }) {
+function BeatCard({ beat, isPlaying, isLoading, progress, onPlay }) {
   const videoRef = useRef(null);
 
   /* Visual Video Autoplay */
@@ -104,9 +104,9 @@ function BeatCard({ beat, isPlaying, progress, onPlay }) {
       <div className={`beat-art ${isPlaying ? "is-playing" : ""}`}>
         <video
           ref={videoRef}
-          className="beat-video"
+          className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
           src={beat.video}
-          poster={beat.video.replace('.mp4', '.jpg')}
+          poster={beat.image || beat.video?.replace('.mp4', '.jpg')}
           muted
           autoPlay
           playsInline
@@ -135,13 +135,18 @@ function BeatCard({ beat, isPlaying, progress, onPlay }) {
           type="button"
           className={`beat-play ${isPlaying ? "is-playing" : ""}`}
           onClick={() => onPlay(beat)}
-          aria-label={isPlaying ? `Pause ${beat.title}` : `Play ${beat.title}`}
+          aria-label={isLoading ? `Loading ${beat.title}` : isPlaying ? `Pause ${beat.title}` : `Play ${beat.title}`}
           aria-pressed={isPlaying}
+          aria-busy={isLoading}
         >
           <ProgressRing progress={progress} isPlaying={isPlaying} />
-          <span className="beat-play-icon" aria-hidden="true">
-            {isPlaying ? "❚❚" : "▶"}
-          </span>
+          {isLoading ? (
+            <div className="beat-loading-spinner" aria-hidden="true" />
+          ) : (
+            <span className="beat-play-icon" aria-hidden="true">
+              {isPlaying ? "❚❚" : "▶"}
+            </span>
+          )}
         </button>
       </div>
 
@@ -151,9 +156,7 @@ function BeatCard({ beat, isPlaying, progress, onPlay }) {
           <p className="beat-name">{beat.title}</p>
           <p className="beat-type">{beat.genre}</p>
           <p className="credit-line">
-            Produced by {getBeatProducer(beat)}
-            <span className="credit-dot">·</span>
-            Source: {getBeatSource(beat)}
+            prod. {getBeatProducer(beat)}<span className="credit-dot"> · </span>{getBeatSource(beat)}
           </p>
         </div>
 
@@ -163,7 +166,6 @@ function BeatCard({ beat, isPlaying, progress, onPlay }) {
       </div>
 
       <div className="beat-card-actions">
-        <ShareLinkBox url={absoluteUrl(`/beats/${beat.id}`)} compact />
         <Link
           className="beat-link"
           to={`/beats/${beat.id}`}
@@ -195,6 +197,7 @@ export default function BeatsPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [audioError, setAudioError] = useState(false);
+  const [loadingBeatId, setLoadingBeatId] = useState(null);
   const [activeFilter, setActiveFilter] = useState("all");
   const [isExclusiveModalOpen, setIsExclusiveModalOpen] = useState(false);
 
@@ -419,6 +422,7 @@ export default function BeatsPage() {
       setAudioError(false);
       setActiveBeat(beat);
       setIsPlaying(false);
+      setLoadingBeatId(beat.id);
 
       const audio = new Audio();
       audioRef.current = audio;
@@ -435,6 +439,7 @@ export default function BeatsPage() {
         setAudioError(true);
         setIsPlaying(false);
         setProgress(0);
+        setLoadingBeatId(null);
         cancelProgressAnimation();
       };
 
@@ -452,6 +457,7 @@ export default function BeatsPage() {
         const duration = audio.duration;
         if (!Number.isFinite(duration) || duration <= 0) {
           setAudioError(true);
+          setLoadingBeatId(null);
           isPlayingRef.current = false;
           setIsPlaying(false);
           return;
@@ -473,11 +479,13 @@ export default function BeatsPage() {
             setProgress(0);
             setIsPlaying(true);
             setAudioError(false);
+            setLoadingBeatId(null);
           } catch {
             if (!isCurrentAudio()) return;
             isPlayingRef.current = false;
             setAudioError(true);
             setIsPlaying(false);
+            setLoadingBeatId(null);
           }
         };
 
@@ -514,7 +522,7 @@ export default function BeatsPage() {
         title="chomkaMUSIC™ Studio Beats | Silachomka"
         description="Explore original studio beats by silachomka. Listen, license on Selar, and craft your next release with chomkaMUSIC™ Studio."
         path="/beats"
-        image="/og-image.png"
+        image={(beats.length > 0 && beats[0].image) ? beats[0].image : "/og-image.png"}
         imageAlt="chomkaMUSIC™ Studio Beats by silachomka"
       />
       {/* =================================================
@@ -584,6 +592,7 @@ export default function BeatsPage() {
             key={beat.id}
             beat={beat}
             isPlaying={activeBeat?.id === beat.id && isPlaying}
+            isLoading={loadingBeatId === beat.id}
             progress={activeBeat?.id === beat.id ? progress : 0}
             onPlay={handlePlay}
           />

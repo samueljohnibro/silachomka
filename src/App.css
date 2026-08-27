@@ -2400,6 +2400,21 @@ a:focus-visible {
   transform: translateY(-1px);
 }
 
+.release-source-footer {
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.release-source-footer strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* =========================================================
    BEATS PAGE & BEAT DETAIL PAGE
    ========================================================= */
@@ -2738,6 +2753,35 @@ a:focus-visible {
 .beat-play-icon { font-size: 10px; line-height: 1; transition: transform var(--transition-fast) var(--ease-out), opacity var(--transition-fast) ease; }
 .beat-play:hover .beat-play-icon { transform: scale(1.05); }
 
+/* ---- Audio loading spinners ---- */
+@keyframes beat-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Spinner inside the circular beat-card play button */
+.beat-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(223, 194, 125, 0.3);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: beat-spin 0.7s linear infinite;
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+/* Spinner inside the full-beat detail player button */
+.beat-detail-loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(5, 5, 7, 0.4);
+  border-top-color: var(--bg);
+  border-radius: 50%;
+  animation: beat-spin 0.7s linear infinite;
+}
+
+
 .beat-info {
   display: flex;
   justify-content: space-between;
@@ -2750,6 +2794,8 @@ a:focus-visible {
 .beat-name { margin: 0 0 5px; font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--text); }
 .beat-card:hover .beat-name { color: var(--gold); }
 .beat-type { margin: 0; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: 0.08em; }
+.credit-line { margin: 4px 0 0; color: var(--muted); font-size: 7.5px; letter-spacing: 0.04em; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.credit-dot { opacity: 0.5; }
 .beat-price { margin: 0; color: var(--gold); font-size: 9px; font-weight: 700; white-space: nowrap; }
 
 .beat-link {
@@ -4091,3 +4137,6 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   .hero-slideshow-media { transform: none !important; opacity: 0 !important; }
   .hero-slideshow-media.is-active { opacity: 1 !important; transform: none !important; animation: none !important; }
 }
+
+.beat-video.is-letterboxed { transform: scale(1.35); }
+.beat-card:hover .beat-video.is-letterboxed, .beat-card.is-playing .beat-video.is-letterboxed { transform: scale(calc(1.35 * var(--hover-scale, 1.05))); }

@@ -191,12 +191,17 @@ function createHomeMetadata() {
 
 function createBeatHubMetadata() {
   const title = "chomkaMUSIC™ Studio Beats | Silachomka";
+  // Use the first available beat's JPG as the hub social image
+  const hubImage =
+    beats.length > 0 && beats[0].image
+      ? beats[0].image
+      : DEFAULT_SOCIAL_IMAGE;
   return {
     title,
     description:
       "Explore original studio beats by silachomka. Listen, license on Selar, and craft your next release with chomkaMUSIC™ Studio.",
     canonicalPath: "/beats",
-    image: DEFAULT_SOCIAL_IMAGE,
+    image: hubImage,
     imageAlt: "chomkaMUSIC™ Studio Beats by silachomka",
   };
 }
@@ -233,6 +238,7 @@ function createGalleryMetadata(post) {
   const canonicalPath = toRoutePath("gallery", post.id);
   const title = `${post.title} | Silachomka Visual Archive`;
   const slideImages = Array.isArray(post.slides) ? post.slides : [];
+  const generatedVideoPoster = post.src && post.src.endsWith('.mp4') ? post.src.replace('.mp4', '.jpg') : null;
 
   return {
     title,
@@ -242,7 +248,7 @@ function createGalleryMetadata(post) {
     ),
     canonicalPath,
     image: resolveSocialImage(
-      [post.ogImage, post.image, post.src, ...slideImages, post.videoSrc],
+      [post.ogImage, post.image, post.src, generatedVideoPoster, ...slideImages, post.videoSrc],
       canonicalPath
     ),
     imageAlt: `${post.title} — silachomka visual archive`,

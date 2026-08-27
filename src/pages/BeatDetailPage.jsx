@@ -26,6 +26,7 @@ export default function BeatDetailPage() {
   /* Audio state */
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState("0:00");
   const [durationTime, setDurationTime] = useState("0:00");
@@ -50,8 +51,10 @@ export default function BeatDetailPage() {
   /* Offer form state */
   const [offerName, setOfferName] = useState("");
   const [offerEmail, setOfferEmail] = useState("");
-  const [offerAmount, setOfferAmount] = useState("");
   const [offerMessage, setOfferMessage] = useState("");
+  const [offerSubmitting, setOfferSubmitting] = useState(false);
+  const [offerSubmitted, setOfferSubmitted] = useState(false);
+  const [offerError, setOfferError] = useState(null);
 
   /* Format seconds to M:SS */
   const formatTime = (seconds) => {
@@ -80,6 +83,8 @@ export default function BeatDetailPage() {
       const audio = new Audio(beat.audio);
       audioRef.current = audio;
 
+      setIsLoading(true);
+
       audio.addEventListener("loadedmetadata", () => {
         setDurationTime(formatTime(audio.duration));
       });
@@ -97,7 +102,9 @@ export default function BeatDetailPage() {
         setCurrentTime("0:00");
       });
 
-      audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      audio.play()
+        .then(() => { setIsLoading(false); setIsPlaying(true); })
+        .catch(() => { setIsLoading(false); setIsPlaying(false); });
     } else {
       if (isPlaying) {
         audioRef.current.pause();
@@ -200,7 +207,7 @@ export default function BeatDetailPage() {
         title={`${beat.title} | chomkaMUSIC™ Studio Beats | Silachomka`}
         description={`${beat.title} is an original${beat.genre ? ` ${beat.genre}` : ""} instrumental by silachomka, available to listen to and license through chomkaMUSIC™ Studio.`}
         path={`/beats/${beat.id}`}
-        image={beat.video ? beat.video.replace('.mp4', '.jpg') : (beat.ogImage || beat.image || beat.cover || beat.thumbnail || beat.poster || "/og-image.png")}
+        image={beat.image || (beat.video ? beat.video.replace('.mp4', '.jpg') : null) || beat.ogImage || beat.cover || beat.thumbnail || beat.poster || "/og-image.png"}
         imageAlt={`${beat.title} beat by silachomka`}
       />
       {/* Breadcrumb Navigation */}
@@ -217,7 +224,7 @@ export default function BeatDetailPage() {
             {beat.video ? (
               <video
                 src={beat.video}
-                poster={beat.video.replace('.mp4', '.jpg')}
+                poster={beat.image || beat.video.replace('.mp4', '.jpg')}
                 autoPlay
                 muted
                 loop
@@ -269,9 +276,14 @@ export default function BeatDetailPage() {
                   boxShadow: "0 6px 20px var(--gold-glow)",
                   transition: "transform 180ms ease",
                 }}
-                aria-label={isPlaying ? "Pause audio preview" : "Play audio preview"}
+                aria-label={isLoading ? "Loading audio" : isPlaying ? "Pause audio preview" : "Play audio preview"}
+                aria-busy={isLoading}
               >
-                {isPlaying ? "❚❚" : "▶"}
+                {isLoading ? (
+                  <div className="beat-detail-loading-spinner" aria-hidden="true" />
+                ) : (
+                  isPlaying ? "❚❚" : "▶"
+                )}
               </button>
 
               <div style={{ flex: 1 }}>
@@ -423,69 +435,112 @@ export default function BeatDetailPage() {
               boxShadow: "0 15px 45px rgba(0, 0, 0, 0.4)",
             }}
           >
-            <p className="eyebrow">Studio Licensing & Buyout Inquiry</p>
+            <p className="eyebrow">Exclusive Buyout Inquiry</p>
             <h2 style={{ margin: "0 0 12px", fontSize: "26px", color: "var(--text)", fontFamily: "var(--font-display)" }}>
-              License or Exclusive Buyout
+              Exclusive Acquisition
             </h2>
             <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: "1.6", marginBottom: "25px" }}>
-              Standard, Premium, and Trackout licenses for <strong>{beat.title}</strong> can be purchased instantly above with direct delivery on Selar. For custom terms or exclusive acquisition negotiations, submit your inquiry below.
+              Standard, Premium, and Trackout licenses for <strong>{beat.title}</strong> can be purchased instantly above with direct delivery on Selar. Use this form exclusively to negotiate an <strong style={{ color: "var(--text)" }}>Exclusive Buyout</strong> — full ownership transfer, custom terms, and stem delivery.
             </p>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                const subject = encodeURIComponent(`chomkaMUSIC Studio Inquiry: ${beat.title} (${activeLicenseData.name})`);
-                const beatUrl = absoluteUrl(`/beats/${beat.id}`);
-                const body = encodeURIComponent(
-                  `Artist / Name: ${offerName || "N/A"}\n` +
-                  `Email: ${offerEmail || "N/A"}\n` +
-                  `Beat: ${beat.title}\n` +
-                  `Beat URL: ${beatUrl}\n` +
-                  `License Requested: ${activeLicenseData.name}\n` +
-                  `Proposed Offer / Budget: ${offerAmount || "Standard Inquiry"}\n\n` +
-                  `Project Details:\n${offerMessage || "N/A"}`
-                );
-                window.location.href = `mailto:chomkamusicstudio@gmail.com?subject=${subject}&body=${body}`;
+                setOfferSubmitting(true);
+                setOfferError(null);
+                try {
+                  const res = await fetch("https://formspree.io/f/xljerwko", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    body: JSON.stringify({
+                      name: offerName,
+                      email: offerEmail,
+                      beat: beat.title,
+                      beat_url: absoluteUrl(`/beats/${beat.id}`),
+                      license: "Exclusive Buyout",
+                      message: offerMessage,
+                    }),
+                  });
+                  if (res.ok) {
+                    setOfferSubmitted(true);
+                  } else {
+                    const data = await res.json().catch(() => ({}));
+                    setOfferError(data?.error || "Submission failed. Please try again.");
+                  }
+                } catch {
+                  setOfferError("Network error. Check your connection and try again.");
+                } finally {
+                  setOfferSubmitting(false);
+                }
               }}
               className="negotiation-form"
             >
-              <div className="negotiation-form-row">
-                <input
-                  type="text"
-                  required
-                  placeholder="Your Name / Artist Name"
-                  value={offerName}
-                  onChange={(e) => setOfferName(e.target.value)}
-                  className="negotiation-input"
-                />
-                <input
-                  type="email"
-                  required
-                  placeholder="Email Address"
-                  value={offerEmail}
-                  onChange={(e) => setOfferEmail(e.target.value)}
-                  className="negotiation-input"
-                />
-              </div>
+              {offerSubmitted ? (
+                <div style={{
+                  padding: "28px 24px",
+                  background: "rgba(212, 175, 55, 0.08)",
+                  border: "1px solid var(--line-gold)",
+                  borderRadius: "6px",
+                  textAlign: "center",
+                }}>
+                  <p style={{ fontSize: "22px", margin: "0 0 8px", color: "var(--gold)" }}>✓ Inquiry Sent</p>
+                  <p style={{ color: "var(--muted)", fontSize: "13px", margin: 0, lineHeight: "1.6" }}>
+                    Your licensing inquiry for <strong style={{ color: "var(--text)" }}>{beat.title}</strong> has been received.
+                    chomkaMUSIC™ Studio will be in touch at <strong style={{ color: "var(--text)" }}>{offerEmail}</strong>.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="negotiation-form-row">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Your Name / Artist Name"
+                      value={offerName}
+                      onChange={(e) => setOfferName(e.target.value)}
+                      className="negotiation-input"
+                    />
+                    <input
+                      type="email"
+                      required
+                      placeholder="Email Address"
+                      value={offerEmail}
+                      onChange={(e) => setOfferEmail(e.target.value)}
+                      className="negotiation-input"
+                    />
+                  </div>
 
-              <input
-                type="text"
-                placeholder="License Type or Proposed Offer Amount"
-                value={offerAmount}
-                onChange={(e) => setOfferAmount(e.target.value)}
-                className="negotiation-input"
-              />
+                  <textarea
+                    placeholder="Project details, intended release date, or custom arrangement / stem requirements..."
+                    value={offerMessage}
+                    onChange={(e) => setOfferMessage(e.target.value)}
+                    className="negotiation-textarea"
+                  />
 
-              <textarea
-                placeholder="Project details, intended release date, or custom arrangement / stem requirements..."
-                value={offerMessage}
-                onChange={(e) => setOfferMessage(e.target.value)}
-                className="negotiation-textarea"
-              />
+                  {offerError && (
+                    <p style={{
+                      color: "#e05c5c",
+                      fontSize: "13px",
+                      margin: "0 0 10px",
+                      padding: "10px 14px",
+                      background: "rgba(224, 92, 92, 0.08)",
+                      border: "1px solid rgba(224, 92, 92, 0.3)",
+                      borderRadius: "4px",
+                    }}>
+                      ⚠ {offerError}
+                    </p>
+                  )}
 
-              <button type="submit" className="primary-button" style={{ width: "100%", marginTop: "10px" }}>
-                Draft Studio Licensing Inquiry →
-              </button>
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    style={{ width: "100%", marginTop: "10px", opacity: offerSubmitting ? 0.6 : 1 }}
+                    disabled={offerSubmitting}
+                  >
+                    {offerSubmitting ? "Sending…" : "Draft Studio Licensing Inquiry →"}
+                  </button>
+                </>
+              )}
             </form>
           </div>
         </div>

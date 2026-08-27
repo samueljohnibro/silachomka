@@ -1,5 +1,6 @@
 // src/components/ReleasePage.jsx
 
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
@@ -51,7 +52,7 @@ function getSpotifyEmbedUrl(url) {
 }
 
 /* =========================================================
-   TRACK ROW COMPONENT (PURE CSS HOVER ENGINE)
+   TRACK ROW COMPONENT (EXPANDABLE WITH PRODUCER CREDIT)
    ========================================================= */
 
 function TrackRow({ track, index }) {
@@ -100,7 +101,7 @@ function TrackRow({ track, index }) {
         </div>
       </div>
 
-      {/* Expanded Links Dropdown */}
+      {/* Expanded Links Dropdown — includes producer credit beside platform buttons */}
       {hasLinks && (
         <div className="track-dropdown-content">
           <div className="track-dropdown-producer">
@@ -154,7 +155,7 @@ export default function ReleasePage({ release }) {
   const trackCount = tracks.length;
   const releaseNumber = String(release.number ?? "").padStart(2, "0");
   const currentUrl = absoluteUrl(`/release/${release.slug}`);
-  const source = getReleaseSource(release);
+  const source = getReleaseSourceString(release);
   const spotifyEmbedUrl = getSpotifyEmbedUrl(platforms.spotify);
 
   return (
@@ -271,7 +272,7 @@ export default function ReleasePage({ release }) {
 
           <ShareLinkBox url={currentUrl} />
 
-          {/* Tracklist Card (Interactive) */}
+          {/* Tracklist Card (Interactive — click to expand platform links + producer) */}
           <div className="tracklist-card">
             <div className="platform-section-title">Tracklist ({trackCount})</div>
             <div>
@@ -283,10 +284,11 @@ export default function ReleasePage({ release }) {
                 />
               ))}
             </div>
-          </div>
-          
-          <div className="release-source-footer" style={{ marginTop: "30px", textAlign: "center", color: "var(--muted)", fontSize: "13px" }}>
-            Project Source: <strong style={{ color: "var(--text)" }}>{getReleaseSourceString(release)}</strong>
+
+            {/* Source credit — shown after the tracklist */}
+            <div className="release-source-footer">
+              Source: <strong>{source}</strong>
+            </div>
           </div>
         </div>
       </div>

@@ -10,6 +10,16 @@ function toAbsolute(value) {
   }
 }
 
+function imageMimeType(url) {
+  const pathname = (url || "").split("?")[0].split("#")[0].toLowerCase();
+  if (pathname.endsWith(".png")) return "image/png";
+  if (pathname.endsWith(".gif")) return "image/gif";
+  if (pathname.endsWith(".webp")) return "image/webp";
+  if (pathname.endsWith(".avif")) return "image/avif";
+  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+  return "";
+}
+
 export default function SeoHead({
   title,
   description,
@@ -20,6 +30,7 @@ export default function SeoHead({
   const canonical = toAbsolute(path);
   const imageUrl = toAbsolute(image);
   const alt = imageAlt || title;
+  const mimeType = imageMimeType(imageUrl);
 
   return (
     <Helmet>
@@ -33,6 +44,7 @@ export default function SeoHead({
       <meta property="og:description" content={description} />
       <meta property="og:image" content={imageUrl} />
       <meta property="og:image:secure_url" content={imageUrl} />
+      {mimeType && <meta property="og:image:type" content={mimeType} />}
       <meta property="og:image:alt" content={alt} />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:site" content="@silachomka" />

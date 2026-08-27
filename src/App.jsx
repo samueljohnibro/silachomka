@@ -12,7 +12,7 @@ import {
 
 import { useChomkaStore } from "./data/store";
 import { ARTIST_SOCIALS, ECOSYSTEM_SOCIALS } from "./data/socials";
-import { DEFAULT_SOURCE } from "./data/credits";
+
 
 import MediaSlideshow from "./components/MediaSlideshow";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
@@ -936,11 +936,6 @@ function AboutSection() {
         <p>
           The music lives under <strong>chomkaMUSIC™</strong>, while the wider creative, technology and sports ecosystem sits under <strong>Chomka Nation</strong>.
         </p>
-
-        <div className="creator-credits">
-          <span>Produced by silachomka</span>
-          <span>Source: {DEFAULT_SOURCE}</span>
-        </div>
       </div>
     </section>
   );

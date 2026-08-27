@@ -2,6 +2,25 @@
 
 const rawBeats = [
   {
+    id: "faces",
+    title: "FACES",
+    genre: "Afro-Alternative Rap × Afro Trap",
+    shortGenre: "Afro-Alternative Rap × Afro Trap",
+    categories: ["afro", "trap"],
+    bpm: "140 BPM",
+    key: "C minor",
+    image: "/beats/faces.jpg",
+    video: "/beats/faces.mp4",
+    audio: "/beats/faces.mp3",
+    showVisualTitle: true,
+    status: "available",
+    selar: {
+      basic: "https://selar.com/chomkamusicstudio-faces-basic",
+      premium: "https://selar.com/chomkamusicstudio-faces-premium",
+      ultimate: "https://selar.com/chomkamusicstudio-faces-ultimate",
+    },
+  },
+  {
     id: "chinese-empathy",
     title: "CHINESE EMPATHY",
     genre: "Afro-Alternative × Afro Trap",
@@ -9,8 +28,10 @@ const rawBeats = [
     categories: ["afro", "trap"],
     bpm: "140 BPM",
     key: "F minor",
+    image: "/beats/chinese-empathy.jpg",
     video: "/beats/chinese-empathy.mp4",
     audio: "/beats/chinese-empathy.mp3",
+    letterboxed: true,
     showVisualTitle: true,
     status: "available",
     selar: {
@@ -27,6 +48,7 @@ const rawBeats = [
     categories: ["afro"],
     bpm: "100 BPM",
     key: "F minor",
+    image: "/beats/overdose.jpg",
     video: "/beats/overdose.mp4",
     audio: "/beats/overdose.mp3",
     showVisualTitle: true,
@@ -45,6 +67,7 @@ const rawBeats = [
     categories: ["afro"],
     bpm: "110 BPM",
     key: "E minor",
+    image: "/beats/validation.jpg",
     video: "/beats/validation.mp4",
     audio: "/beats/validation.mp3",
     showVisualTitle: true,
@@ -63,6 +86,7 @@ const rawBeats = [
     categories: ["afro", "trap"],
     bpm: "149 BPM",
     key: "F♯ major",
+    image: "/beats/smile.jpg",
     video: "/beats/smile.mp4",
     audio: "/beats/smile.mp3",
     showVisualTitle: true,
@@ -81,6 +105,7 @@ const rawBeats = [
     categories: ["afro", "trap"],
     bpm: "125 BPM",
     key: "D♯ minor",
+    image: "/beats/hubert.jpg",
     video: "/beats/hubert.mp4",
     audio: "/beats/hubert.mp3",
     showVisualTitle: true,
@@ -99,6 +124,7 @@ const rawBeats = [
     categories: ["afro", "rnb"],
     bpm: "125 BPM",
     key: "C minor",
+    image: "/beats/fanguan.jpg",
     video: "/beats/fanguan.mp4",
     audio: "/beats/fanguan.mp3",
     showVisualTitle: true,
@@ -117,6 +143,7 @@ const rawBeats = [
     categories: ["afro", "trap"],
     bpm: "116 BPM",
     key: "A♯ minor",
+    image: "/beats/congo.jpg",
     video: "/beats/congo.mp4",
     audio: "/beats/congo.mp3",
     showVisualTitle: true,
@@ -135,9 +162,10 @@ const rawBeats = [
     categories: ["afro", "rnb"],
     bpm: "115 BPM",
     key: "G minor",
+    image: "/beats/want.jpg",
     video: "/beats/want.mp4",
     audio: "/beats/want.mp3",
-    showVisualTitle: false,
+    showVisualTitle: true,
     status: "available",
     selar: {
       basic: "https://selar.com/chomkamusicstudio-want-basic",
@@ -146,6 +174,7 @@ const rawBeats = [
     },
   },
 ];
+
 
 function resolveBeatVideo(beat) {
   if (!beat || typeof beat !== "object") return "";

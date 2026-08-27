@@ -23,29 +23,54 @@ const createRelease = ({
   displayDate,
   cover,
   description,
-  source = DEFAULT_SOURCE,
+  // Accept either sources (array) or source (string) for backward compat
+  sources,
+  source,
   platforms = {},
   tracks = [],
-}) => ({
-  number,
-  title,
-  slug,
-  edition,
-  date,
-  displayDate,
-  cover,
-  source,
-  description:
-    description ||
-    `${title} is an official studio release by silachomka published under chomkaMUSIC™.`,
-  platforms: {
-    ...platforms,
-  },
-  tracks: tracks.map((track) => ({
-    ...track,
-    producer: track.producer || DEFAULT_PRODUCER,
-  })),
-});
+}) => {
+  // Normalise to a sources array
+  let normalisedSources;
+  if (Array.isArray(sources) && sources.length > 0) {
+    normalisedSources = sources;
+  } else if (typeof source === "string" && source.trim()) {
+    normalisedSources = [source.trim()];
+  } else {
+    normalisedSources = [DEFAULT_SOURCE];
+  }
+
+  return {
+    number,
+    title,
+    slug,
+    edition,
+    date,
+    displayDate,
+    cover,
+    sources: normalisedSources,
+    description:
+      description ||
+      `${title} is an official studio release by silachomka published under chomkaMUSIC™.`,
+    platforms: {
+      ...platforms,
+    },
+    tracks: tracks.map((track) => {
+      // Normalise to a producers array
+      let normalisedProducers;
+      if (Array.isArray(track.producers) && track.producers.length > 0) {
+        normalisedProducers = track.producers;
+      } else if (typeof track.producer === "string" && track.producer.trim()) {
+        normalisedProducers = [track.producer.trim()];
+      } else {
+        normalisedProducers = [DEFAULT_PRODUCER];
+      }
+      // Spread track first so any extra fields are preserved,
+      // then explicitly set the normalised array field.
+      const { producer: _p, producers: _ps, ...rest } = track;
+      return { ...rest, producers: normalisedProducers };
+    }),
+  };
+};
 
 const releases = [
   /* =========================================================
