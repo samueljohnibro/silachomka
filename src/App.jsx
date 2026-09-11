@@ -700,8 +700,22 @@ function LatestReleaseSection({
    ========================================================= */
 
 function MusicSection({ releases: sortedReleases, totalTracks }) {
-  const [activeFilter, setActiveFilter] = useState("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeFilter = searchParams.get("filter") || "all";
+  const viewMode = searchParams.get("view") || "grid";
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+
+  const setActiveFilter = (filter) => {
+    const p = new URLSearchParams(searchParams);
+    if (filter === "all") p.delete("filter"); else p.set("filter", filter);
+    setSearchParams(p, { replace: true });
+  };
+
+  const setViewMode = (mode) => {
+    const p = new URLSearchParams(searchParams);
+    if (mode === "grid") p.delete("view"); else p.set("view", mode);
+    setSearchParams(p, { replace: true });
+  };
 
   const hasAlbums = sortedReleases.some((r) => r.type === "album");
   const filters = [
@@ -736,9 +750,29 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
           <p className="eyebrow">DISCOGRAPHY</p>
           <h2>Music</h2>
         </div>
-        <span>
-          {filteredReleases.length} {filteredReleases.length === 1 ? "release" : "releases"}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ display: "flex", gap: "4px", border: "1px solid var(--line-gold)", borderRadius: "3px", padding: "2px" }}>
+            <button
+              onClick={() => setViewMode("grid")}
+              style={{
+                background: viewMode === "grid" ? "rgba(223, 194, 125, 0.15)" : "transparent",
+                color: viewMode === "grid" ? "var(--gold)" : "var(--text-secondary)",
+                border: "none", padding: "5px 10px", cursor: "pointer", fontSize: "9px", fontWeight: "700", borderRadius: "2px", textTransform: "uppercase", letterSpacing: "0.08em",
+              }}
+            >Grid</button>
+            <button
+              onClick={() => setViewMode("list")}
+              style={{
+                background: viewMode === "list" ? "rgba(223, 194, 125, 0.15)" : "transparent",
+                color: viewMode === "list" ? "var(--gold)" : "var(--text-secondary)",
+                border: "none", padding: "5px 10px", cursor: "pointer", fontSize: "9px", fontWeight: "700", borderRadius: "2px", textTransform: "uppercase", letterSpacing: "0.08em",
+              }}
+            >List</button>
+          </div>
+          <span>
+            {filteredReleases.length} {filteredReleases.length === 1 ? "release" : "releases"}
+          </span>
+        </div>
       </div>
 
       <div className="filter-toolbar">
@@ -784,16 +818,56 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
       </div>
 
       {filteredReleases.length > 0 ? (
-        <div className="release-grid">
-          {filteredReleases.map((release, index) => (
-            <ReleaseCard
-              key={release.slug ?? release.id ?? release.title ?? index}
-              release={release}
-              isLatest={activeFilter === "all" && index === 0}
-              activeFilter={activeFilter}
-            />
-          ))}
-        </div>
+        viewMode === "grid" ? (
+          <div className="release-grid">
+            {filteredReleases.map((release, index) => {
+              const dynamicNumber = filteredReleases.length - index;
+              return (
+                <ReleaseCard
+                  key={release.slug ?? release.id ?? release.title ?? index}
+                  release={{ ...release, number: dynamicNumber }}
+                  isLatest={activeFilter === "all" && index === 0}
+                  activeFilter={activeFilter}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "32px", marginTop: "24px" }}>
+            {filteredReleases.map((release, index) => {
+              let tracksToShow = release.tracks || [];
+              if (activeFilter === "ft_silachomka") {
+                tracksToShow = tracksToShow.filter(t => Array.isArray(t.featuring) && t.featuring.some(f => f.toLowerCase() === "silachomka"));
+              } else if (activeFilter === "prod_by_silachomka") {
+                tracksToShow = tracksToShow.filter(t => Array.isArray(t.producers) && t.producers.some(p => p.toLowerCase() === "silachomka"));
+              }
+              const dynamicNumber = filteredReleases.length - index;
+              return (
+                <div key={release.slug ?? index} className="tracklist-card">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      {release.cover && <img src={release.cover} alt={release.title} style={{ width: "40px", height: "40px", borderRadius: "4px", objectFit: "cover" }} />}
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: "14px" }}>{release.title}</h3>
+                        <p style={{ margin: 0, fontSize: "10px", color: "var(--gold)", letterSpacing: "0.05em" }}>
+                          Release {String(dynamicNumber).padStart(2, "0")} • {release.artist && release.artist !== "silachomka" ? release.artist : "silachomka"}
+                        </p>
+                      </div>
+                    </div>
+                    <Link to={`/release/${release.slug}${activeFilter !== "all" ? "?filter=" + activeFilter : ""}`} className="text-button" style={{ fontSize: "10px" }}>
+                      View release →
+                    </Link>
+                  </div>
+                  <div>
+                    {tracksToShow.map((track, trackIndex) => (
+                      <TrackRow key={`${release.slug}-track-${trackIndex}`} track={track} index={trackIndex} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : (
         <div className="gallery-placeholder">
           <span>01</span>
