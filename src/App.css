@@ -4150,6 +4150,7 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 24px;
 }
 .filter-desktop-list {
   display: flex;
@@ -4211,7 +4212,7 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
 .filter-dropdown {
   position: absolute;
   top: calc(100% + 4px);
-  right: 0;
+  left: 0;
   z-index: 100;
   background: var(--surface-2);
   border: 1px solid var(--line-gold);
@@ -4222,6 +4223,10 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   gap: 4px;
   min-width: 160px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+}
+.beats-filter-toolbar .filter-dropdown {
+  left: auto;
+  right: 0;
 }
 .filter-dropdown-item {
   text-align: left;

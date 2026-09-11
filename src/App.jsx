@@ -701,11 +701,13 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   const [activeFilter, setActiveFilter] = useState("all");
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
 
+  const hasAlbums = sortedReleases.some((r) => r.type === "album");
   const filters = [
     { id: "all", label: "ALL" },
+    { id: "silachomka", label: "SILACHOMKA" },
     { id: "singles", label: "SINGLES" },
     { id: "eps", label: "EPS" },
-    { id: "albums", label: "ALBUMS" },
+    ...(hasAlbums ? [{ id: "albums", label: "ALBUMS" }] : []),
     { id: "ft_silachomka", label: "FT. SILACHOMKA" },
     { id: "prod_by_silachomka", label: "PROD. BY SILACHOMKA" },
   ];
@@ -713,6 +715,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   const filteredReleases = useMemo(() => {
     if (activeFilter === "all") return sortedReleases;
     return sortedReleases.filter((release) => {
+      if (activeFilter === "silachomka") return release.artist === "silachomka";
       if (activeFilter === "singles") return release.type === "single";
       if (activeFilter === "eps") return release.type === "ep";
       if (activeFilter === "albums") return release.type === "album";

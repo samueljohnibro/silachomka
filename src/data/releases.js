@@ -28,6 +28,10 @@ const createRelease = ({
   source,
   platforms = {},
   tracks = [],
+  type,
+  artist,
+  featsSilachomka = false,
+  producedBySilachomka = true,
 }) => {
   // Normalise to a sources array
   let normalisedSources;
@@ -39,6 +43,12 @@ const createRelease = ({
     normalisedSources = [DEFAULT_SOURCE];
   }
 
+  // Auto-determine type if not explicitly provided
+  let derivedType = type;
+  if (!derivedType) {
+    derivedType = tracks.length <= 2 ? "single" : "ep";
+  }
+
   return {
     number,
     title,
@@ -47,6 +57,10 @@ const createRelease = ({
     date,
     displayDate,
     cover,
+    type: derivedType,
+    artist: artist || "silachomka",
+    featsSilachomka,
+    producedBySilachomka,
     sources: normalisedSources,
     description:
       description ||
@@ -110,6 +124,7 @@ const releases = [
   createRelease({
     title: "SOBOBO",
     slug: "sobobo",
+    cover: "/covers/hunchoa-sobobo.jpg",
     date: "2025-03-15",
     displayDate: "Saturday, 15th March, 2025",
     type: "single",
