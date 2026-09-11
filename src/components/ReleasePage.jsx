@@ -55,9 +55,16 @@ function getSpotifyEmbedUrl(url) {
    TRACK ROW COMPONENT (EXPANDABLE WITH PRODUCER CREDIT)
    ========================================================= */
 
-export function TrackRow({ track, index }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export function TrackRow({ track, index, isExpanded, onToggle }) {
+  const [localExpanded, setLocalExpanded] = useState(false);
   const trackPlatforms = track.platforms || {};
+
+  const expanded = isExpanded !== undefined ? isExpanded : localExpanded;
+
+  const handleToggle = () => {
+    if (onToggle) onToggle();
+    else setLocalExpanded((prev) => !prev);
+  };
 
   // Check if track has any valid individual platform links
   const availablePlatforms = PLATFORM_CONFIG.filter((platform) => 
@@ -67,14 +74,14 @@ export function TrackRow({ track, index }) {
   const hasLinks = availablePlatforms.length > 0;
 
   return (
-    <div className={`track-item-row ${isExpanded ? "is-expanded" : ""}`}>
+    <div className={`track-item-row ${expanded ? "is-expanded" : ""}`}>
       <div 
         className="track-item-main"
-        onClick={() => hasLinks && setIsExpanded((prev) => !prev)}
+        onClick={() => hasLinks && handleToggle()}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === "Enter" && hasLinks && setIsExpanded((prev) => !prev)}
-        aria-expanded={isExpanded}
+        onKeyDown={(e) => e.key === "Enter" && hasLinks && handleToggle()}
+        aria-expanded={expanded}
         aria-label={`${track.title} stream links`}
       >
         <div className="track-title-left">
@@ -155,6 +162,7 @@ export default function ReleasePage({ release }) {
 
   const platforms = release.platforms || {};
   const allTracks = release.tracks || [];
+  const [expandedTrackIdx, setExpandedTrackIdx] = useState(null);
 
   // Filter tracks based on the active filter from Music section
   const tracks = useMemo(() => {
@@ -321,7 +329,9 @@ export default function ReleasePage({ release }) {
                 <TrackRow 
                   key={`${track.title}-${index}`} 
                   track={track} 
-                  index={index} 
+                  index={index}
+                  isExpanded={expandedTrackIdx === index}
+                  onToggle={() => setExpandedTrackIdx(expandedTrackIdx === index ? null : index)}
                 />
               ))}
             </div>

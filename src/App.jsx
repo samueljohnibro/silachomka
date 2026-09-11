@@ -705,6 +705,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   const subFilter = searchParams.get("sub") || "";
   const viewMode = searchParams.get("view") || "grid";
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [expandedTrackKey, setExpandedTrackKey] = useState(null);
 
   // Type filters that can be conjoined with SILACHOMKA
   const TYPE_FILTERS = ["singles", "eps", "albums"];
@@ -997,9 +998,18 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
                     </Link>
                   </div>
                   <div>
-                    {tracksToShow.map((track, trackIndex) => (
-                      <TrackRow key={`${release.slug}-track-${trackIndex}`} track={track} index={trackIndex} />
-                    ))}
+                    {tracksToShow.map((track, trackIndex) => {
+                      const key = `${release.slug}-${trackIndex}`;
+                      return (
+                        <TrackRow
+                          key={key}
+                          track={track}
+                          index={trackIndex}
+                          isExpanded={expandedTrackKey === key}
+                          onToggle={() => setExpandedTrackKey(expandedTrackKey === key ? null : key)}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               );
