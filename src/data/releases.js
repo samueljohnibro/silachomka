@@ -64,7 +64,7 @@ const createRelease = ({
     sources: normalisedSources,
     description:
       description ||
-      `${title} is an official studio release by silachomka published under chomkaMUSIC™.`,
+      `${title} is an official studio release by ${artist || "silachomka"} published under ${normalisedSources.join(" & ")}.`,
     platforms: {
       ...platforms,
     },

@@ -381,6 +381,7 @@ function SiteFooter() {
 function ReleaseCard({
   release,
   isLatest = false,
+  activeFilter = "all",
 }) {
   const trackCount = getTrackCount(release);
 
@@ -388,7 +389,7 @@ function ReleaseCard({
     <article className="release-card">
       <Link
         className="release-art"
-        to={`/release/${release.slug}`}
+        to={`/release/${release.slug}${activeFilter !== 'all' ? '?filter=' + activeFilter : ''}`}
         aria-label={`Open ${release.title}`}
       >
         {release.cover && (
@@ -447,7 +448,7 @@ function ReleaseCard({
 
         <Link
           className="text-button"
-          to={`/release/${release.slug}`}
+          to={`/release/${release.slug}${activeFilter !== 'all' ? '?filter=' + activeFilter : ''}`}
         >
           View release →
         </Link>
@@ -788,6 +789,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
               key={release.slug ?? release.id ?? release.title ?? index}
               release={release}
               isLatest={activeFilter === "all" && index === 0}
+              activeFilter={activeFilter}
             />
           ))}
         </div>

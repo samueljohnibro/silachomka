@@ -1,7 +1,7 @@
 // src/components/ReleasePage.jsx
 
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
 import {
@@ -132,6 +132,9 @@ function TrackRow({ track, index }) {
    ========================================================= */
 
 export default function ReleasePage({ release }) {
+  const [searchParams] = useSearchParams();
+  const activeFilter = searchParams.get("filter") || "all";
+
   /* Fallback for missing release */
   if (!release) {
     return (
@@ -151,7 +154,27 @@ export default function ReleasePage({ release }) {
   }
 
   const platforms = release.platforms || {};
-  const tracks = release.tracks || [];
+  const allTracks = release.tracks || [];
+
+  // Filter tracks based on the active filter from Music section
+  const tracks = useMemo(() => {
+    if (activeFilter === "ft_silachomka") {
+      return allTracks.filter((track) =>
+        Array.isArray(track.featuring) && track.featuring.some(
+          (f) => f.toLowerCase() === "silachomka"
+        )
+      );
+    }
+    if (activeFilter === "prod_by_silachomka") {
+      return allTracks.filter((track) =>
+        Array.isArray(track.producers) && track.producers.some(
+          (p) => p.toLowerCase() === "silachomka"
+        )
+      );
+    }
+    return allTracks;
+  }, [allTracks, activeFilter]);
+
   const trackCount = tracks.length;
   const releaseNumber = String(release.number ?? "").padStart(2, "0");
   const currentUrl = absoluteUrl(`/release/${release.slug}`);
@@ -162,10 +185,7 @@ export default function ReleasePage({ release }) {
     <main className="release-page-view">
       <SeoHead
         title={`${release.title} | silachomka`}
-        description={
-          release.description ||
-          `${release.title} is an official studio release by silachomka published under chomkaMUSIC™.`
-        }
+        description={release.description}
         path={`/release/${release.slug}`}
         image={release.cover || "/og-image.png"}
         imageAlt={`${release.title} official cover art`}
@@ -217,8 +237,7 @@ export default function ReleasePage({ release }) {
           </div>
 
           <p className="release-description-text">
-            {release.description ||
-              `${release.title} is an official studio release by silachomka published under chomkaMUSIC™ as part of the Chomka Nation creative ecosystem.`}
+            {release.description}
           </p>
           
           {/* ===============================================
@@ -274,7 +293,29 @@ export default function ReleasePage({ release }) {
 
           {/* Tracklist Card (Interactive — click to expand platform links + producer) */}
           <div className="tracklist-card">
-            <div className="platform-section-title">Tracklist ({trackCount})</div>
+            <div className="platform-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+              <span>
+                Tracklist ({trackCount}{activeFilter !== "all" ? ` of ${allTracks.length}` : ""})
+              </span>
+              {activeFilter !== "all" && (
+                <Link
+                  to={`/release/${release.slug}`}
+                  style={{
+                    fontSize: "8px",
+                    color: "var(--gold)",
+                    textDecoration: "none",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    fontWeight: "700",
+                    border: "1px solid var(--line-gold)",
+                    padding: "5px 10px",
+                    borderRadius: "3px",
+                  }}
+                >
+                  Show all tracks
+                </Link>
+              )}
+            </div>
             <div>
               {tracks.map((track, index) => (
                 <TrackRow 
