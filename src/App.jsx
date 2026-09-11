@@ -8,6 +8,7 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 
 import { useChomkaStore } from "./data/store";
@@ -16,7 +17,7 @@ import { ARTIST_SOCIALS, ECOSYSTEM_SOCIALS } from "./data/socials";
 
 import MediaSlideshow from "./components/MediaSlideshow";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
-import ReleasePage from "./components/ReleasePage";
+import ReleasePage, { TrackRow } from "./components/ReleasePage";
 import GalleryPostModal from "./components/GalleryPostModal";
 import VideosSection from "./components/VideosSection";
 import BeatsPage from "./pages/BeatsPage";

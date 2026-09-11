@@ -55,7 +55,7 @@ function getSpotifyEmbedUrl(url) {
    TRACK ROW COMPONENT (EXPANDABLE WITH PRODUCER CREDIT)
    ========================================================= */
 
-function TrackRow({ track, index }) {
+export function TrackRow({ track, index }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const trackPlatforms = track.platforms || {};
 
@@ -191,7 +191,7 @@ export default function ReleasePage({ release }) {
         imageAlt={`${release.title} official cover art`}
       />
       {/* Breadcrumb Navigation */}
-      <Link className="release-breadcrumb" to="/#music">
+      <Link className="release-breadcrumb" to={`/?${activeFilter !== "all" ? "filter=" + activeFilter + "#music" : "#music"}`}>
         ← All Music
       </Link>
 
@@ -295,9 +295,9 @@ export default function ReleasePage({ release }) {
           <div className="tracklist-card">
             <div className="platform-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
               <span>
-                Tracklist ({trackCount}{activeFilter !== "all" ? ` of ${allTracks.length}` : ""})
+                Tracklist ({trackCount}{trackCount < allTracks.length ? ` of ${allTracks.length}` : ""})
               </span>
-              {activeFilter !== "all" && (
+              {trackCount < allTracks.length && (
                 <Link
                   to={`/release/${release.slug}`}
                   style={{
