@@ -718,7 +718,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
     const p = new URLSearchParams(searchParams);
     if (!filter || filter === "all") { p.delete("filter"); p.delete("sub"); }
     else { p.set("filter", filter); if (sub) p.set("sub", sub); else p.delete("sub"); }
-    setSearchParams(p, { replace: true });
+    setSearchParams(p, { replace: true, preventScrollReset: true });
   };
 
   const handleFilterClick = (filterId) => {
@@ -765,7 +765,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   const setViewMode = (mode) => {
     const p = new URLSearchParams(searchParams);
     if (mode === "grid") p.delete("view"); else p.set("view", mode);
-    setSearchParams(p, { replace: true });
+    setSearchParams(p, { replace: true, preventScrollReset: true });
   };
 
   const hasAlbums = sortedReleases.some((r) => r.type === "album");
@@ -828,6 +828,18 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
     "ft_silachomka", "prod_by_silachomka",
   ];
 
+  const filteredTracksCount = useMemo(() => {
+    return filteredReleases.reduce((acc, release) => {
+      let tracks = release.tracks || [];
+      if (activeFilter === "ft_silachomka") {
+        tracks = tracks.filter(t => Array.isArray(t.featuring) && t.featuring.some(f => f.toLowerCase() === "silachomka"));
+      } else if (activeFilter === "prod_by_silachomka") {
+        tracks = tracks.filter(t => Array.isArray(t.producers) && t.producers.some(p => p.toLowerCase() === "silachomka"));
+      }
+      return acc + tracks.length;
+    }, 0);
+  }, [filteredReleases, activeFilter]);
+
   return (
     <section className="music-section" id="music">
       <div className="section-heading">
@@ -854,8 +866,8 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
               }}
             >List</button>
           </div>
-          <span>
-            {filteredReleases.length} {filteredReleases.length === 1 ? "release" : "releases"}
+          <span style={{ fontSize: "11px", letterSpacing: "0.05em", color: "var(--muted)", textTransform: "uppercase" }}>
+            {filteredReleases.length} {filteredReleases.length === 1 ? "release" : "releases"} <span style={{ opacity: 0.5, margin: "0 4px" }}>|</span> {filteredTracksCount} {filteredTracksCount === 1 ? "track" : "tracks"}
           </span>
         </div>
       </div>
