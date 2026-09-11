@@ -702,13 +702,64 @@ function LatestReleaseSection({
 function MusicSection({ releases: sortedReleases, totalTracks }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeFilter = searchParams.get("filter") || "all";
+  const subFilter = searchParams.get("sub") || "";
   const viewMode = searchParams.get("view") || "grid";
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
 
-  const setActiveFilter = (filter) => {
+  // Type filters that can be conjoined with SILACHOMKA
+  const TYPE_FILTERS = ["singles", "eps", "albums"];
+  // Exclusive filters that clear everything
+  const EXCLUSIVE_FILTERS = ["all", "ft_silachomka", "prod_by_silachomka"];
+
+  const isSilachomkaActive = activeFilter === "silachomka";
+  const isConjoined = isSilachomkaActive && TYPE_FILTERS.includes(subFilter);
+
+  const updateParams = (filter, sub) => {
     const p = new URLSearchParams(searchParams);
-    if (filter === "all") p.delete("filter"); else p.set("filter", filter);
+    if (!filter || filter === "all") { p.delete("filter"); p.delete("sub"); }
+    else { p.set("filter", filter); if (sub) p.set("sub", sub); else p.delete("sub"); }
     setSearchParams(p, { replace: true });
+  };
+
+  const handleFilterClick = (filterId) => {
+    if (EXCLUSIVE_FILTERS.includes(filterId)) {
+      // Exclusive: clear everything
+      updateParams(filterId === "all" ? null : filterId, null);
+    } else if (filterId === "silachomka") {
+      if (isSilachomkaActive) {
+        // Clicking silachomka when already active: deselect it
+        if (subFilter) updateParams(subFilter, null); // keep the sub as main
+        else updateParams(null, null); // go to all
+      } else {
+        updateParams("silachomka", null);
+      }
+    } else if (TYPE_FILTERS.includes(filterId)) {
+      if (isSilachomkaActive) {
+        // Conjoin with silachomka
+        if (subFilter === filterId) {
+          // Already conjoined with this type, deselect the type
+          updateParams("silachomka", null);
+        } else {
+          updateParams("silachomka", filterId);
+        }
+      } else {
+        // Standalone type filter
+        if (activeFilter === filterId) updateParams(null, null);
+        else updateParams(filterId, null);
+      }
+    }
+  };
+
+  const handleDeselectSilachomka = (e) => {
+    e.stopPropagation();
+    // Remove silachomka, keep the sub-filter as main
+    updateParams(subFilter, null);
+  };
+
+  const handleDeselectSub = (e) => {
+    e.stopPropagation();
+    // Remove sub-filter, keep silachomka
+    updateParams("silachomka", null);
   };
 
   const setViewMode = (mode) => {
@@ -718,30 +769,64 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   };
 
   const hasAlbums = sortedReleases.some((r) => r.type === "album");
-  const filters = [
-    { id: "all", label: "ALL" },
-    { id: "silachomka", label: "SILACHOMKA" },
-    { id: "singles", label: "SINGLES" },
-    { id: "eps", label: "EPS" },
-    ...(hasAlbums ? [{ id: "albums", label: "ALBUMS" }] : []),
-    { id: "ft_silachomka", label: "FT. SILACHOMKA" },
-    { id: "prod_by_silachomka", label: "PROD. BY SILACHOMKA" },
-  ];
 
   const filteredReleases = useMemo(() => {
-    if (activeFilter === "all") return sortedReleases;
-    return sortedReleases.filter((release) => {
-      if (activeFilter === "silachomka") return release.artist === "silachomka";
-      if (activeFilter === "singles") return release.type === "single";
-      if (activeFilter === "eps") return release.type === "ep";
-      if (activeFilter === "albums") return release.type === "album";
-      if (activeFilter === "ft_silachomka") return release.featsSilachomka === true;
-      if (activeFilter === "prod_by_silachomka") return release.producedBySilachomka !== false;
-      return true;
-    });
-  }, [sortedReleases, activeFilter]);
+    let results = sortedReleases;
+    const f = activeFilter;
+    const s = subFilter;
+
+    if (f === "all") return results;
+
+    if (f === "silachomka") {
+      results = results.filter(r => r.artist === "silachomka");
+      if (s === "singles") results = results.filter(r => r.type === "single");
+      else if (s === "eps") results = results.filter(r => r.type === "ep");
+      else if (s === "albums") results = results.filter(r => r.type === "album");
+    } else if (f === "singles") results = results.filter(r => r.type === "single");
+    else if (f === "eps") results = results.filter(r => r.type === "ep");
+    else if (f === "albums") results = results.filter(r => r.type === "album");
+    else if (f === "ft_silachomka") results = results.filter(r => r.featsSilachomka === true);
+    else if (f === "prod_by_silachomka") results = results.filter(r => r.producedBySilachomka !== false);
+
+    return results;
+  }, [sortedReleases, activeFilter, subFilter]);
 
   const toggleFilterMenu = () => setFilterMenuOpen(!filterMenuOpen);
+
+  // Build the filter button label and state for each filter
+  const getFilterLabel = (filterId) => {
+    const labels = { all: "ALL", silachomka: "SILACHOMKA", singles: "SINGLES", eps: "EPS", albums: "ALBUMS", ft_silachomka: "FT. SILACHOMKA", prod_by_silachomka: "PROD. BY SILACHOMKA" };
+    const baseLabel = labels[filterId] || filterId;
+
+    if (TYPE_FILTERS.includes(filterId)) {
+      if (isSilachomkaActive && !isConjoined) return `+ ${baseLabel}`;
+      if (isConjoined && subFilter === filterId) return baseLabel;
+    }
+    return baseLabel;
+  };
+
+  const isFilterActive = (filterId) => {
+    if (filterId === activeFilter) return true;
+    if (isConjoined && filterId === subFilter) return true;
+    return false;
+  };
+
+  // For mobile hamburger label
+  const getMobileLabel = () => {
+    if (isConjoined) {
+      const labels = { singles: "SINGLES", eps: "EPS", albums: "ALBUMS" };
+      return `SILACHOMKA + ${labels[subFilter]}`;
+    }
+    const labels = { all: "ALL", silachomka: "SILACHOMKA", singles: "SINGLES", eps: "EPS", albums: "ALBUMS", ft_silachomka: "FT. SILACHOMKA", prod_by_silachomka: "PROD. BY SILACHOMKA" };
+    return labels[activeFilter] || "ALL";
+  };
+
+  // Filters to render
+  const visibleFilters = [
+    "all", "silachomka", "singles", "eps",
+    ...(hasAlbums ? ["albums"] : []),
+    "ft_silachomka", "prod_by_silachomka",
+  ];
 
   return (
     <section className="music-section" id="music">
@@ -782,22 +867,22 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
             onClick={toggleFilterMenu}
             aria-expanded={filterMenuOpen}
           >
-            {filters.find(f => f.id === activeFilter)?.label} 
+            {getMobileLabel()}{" "}
             <span className="filter-icon">▼</span>
           </button>
-          
+
           {filterMenuOpen && (
             <div className="filter-dropdown">
-              {filters.map((filter) => (
+              {visibleFilters.map((filterId) => (
                 <button
-                  key={filter.id}
-                  className={`filter-dropdown-item ${activeFilter === filter.id ? "is-active" : ""}`}
+                  key={filterId}
+                  className={`filter-dropdown-item ${isFilterActive(filterId) ? "is-active" : ""}`}
                   onClick={() => {
-                    setActiveFilter(filter.id);
+                    handleFilterClick(filterId);
                     setFilterMenuOpen(false);
                   }}
                 >
-                  {filter.label}
+                  {getFilterLabel(filterId)}
                 </button>
               ))}
             </div>
@@ -805,15 +890,28 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
         </div>
 
         <div className="filter-desktop-list">
-          {filters.map((filter) => (
-            <button
-              key={filter.id}
-              className={`filter-btn ${activeFilter === filter.id ? "is-active" : ""}`}
-              onClick={() => setActiveFilter(filter.id)}
-            >
-              {filter.label}
-            </button>
-          ))}
+          {visibleFilters.map((filterId) => {
+            const active = isFilterActive(filterId);
+            const showX = isConjoined && (filterId === "silachomka" || filterId === subFilter);
+
+            return (
+              <button
+                key={filterId}
+                className={`filter-btn ${active ? "is-active" : ""}`}
+                onClick={() => handleFilterClick(filterId)}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              >
+                {getFilterLabel(filterId)}
+                {showX && (
+                  <span
+                    onClick={filterId === "silachomka" ? handleDeselectSilachomka : handleDeselectSub}
+                    style={{ marginLeft: "2px", fontSize: "10px", lineHeight: 1, opacity: 0.8 }}
+                    aria-label={`Remove ${filterId} filter`}
+                  >×</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
