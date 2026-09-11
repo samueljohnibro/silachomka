@@ -106,7 +106,7 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay }) {
           ref={videoRef}
           className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
           src={beat.video}
-          poster={beat.image || beat.video?.replace('.mp4', '.jpg')}
+          poster={beat.image}
           muted
           autoPlay
           playsInline

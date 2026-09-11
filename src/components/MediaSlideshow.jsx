@@ -131,6 +131,7 @@ export default function MediaSlideshow({
             {isVideo ? (
               <video
                 src={src}
+                poster={item.beat?.image || item.poster || undefined}
                 autoPlay
                 muted
                 loop

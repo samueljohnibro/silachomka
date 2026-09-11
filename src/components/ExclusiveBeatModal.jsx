@@ -70,6 +70,7 @@ export default function ExclusiveBeatModal({ isOpen, onClose, beats = [] }) {
                 {beat.video ? (
                   <video
                     src={beat.video}
+                    poster={beat.image}
                     muted
                     playsInline
                     loop

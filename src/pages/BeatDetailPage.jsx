@@ -237,7 +237,7 @@ export default function BeatDetailPage() {
             {beat.video ? (
               <video
                 src={beat.video}
-                poster={beat.image || beat.video.replace('.mp4', '.jpg')}
+                poster={beat.image}
                 autoPlay
                 muted
                 loop
