@@ -1,6 +1,6 @@
 // src/App.jsx
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Link,
   Route,
@@ -34,6 +34,7 @@ import "./App.css";
 
 function ScrollToHash() {
   const { pathname, hash } = useLocation();
+  const prevPathnameRef = useRef(pathname);
 
   useEffect(() => {
     if (hash) {
@@ -46,9 +47,10 @@ function ScrollToHash() {
       }, 60);
 
       return () => clearTimeout(timer);
-    } else {
+    } else if (prevPathnameRef.current !== pathname) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+    prevPathnameRef.current = pathname;
   }, [pathname, hash]);
 
   return null;
