@@ -943,8 +943,36 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
               return (
                 <div key={release.slug ?? index} className="tracklist-card">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      {release.cover && <img src={release.cover} alt={release.title} style={{ width: "40px", height: "40px", borderRadius: "4px", objectFit: "cover" }} />}
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", position: "relative" }}>
+                      {release.cover && (
+                        <div style={{ position: "relative", zIndex: 10, width: "40px", height: "40px" }}>
+                          <img 
+                            src={release.cover} 
+                            alt={release.title} 
+                            className="list-view-cover"
+                            style={{ 
+                              width: "40px", height: "40px", 
+                              borderRadius: "4px", objectFit: "cover",
+                              transition: "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+                              transformOrigin: "left center",
+                              position: "absolute",
+                              top: 0, left: 0
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = "scale(6.25)";
+                              e.currentTarget.style.boxShadow = "0 20px 48px rgba(0, 0, 0, 0.8), 0 0 25px var(--gold-glow)";
+                              e.currentTarget.style.borderRadius = "2px";
+                              e.currentTarget.style.zIndex = "50";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = "scale(1)";
+                              e.currentTarget.style.boxShadow = "none";
+                              e.currentTarget.style.borderRadius = "4px";
+                              e.currentTarget.style.zIndex = "10";
+                            }}
+                          />
+                        </div>
+                      )}
                       <div>
                         <h3 style={{ margin: 0, fontSize: "14px" }}>{release.title}</h3>
                         <p style={{ margin: 0, fontSize: "10px", color: "var(--gold)", letterSpacing: "0.05em" }}>
