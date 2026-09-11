@@ -718,10 +718,12 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   const isConjoined = isSilachomkaActive && TYPE_FILTERS.includes(subFilter);
 
   const updateParams = (filter, sub) => {
+    const scrollY = window.scrollY;
     const p = new URLSearchParams(searchParams);
     if (!filter || filter === "all") { p.delete("filter"); p.delete("sub"); }
     else { p.set("filter", filter); if (sub) p.set("sub", sub); else p.delete("sub"); }
     setSearchParams(p, { replace: true, preventScrollReset: true });
+    requestAnimationFrame(() => window.scrollTo(0, scrollY));
   };
 
   const handleFilterClick = (filterId) => {
@@ -766,9 +768,11 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   };
 
   const setViewMode = (mode) => {
+    const scrollY = window.scrollY;
     const p = new URLSearchParams(searchParams);
     if (mode === "grid") p.delete("view"); else p.set("view", mode);
     setSearchParams(p, { replace: true, preventScrollReset: true });
+    requestAnimationFrame(() => window.scrollTo(0, scrollY));
   };
 
   const hasAlbums = sortedReleases.some((r) => r.type === "album");
