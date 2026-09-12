@@ -32,26 +32,41 @@ import "./App.css";
    SCROLL TO HASH ENGINE (CROSS-PAGE ANCHOR SCROLLING)
    ========================================================= */
 
+// Global flag: filter/view-mode clicks set this to suppress scroll-to-top
+let _suppressNextScroll = false;
+export function suppressScroll() { _suppressNextScroll = true; }
+
 function ScrollToHash() {
-  const { pathname, hash } = useLocation();
-  const prevPathnameRef = useRef(pathname);
+  const location = useLocation();
+  const prevRef = useRef({ pathname: location.pathname, search: location.search });
 
   useEffect(() => {
-    if (hash) {
-      const targetId = hash.replace("#", "");
+    const prev = prevRef.current;
+    const pathnameChanged = prev.pathname !== location.pathname;
+    prevRef.current = { pathname: location.pathname, search: location.search };
+
+    // If suppression flag is set, consume it and do nothing
+    if (_suppressNextScroll) {
+      _suppressNextScroll = false;
+      return;
+    }
+
+    if (location.hash) {
+      const targetId = location.hash.replace("#", "");
       const timer = setTimeout(() => {
         const element = document.getElementById(targetId);
         if (element) {
           element.scrollIntoView({ behavior: "smooth" });
         }
       }, 60);
-
       return () => clearTimeout(timer);
-    } else if (prevPathnameRef.current !== pathname) {
+    }
+
+    // Only scroll to top if the pathname actually changed (real navigation)
+    if (pathnameChanged) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    prevPathnameRef.current = pathname;
-  }, [pathname, hash]);
+  }, [location.pathname, location.search, location.hash]);
 
   return null;
 }
@@ -719,11 +734,15 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
 
   const updateParams = (filter, sub) => {
     const scrollY = window.scrollY;
+    suppressScroll();
     const p = new URLSearchParams(searchParams);
     if (!filter || filter === "all") { p.delete("filter"); p.delete("sub"); }
     else { p.set("filter", filter); if (sub) p.set("sub", sub); else p.delete("sub"); }
     setSearchParams(p, { replace: true, preventScrollReset: true });
-    requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    // Aggressively restore scroll across multiple frames to beat any async scroll resets
+    requestAnimationFrame(() => { window.scrollTo(0, scrollY); requestAnimationFrame(() => window.scrollTo(0, scrollY)); });
+    setTimeout(() => window.scrollTo(0, scrollY), 0);
+    setTimeout(() => window.scrollTo(0, scrollY), 50);
   };
 
   const handleFilterClick = (filterId) => {
@@ -769,10 +788,13 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
 
   const setViewMode = (mode) => {
     const scrollY = window.scrollY;
+    suppressScroll();
     const p = new URLSearchParams(searchParams);
     if (mode === "grid") p.delete("view"); else p.set("view", mode);
     setSearchParams(p, { replace: true, preventScrollReset: true });
-    requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    requestAnimationFrame(() => { window.scrollTo(0, scrollY); requestAnimationFrame(() => window.scrollTo(0, scrollY)); });
+    setTimeout(() => window.scrollTo(0, scrollY), 0);
+    setTimeout(() => window.scrollTo(0, scrollY), 50);
   };
 
   const hasAlbums = sortedReleases.some((r) => r.type === "album");
