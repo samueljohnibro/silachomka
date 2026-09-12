@@ -369,7 +369,7 @@ export default function StudioPublisherPage() {
   const [beatGenre, setBeatGenre] = useState("Afro-Alternative × Trap");
   const [beatBpm, setBeatBpm] = useState("130 BPM");
   const [beatKey, setBeatKey] = useState("F Minor");
-  const [beatVideo, setBeatVideo] = useState("/beats/chinese-empathy.mp4");
+  const [beatVideo, setBeatVideo] = useState("/beats/chinese-empathy.gif");
   const [beatAudio, setBeatAudio] = useState("/beats/chinese-empathy.mp3");
   const [beatCategories, setBeatCategories] = useState(["afro"]);
   const [beatSelarBasic, setBeatSelarBasic] = useState("https://selar.com/chomkamusicstudio-");

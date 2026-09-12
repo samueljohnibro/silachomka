@@ -840,6 +840,16 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
     return false;
   };
 
+  const handleClearFilter = (e, filterId) => {
+    e.stopPropagation();
+    if (isConjoined) {
+      if (filterId === "silachomka") handleDeselectSilachomka(e);
+      else if (filterId === subFilter) handleDeselectSub(e);
+    } else {
+      updateParams(null, null); // Clear it
+    }
+  };
+
   // For mobile hamburger label
   const getMobileLabel = () => {
     if (isConjoined) {
@@ -914,18 +924,35 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
 
           {filterMenuOpen && (
             <div className="filter-dropdown">
-              {visibleFilters.map((filterId) => (
-                <button
-                  key={filterId}
-                  className={`filter-dropdown-item ${isFilterActive(filterId) ? "is-active" : ""}`}
-                  onClick={() => {
-                    handleFilterClick(filterId);
-                    setFilterMenuOpen(false);
-                  }}
-                >
-                  {getFilterLabel(filterId)}
-                </button>
-              ))}
+              {visibleFilters.map((filterId) => {
+                const active = isFilterActive(filterId);
+                const showX = active && filterId !== "all";
+
+                return (
+                  <button
+                    key={filterId}
+                    className={`filter-dropdown-item ${active ? "is-active" : ""}`}
+                    onClick={(e) => {
+                      if (e.target.tagName === "SPAN" && e.target.className === "filter-clear-icon") {
+                        handleClearFilter(e, filterId);
+                      } else {
+                        handleFilterClick(filterId);
+                      }
+                      setFilterMenuOpen(false);
+                    }}
+                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <span>{getFilterLabel(filterId)}</span>
+                    {showX && (
+                      <span
+                        className="filter-clear-icon"
+                        style={{ fontSize: "14px", lineHeight: 1, opacity: 0.8, padding: "0 4px" }}
+                        aria-label={`Remove ${filterId} filter`}
+                      >×</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -933,7 +960,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
         <div className="filter-desktop-list">
           {visibleFilters.map((filterId) => {
             const active = isFilterActive(filterId);
-            const showX = isConjoined && (filterId === "silachomka" || filterId === subFilter);
+            const showX = active && filterId !== "all";
 
             return (
               <button
@@ -945,7 +972,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
                 {getFilterLabel(filterId)}
                 {showX && (
                   <span
-                    onClick={filterId === "silachomka" ? handleDeselectSilachomka : handleDeselectSub}
+                    onClick={(e) => handleClearFilter(e, filterId)}
                     style={{ marginLeft: "2px", fontSize: "10px", lineHeight: 1, opacity: 0.8 }}
                     aria-label={`Remove ${filterId} filter`}
                   >×</span>

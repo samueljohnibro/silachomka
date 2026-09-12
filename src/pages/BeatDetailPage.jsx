@@ -235,15 +235,24 @@ export default function BeatDetailPage() {
         <div>
           <div className="beat-visualizer-card">
             {beat.video ? (
-              <video
-                src={beat.video}
-                poster={beat.image}
-                autoPlay
-                muted
-                loop
-                playsInline
-                className="beat-visualizer-video"
-              />
+              beat.video.endsWith(".gif") ? (
+                <img
+                  src={beat.video}
+                  alt={`${beat.title} visualizer`}
+                  className="beat-visualizer-video"
+                  style={{ objectFit: "cover" }}
+                />
+              ) : (
+                <video
+                  src={beat.video}
+                  poster={beat.image}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  className="beat-visualizer-video"
+                />
+              )
             ) : (
               <div
                 style={{

@@ -213,7 +213,7 @@ const gallery = [
     caption: "Behind the console. 140 BPM drum programming and low-end sculpting.\n\nchomkaMUSIC Studio.",
     date: "2024-08-10",
     displayDate: "10 Aug 2024",
-    src: "/beats/chinese-empathy.mp4",
+    src: "/beats/chinese-empathy.gif",
     tags: ["#StudioBTS", "#Production", "#chomkaMUSIC"],
   },
 ];

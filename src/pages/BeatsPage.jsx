@@ -102,18 +102,28 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay }) {
     <article className={`beat-card ${isPlaying ? "is-playing" : ""}`}>
       {/* Visualizer Frame */}
       <div className={`beat-art ${isPlaying ? "is-playing" : ""}`}>
-        <video
-          ref={videoRef}
-          className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
-          src={beat.video}
-          poster={beat.image}
-          muted
-          autoPlay
-          playsInline
-          loop
-          preload="metadata"
-          aria-hidden="true"
-        />
+        {beat.video?.endsWith(".gif") ? (
+          <img
+            src={beat.video}
+            alt=""
+            className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
+            style={{ objectFit: "cover" }}
+            aria-hidden="true"
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
+            src={beat.video}
+            poster={beat.image}
+            muted
+            autoPlay
+            playsInline
+            loop
+            preload="metadata"
+            aria-hidden="true"
+          />
+        )}
 
         <div className="beat-video-overlay" aria-hidden="true" />
 

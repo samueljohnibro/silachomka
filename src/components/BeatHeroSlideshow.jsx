@@ -24,7 +24,7 @@ export default function BeatHeroSlideshow({ beats = [] }) {
 
     const seen = new Set();
 
-    return beats
+    const mediaList = beats
       .map((beat) => {
         if (!beat || typeof beat !== "object") {
           return null;
@@ -45,12 +45,20 @@ export default function BeatHeroSlideshow({ beats = [] }) {
         seen.add(src);
 
         return {
-          type: "video",
+          type: src.endsWith(".mp4") || src.endsWith(".webm") ? "video" : "image",
           src,
           beat,
         };
       })
       .filter(Boolean);
+
+    // Pseudorandom shuffle
+    for (let i = mediaList.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [mediaList[i], mediaList[j]] = [mediaList[j], mediaList[i]];
+    }
+
+    return mediaList;
   }, [beats]);
 
   if (!media.length) {

@@ -68,16 +68,26 @@ export default function ExclusiveBeatModal({ isOpen, onClose, beats = [] }) {
             >
               <div className="exclusive-modal-thumb">
                 {beat.video ? (
-                  <video
-                    src={beat.video}
-                    poster={beat.image}
-                    muted
-                    playsInline
-                    loop
-                    autoPlay
-                    className="exclusive-modal-video"
-                    aria-hidden="true"
-                  />
+                  beat.video.endsWith(".gif") ? (
+                    <img
+                      src={beat.video}
+                      alt=""
+                      className="exclusive-modal-video"
+                      style={{ objectFit: "cover" }}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <video
+                      src={beat.video}
+                      poster={beat.image}
+                      muted
+                      playsInline
+                      loop
+                      autoPlay
+                      className="exclusive-modal-video"
+                      aria-hidden="true"
+                    />
+                  )
                 ) : (
                   <div className="exclusive-modal-placeholder">🎹</div>
                 )}
