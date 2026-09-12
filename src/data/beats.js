@@ -9,7 +9,7 @@ const rawBeats = [
     categories: ["afro", "trap"],
     bpm: "140 BPM",
     key: "C minor",
-    image: "/beats/faces.jpg",
+    image: "/beats/faces.png",
     video: "/beats/faces.mp4",
     audio: "/beats/faces.mp3",
     showVisualTitle: true,

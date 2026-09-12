@@ -1,6 +1,6 @@
 export const DEFAULT_PRODUCER = "silachomka";
 export const DEFAULT_SOURCE = "chomkaMUSIC™";
-export const SITE_ORIGIN = "https://silachomka.com";
+export const SITE_ORIGIN = "https://silachomka.vercel.app";
 
 export function formatCreditsList(items, defaultValue) {
   if (!items || items.length === 0) return defaultValue;

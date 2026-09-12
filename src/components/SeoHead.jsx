@@ -2,11 +2,12 @@ import { Helmet } from "react-helmet-async";
 import { SITE_ORIGIN } from "../data/credits";
 
 function toAbsolute(value) {
-  if (!value) return `${SITE_ORIGIN}/og-image.png`;
+  const origin = typeof window !== "undefined" && window.location?.origin ? window.location.origin : SITE_ORIGIN;
+  if (!value) return `${origin}/og-image.png`;
   try {
-    return new URL(value, `${SITE_ORIGIN}/`).toString();
+    return new URL(value, `${origin}/`).toString();
   } catch {
-    return `${SITE_ORIGIN}/og-image.png`;
+    return `${origin}/og-image.png`;
   }
 }
 
