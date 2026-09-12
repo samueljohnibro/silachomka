@@ -181,17 +181,12 @@ function createHomeMetadata() {
 
 function createBeatHubMetadata() {
   const title = "chomkaMUSIC™ Studio Beats | Silachomka";
-  // Use the first available beat's JPG as the hub social image
-  const hubImage =
-    beats.length > 0 && beats[0].image
-      ? beats[0].image
-      : DEFAULT_SOCIAL_IMAGE;
   return {
     title,
     description:
       "Explore original studio beats by silachomka. Listen, license on Selar, and craft your next release with chomkaMUSIC™ Studio.",
     canonicalPath: "/beats",
-    image: hubImage,
+    image: DEFAULT_SOCIAL_IMAGE,
     imageAlt: "chomkaMUSIC™ Studio Beats by silachomka",
   };
 }
