@@ -1,0 +1,16 @@
+name = "silachomka-api"
+main = "src/index.js"
+compatibility_date = "2026-09-12"
+
+# Observability (optional but recommended for Workers)
+[observability]
+enabled = true
+
+# Future Neon DB configuration placeholder
+# [vars]
+# DATABASE_URL = ""
+
+# Future R2 Bucket configuration placeholder
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "silachomka-media"
