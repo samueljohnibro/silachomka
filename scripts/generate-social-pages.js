@@ -14,24 +14,14 @@ const outputDirectory = path.join(rootDirectory, "dist");
 
 const SOCIAL_METADATA_PATTERN =
   /<!-- SOCIAL_METADATA:START -->[\s\S]*?<!-- SOCIAL_METADATA:END -->/;
-const DEFAULT_SITE_URL = "https://silachomka.com";
+const DEFAULT_SITE_URL = "https://silachomka.vercel.app";
 const DEFAULT_SOCIAL_IMAGE = "/og-image.png";
 const MAX_DESCRIPTION_LENGTH = 280;
 
 function getSiteUrl() {
-  const configuredUrl =
-    process.env.SITE_URL ||
-    process.env.VITE_SITE_URL ||
-    DEFAULT_SITE_URL;
-
-  try {
-    return new URL(configuredUrl).origin;
-  } catch {
-    console.warn(
-      `Invalid SITE_URL/VITE_SITE_URL value "${configuredUrl}". Falling back to ${DEFAULT_SITE_URL}.`
-    );
-    return DEFAULT_SITE_URL;
-  }
+  // Hardcoded to the vercel.app domain because the custom .com domain is currently 
+  // offline/failing DNS resolution, which breaks image downloads for WhatsApp link previews.
+  return "https://silachomka.vercel.app";
 }
 
 const siteUrl = getSiteUrl();
