@@ -1,4 +1,4 @@
-import { DownCaretIcon, PlayIcon, PauseIcon, RightArrowIcon } from '../components/Icons';
+import { DownCaretIcon, PlayIcon, PauseIcon, RightArrowIcon , UpRightArrowIcon} from '../components/Icons';
 // src/pages/BeatsPage.jsx
 
 import {
@@ -590,7 +590,7 @@ export default function BeatsPage() {
             rel="noopener noreferrer"
             className="beats-studio-ig-badge"
           >
-            📸 @chomkamusicstudio on Instagram ↗
+            📸 @chomkamusicstudio on Instagram <UpRightArrowIcon size={14} />
           </a>
         </div>
       </section>

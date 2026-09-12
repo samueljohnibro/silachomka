@@ -1,3 +1,4 @@
+import { RightArrowIcon } from '../components/Icons';
 import { MusicNoteIcon } from './Icons';
 // src/components/ExclusiveBeatModal.jsx
 
@@ -110,7 +111,7 @@ export default function ExclusiveBeatModal({ isOpen, onClose, beats = [] }) {
                   handleSelectBeat(beat.id);
                 }}
               >
-                Select Exclusive →
+                Select Exclusive <RightArrowIcon size={14} />
               </button>
             </div>
           ))}

@@ -1,4 +1,4 @@
-import { DownCaretIcon } from './components/Icons';
+import { DownCaretIcon , UpRightArrowIcon} from './components/Icons';
 // src/App.jsx
 
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -469,7 +469,7 @@ function ReleaseCard({
           className="text-button"
           to={`/release/${release.slug}${activeFilter !== 'all' ? '?filter=' + activeFilter : ''}`}
         >
-          View release →
+          View release <RightArrowIcon size={16} />
         </Link>
       </div>
     </article>
@@ -1050,7 +1050,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
                       </div>
                     </div>
                     <Link to={`/release/${release.slug}${activeFilter !== "all" ? "?filter=" + activeFilter : ""}`} className="text-button" style={{ fontSize: "10px" }}>
-                      View release →
+                      View release <RightArrowIcon size={16} />
                     </Link>
                   </div>
                   <div>
@@ -1373,7 +1373,7 @@ function SocialsSection() {
                   <span className="social-name">{soc.name}</span>
                   <span className="social-handle">{soc.handle}</span>
                 </div>
-                <span className="social-arrow">↗</span>
+                <span className="social-arrow"><UpRightArrowIcon size={14} /></span>
               </a>
             ))}
           </div>
@@ -1396,7 +1396,7 @@ function SocialsSection() {
                   <span className="social-name">{eco.name}</span>
                   <span className="social-handle">{eco.role}</span>
                 </div>
-                <span className="social-arrow">↗</span>
+                <span className="social-arrow"><UpRightArrowIcon size={14} /></span>
               </a>
             ))}
           </div>

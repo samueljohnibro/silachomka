@@ -1,3 +1,4 @@
+import { UpRightArrowIcon } from '../components/Icons';
 // src/components/GalleryPostModal.jsx
 
 import { useState, useEffect, useCallback } from "react";
@@ -236,7 +237,7 @@ export default function GalleryPostModal({
               <ShareLinkBox url={shareUrl} />
               {post.link ? (
                 <Link to={post.link} className="gallery-modal-cta-btn" onClick={onClose}>
-                  Open Release Project →
+                  Open Release Project <RightArrowIcon size={14} />
                 </Link>
               ) : (
                 <a
@@ -245,7 +246,7 @@ export default function GalleryPostModal({
                   rel="noopener noreferrer"
                   className="gallery-modal-cta-btn"
                 >
-                  Follow on Instagram ↗
+                  Follow on Instagram <UpRightArrowIcon size={14} />
                 </a>
               )}
             </div>

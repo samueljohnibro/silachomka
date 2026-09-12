@@ -1,3 +1,4 @@
+import { UpRightArrowIcon } from '../components/Icons';
 // src/components/ReleasePage.jsx
 
 import { useState, useMemo } from "react";
@@ -124,7 +125,7 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
                 className="track-platform-btn"
                 onClick={(e) => e.stopPropagation()}
               >
-                {platform.name} ↗
+                {platform.name} <UpRightArrowIcon size={14} />
               </a>
             ))}
           </div>
@@ -290,7 +291,7 @@ export default function ReleasePage({ release }) {
                     className="platform-btn"
                     aria-label={`Listen to ${release.title} on ${platform.name}`}
                   >
-                    {platform.name} →
+                    {platform.name} <RightArrowIcon size={14} />
                   </a>
                 );
               })}

@@ -1,3 +1,4 @@
+import { UpRightArrowIcon } from '../components/Icons';
 // src/components/VideosSection.jsx
 
 import { useState } from "react";
@@ -62,7 +63,7 @@ export default function VideosSection() {
                   className="video-action-btn btn-youtube"
                   aria-label="Open on YouTube"
                 >
-                  YouTube ↗
+                  YouTube <UpRightArrowIcon size={14} />
                 </a>
               )}
               {selectedVideo.links?.audiomack && (
@@ -73,7 +74,7 @@ export default function VideosSection() {
                   className="video-action-btn btn-audiomack"
                   aria-label="Listen on Audiomack"
                 >
-                  Audiomack ↗
+                  Audiomack <UpRightArrowIcon size={14} />
                 </a>
               )}
               {selectedVideo.links?.soundcloud && (
@@ -84,7 +85,7 @@ export default function VideosSection() {
                   className="video-action-btn btn-soundcloud"
                   aria-label="Listen on SoundCloud"
                 >
-                  SoundCloud ↗
+                  SoundCloud <UpRightArrowIcon size={14} />
                 </a>
               )}
             </div>

@@ -1,4 +1,4 @@
-import { PlayIcon, PauseIcon, LeftArrowIcon, RightArrowIcon } from '../components/Icons';
+import { PlayIcon, PauseIcon, LeftArrowIcon, RightArrowIcon , UpRightArrowIcon, LightningIcon} from '../components/Icons';
 // src/pages/BeatDetailPage.jsx
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -157,7 +157,7 @@ export default function BeatDetailPage() {
       name: "Standard Lease",
       short: "Basic",
       price: "₦15,000",
-      priceStatus: "⚡ Instant Selar Checkout",
+      priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
       perks: [
         "✓ High-Quality MP3 Audio File",
         "✓ Non-Exclusive Commercial Distribution Rights",
@@ -170,7 +170,7 @@ export default function BeatDetailPage() {
       name: "Premium WAV",
       short: "Premium",
       price: "₦30,000",
-      priceStatus: "⚡ Instant Selar Checkout",
+      priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
       perks: [
         "✓ 24-bit Studio Master WAV + MP3",
         "✓ Radio, Streaming & Performance Clearance",
@@ -183,7 +183,7 @@ export default function BeatDetailPage() {
       name: "Trackout Stems",
       short: "Ultimate",
       price: "₦60,000",
-      priceStatus: "⚡ Instant Selar Checkout",
+      priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
       perks: [
         "✓ Full Multi-Track Audio Stems (WAV)",
         "✓ Complete Mix & Arrangement Control",
@@ -462,7 +462,7 @@ export default function BeatDetailPage() {
                   className="license-buy-btn"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {activeLicenseData.btnText} ↗
+                  {activeLicenseData.btnText} <UpRightArrowIcon size={16} />
                 </a>
               ) : (
                 <a 

@@ -35,3 +35,15 @@ export const MusicNoteIcon = ({ size = 24, color = "currentColor" }) => (
   </svg>
 );
 
+
+export const UpRightArrowIcon = ({ size = 16, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-flex", verticalAlign: "middle" }}>
+    <path d="M7 17L17 7M17 7H7M17 7V17" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+export const LightningIcon = ({ size = 16, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-flex", verticalAlign: "middle" }}>
+    <path d="M13 3L4 14H12L11 21L20 10H12L13 3Z" fill="currentColor" stroke={color} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
