@@ -180,7 +180,7 @@ function createHomeMetadata() {
 }
 
 function createBeatHubMetadata() {
-  const title = "chomkaMUSIC™ Studio Beats | Silachomka";
+  const title = "chomkaMUSIC™ Studio Beats | silachomka";
   return {
     title,
     description:
@@ -193,7 +193,7 @@ function createBeatHubMetadata() {
 
 function createBeatMetadata(beat) {
   const canonicalPath = toRoutePath("beats", beat.id);
-  const title = `${beat.title} | chomkaMUSIC™ Studio Beats | Silachomka`;
+  const title = `${beat.title} | chomkaMUSIC™ Studio Beats | silachomka`;
   const genre = beat.genre ? ` ${beat.genre}` : "";
 
   return {
@@ -221,7 +221,7 @@ function createBeatMetadata(beat) {
 
 function createGalleryMetadata(post) {
   const canonicalPath = toRoutePath("gallery", post.id);
-  const title = `${post.title} | Silachomka Visual Archive`;
+  const title = `${post.title} | silachomka Visual Archive`;
   const slideImages = Array.isArray(post.slides) ? post.slides : [];
   const generatedVideoPoster = post.src && post.src.endsWith('.mp4') ? post.src.replace('.mp4', '.jpg') : null;
 

@@ -1,3 +1,4 @@
+import { DownCaretIcon } from './components/Icons';
 // src/App.jsx
 
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -729,8 +730,8 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   // Exclusive filters that clear everything
   const EXCLUSIVE_FILTERS = ["all", "ft_silachomka", "prod_by_silachomka"];
 
-  const isSilachomkaActive = activeFilter === "silachomka";
-  const isConjoined = isSilachomkaActive && TYPE_FILTERS.includes(subFilter);
+  const issilachomkaActive = activeFilter === "silachomka";
+  const isConjoined = issilachomkaActive && TYPE_FILTERS.includes(subFilter);
 
   const updateParams = (filter, sub) => {
     const scrollY = window.scrollY;
@@ -750,7 +751,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
       // Exclusive: clear everything
       updateParams(filterId === "all" ? null : filterId, null);
     } else if (filterId === "silachomka") {
-      if (isSilachomkaActive) {
+      if (issilachomkaActive) {
         // Clicking silachomka when already active: deselect it
         if (subFilter) updateParams(subFilter, null); // keep the sub as main
         else updateParams(null, null); // go to all
@@ -758,7 +759,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
         updateParams("silachomka", null);
       }
     } else if (TYPE_FILTERS.includes(filterId)) {
-      if (isSilachomkaActive) {
+      if (issilachomkaActive) {
         // Conjoin with silachomka
         if (subFilter === filterId) {
           // Already conjoined with this type, deselect the type
@@ -774,7 +775,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
     }
   };
 
-  const handleDeselectSilachomka = (e) => {
+  const handleDeselectsilachomka = (e) => {
     e.stopPropagation();
     // Remove silachomka, keep the sub-filter as main
     updateParams(subFilter, null);
@@ -814,8 +815,8 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
     } else if (f === "singles") results = results.filter(r => r.type === "single");
     else if (f === "eps") results = results.filter(r => r.type === "ep");
     else if (f === "albums") results = results.filter(r => r.type === "album");
-    else if (f === "ft_silachomka") results = results.filter(r => r.featsSilachomka === true);
-    else if (f === "prod_by_silachomka") results = results.filter(r => r.producedBySilachomka !== false);
+    else if (f === "ft_silachomka") results = results.filter(r => r.featssilachomka === true);
+    else if (f === "prod_by_silachomka") results = results.filter(r => r.producedBysilachomka !== false);
 
     return results;
   }, [sortedReleases, activeFilter, subFilter]);
@@ -828,7 +829,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
     const baseLabel = labels[filterId] || filterId;
 
     if (TYPE_FILTERS.includes(filterId)) {
-      if (isSilachomkaActive && !isConjoined) return `+ ${baseLabel}`;
+      if (issilachomkaActive && !isConjoined) return `+ ${baseLabel}`;
       if (isConjoined && subFilter === filterId) return baseLabel;
     }
     return baseLabel;
@@ -843,7 +844,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   const handleClearFilter = (e, filterId) => {
     e.stopPropagation();
     if (isConjoined) {
-      if (filterId === "silachomka") handleDeselectSilachomka(e);
+      if (filterId === "silachomka") handleDeselectsilachomka(e);
       else if (filterId === subFilter) handleDeselectSub(e);
     } else {
       updateParams(null, null); // Clear it
@@ -919,7 +920,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
             aria-expanded={filterMenuOpen}
           >
             {getMobileLabel()}{" "}
-            <span className="filter-icon">▼</span>
+            <span className="filter-icon"><DownCaretIcon /></span>
           </button>
 
           {filterMenuOpen && (

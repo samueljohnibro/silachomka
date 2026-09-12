@@ -30,8 +30,8 @@ const createRelease = ({
   tracks = [],
   type,
   artist,
-  featsSilachomka = false,
-  producedBySilachomka = true,
+  featssilachomka = false,
+  producedBysilachomka = true,
 }) => {
   // Normalise to a sources array
   let normalisedSources;
@@ -59,8 +59,8 @@ const createRelease = ({
     cover,
     type: derivedType,
     artist: artist || "silachomka",
-    featsSilachomka,
-    producedBySilachomka,
+    featssilachomka,
+    producedBysilachomka,
     sources: normalisedSources,
     description:
       description ||
@@ -98,8 +98,8 @@ const releases = [
     cover: "/covers/skazz084berg-fridaythe13th.jpg",
     type: "ep",
     artist: "Skazz, 084BERG",
-    featsSilachomka: false,
-    producedBySilachomka: true,
+    featssilachomka: false,
+    producedBysilachomka: true,
     source: "Pagne Park Records/Oluwatobi Samuel Adeniyi & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/album/53ooJPucEDsGmZJNxrsl9J?si=vjFOajkHRli_aaUgt6f1Xw",
@@ -129,8 +129,8 @@ const releases = [
     displayDate: "Saturday, 15th March, 2025",
     type: "single",
     artist: "HunchoA, Dy, Mylestone",
-    featsSilachomka: false,
-    producedBySilachomka: true,
+    featssilachomka: false,
+    producedBysilachomka: true,
     source: "HunchoA & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/track/4YNr11danXpfgkVz9KTsyo?si=526d0f46b1b9444c",
@@ -157,8 +157,8 @@ const releases = [
     cover: "/covers/084berg-oyanow.jpg",
     type: "single",
     artist: "084BERG",
-    featsSilachomka: true,
-    producedBySilachomka: false,
+    featssilachomka: true,
+    producedBysilachomka: false,
     source: "Pagne Park Records & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/album/6w7gFj2QB3lFHfV3loFD8z?si=Y11dxKFKQv6z_jmBX8xBjw",
@@ -188,8 +188,8 @@ const releases = [
     cover: "/covers/skazz-twen.jpg",
     type: "ep",
     artist: "Skazz",
-    featsSilachomka: true,
-    producedBySilachomka: true,
+    featssilachomka: true,
+    producedBysilachomka: true,
     source: "Oluwatobi Samuel Adeniyi & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/album/3doAPFLOQnkCecKPVJVJx2?si=knHH5XcdSoqOANrneIQ5Kg",
@@ -221,8 +221,8 @@ const releases = [
     cover: "/covers/kaayo-theimposterpackage.jpg",
     type: "ep",
     artist: "kaayo",
-    featsSilachomka: true,
-    producedBySilachomka: true,
+    featssilachomka: true,
+    producedBysilachomka: true,
     source: "PHD Services & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/album/2TZRt85NRh3BNIguCJdk5j?si=DBpqremLSq6eWNK6LOB5Dw",
@@ -252,8 +252,8 @@ const releases = [
     cover: "/covers/k4my-hyperdriveingresszone.jpg",
     type: "ep",
     artist: "K4MY",
-    featsSilachomka: true,
-    producedBySilachomka: true,
+    featssilachomka: true,
+    producedBysilachomka: true,
     source: "405! & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/album/4dwSmlnLBygHGz7ZM2JxYV?si=--tV9Up6SPaTu-hC60A03Q",
@@ -267,7 +267,7 @@ const releases = [
         title: "DISCORD",
         featuring: ["silachomka"],
         platforms: {
-          spotify: "https://open.spotify.com/track/3qnCj5RiPMzspIDaRmbIoP?si=d0ed4bb99f344b99",
+          spotify: "https://open.spotify.com/track/3KUGEUVvIwUPw8rVawJvFB?si=424240f5af744602",
           appleMusic: "https://music.apple.com/ng/song/discord/1841123992",
           youtubeMusic: "https://music.youtube.com/watch?v=4n24DoC8YLk&si=5Lsma1PPFdxIaFil",
           audiomack: "https://audiomack.com/younghazard/song/k4my-discord-mastered",
@@ -278,7 +278,7 @@ const releases = [
         title: "UPPERECHELON",
         featuring: ["bornfrompagne", "silachomka"],
         platforms: {
-          spotify: "https://open.spotify.com/track/3qnCj5RiPMzspIDaRmbIoP?si=d0ed4bb99f344b99",
+          spotify: "https://open.spotify.com/track/0ACyH3BMuomwzHrj6qBu4k?si=f2b20568ea714e5d",
           appleMusic: "https://music.apple.com/ng/song/upperechelon-feat-bornfrompagne-silachomka/1841124204",
           youtubeMusic: "https://music.youtube.com/watch?v=auFiG-Yiwec&si=XVOJ1LM0YdOG7HSZ",
           audiomack: "https://audiomack.com/younghazard/song/k4my-upper-echelon-mastered",
@@ -287,10 +287,10 @@ const releases = [
       },
       {
         title: "HYPERDRIVE MOTIVATOR",
-        featuring: ["kayo", "KOMÉ", "grand4rcher"],
+        featuring: ["kaayo", "KOMÉ", "grand4rcher"],
         platforms: {
           spotify: "https://open.spotify.com/track/5WCAd0AHGsJd4XkuDyRiuD?si=572cbed2a60d465c",
-          appleMusic: "https://music.apple.com/us/song/hyperdrive-motivator-feat-kayogotbanned-kom%C3%A9-grand4rcher/1841123991",
+          appleMusic: "https://music.apple.com/us/song/hyperdrive-motivator-feat-kaayogotbanned-kom%C3%A9-grand4rcher/1841123991",
           youtubeMusic: "https://music.youtube.com/watch?v=GdPaeTwJFUs&si=p5BgiSKbftbG_kFJ",
           audiomack: "https://audiomack.com/younghazard/song/hyperdrive-motivator-mastered",
           deezer: "https://link.deezer.com/s/34mrSsGqkH7djtDIcapXr"
@@ -320,10 +320,10 @@ const releases = [
       },
       {
         title: "Pull up, Dance - BONUS TRACK",
-        featuring: ["kayo", "KOMÉ", "grand4rcher"],
+        featuring: ["kaayo", "KOMÉ", "grand4rcher"],
         platforms: {
           spotify: "https://open.spotify.com/track/6OmYjDoLHgf8unsabDUoUS?si=76f2116c6181423d",
-          appleMusic: "https://music.apple.com/us/song/pull-up-dance-feat-kayogotbanned-kom%C3%A9-bonus-track/1841124206",
+          appleMusic: "https://music.apple.com/us/song/pull-up-dance-feat-kaayogotbanned-kom%C3%A9-bonus-track/1841124206",
           youtubeMusic: "https://music.youtube.com/watch?v=2PA8eV6UKto&si=A-byotZTjlLcYzr0",
           audiomack: "https://audiomack.com/younghazard/song/k4my-pull-up-dance-mastered",
           deezer: "https://link.deezer.com/s/34mrTKonrnkHndSYnEhI3"
@@ -350,8 +350,8 @@ const releases = [
     cover: "/covers/bojaak-despicable.jpg",
     type: "single",
     artist: "BOJAAK",
-    featsSilachomka: false,
-    producedBySilachomka: true,
+    featssilachomka: false,
+    producedBysilachomka: true,
     source: "Bojaak & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/track/1knGqKXBkUgFYtTLVU9KMN?si=f9f5dd10e0914880",
@@ -378,8 +378,8 @@ const releases = [
     cover: "/covers/mlt-thursday.jpg",
     type: "single",
     artist: "MLT",
-    featsSilachomka: true,
-    producedBySilachomka: false,
+    featssilachomka: true,
+    producedBysilachomka: false,
     source: "1706 Gang & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/album/2RaZtz7CtmossmCJOTBTL6?si=GJUFdRgxSEO6ZSkqJI_0EA",
@@ -411,8 +411,8 @@ const releases = [
     cover: "/covers/bojaak-speciaal.jpg",
     type: "single",
     artist: "BOJAAK",
-    featsSilachomka: false,
-    producedBySilachomka: true,
+    featssilachomka: false,
+    producedBysilachomka: true,
     source: "Bojaak & chomkaMUSIC™",
     platforms: {
       spotify: "https://open.spotify.com/track/50tdgSejucd5vopVw0LYNN?si=ad5ae14f9ada4ca0",
@@ -639,7 +639,7 @@ const releases = [
     },
     tracks: [
       {
-        title: "Don't Play Silachomka",
+        title: "Don't Play silachomka",
         featuring: ["ýħēmö"],
         platforms: {
           spotify: "https://open.spotify.com/track/55P1ISJpsBGiXaFuKmgaH3?si=313f515c77934b4f",

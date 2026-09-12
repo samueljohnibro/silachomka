@@ -60,7 +60,7 @@ const gallery = [
     displayDate: "27 Apr 2025",
     src: "/covers/dont-play-silachomka.jpg",
     link: "/release/dont-play-silachomka",
-    tags: ["#DontPlaySilachomka", "#silachomka", "#yhemo"],
+    tags: ["#DontPlaysilachomka", "#silachomka", "#yhemo"],
   },
   {
     id: "savage-campaign",

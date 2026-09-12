@@ -1,3 +1,4 @@
+import { MusicNoteIcon } from './Icons';
 // src/components/ExclusiveBeatModal.jsx
 
 import { useEffect } from "react";
@@ -89,7 +90,7 @@ export default function ExclusiveBeatModal({ isOpen, onClose, beats = [] }) {
                     />
                   )
                 ) : (
-                  <div className="exclusive-modal-placeholder">🎹</div>
+                  <div className="exclusive-modal-placeholder"><MusicNoteIcon /></div>
                 )}
               </div>
 

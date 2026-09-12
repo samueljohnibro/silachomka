@@ -1,3 +1,4 @@
+import { DownCaretIcon, PlayIcon, PauseIcon, RightArrowIcon } from '../components/Icons';
 // src/pages/BeatsPage.jsx
 
 import {
@@ -154,7 +155,7 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay }) {
             <div className="beat-loading-spinner" aria-hidden="true" />
           ) : (
             <span className="beat-play-icon" aria-hidden="true">
-              {isPlaying ? "❚❚" : "▶"}
+              {isPlaying ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
             </span>
           )}
         </button>
@@ -181,7 +182,7 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay }) {
           to={`/beats/${beat.id}`}
           aria-label={`View details and Selar licensing for ${beat.title}`}
         >
-          License Beat →
+          License Beat <RightArrowIcon />
         </Link>
       </div>
     </article>
@@ -440,6 +441,36 @@ export default function BeatsPage() {
       audio.preload = "metadata";
       audio.src = beat.audio;
 
+      if ("mediaSession" in navigator) {
+        const artSrc = beat.image
+          ? window.location.origin + beat.image
+          : window.location.origin + "/og-image.png";
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: beat.title,
+          artist: "silachomka",
+          album: "chomkaMUSIC™ Studio Beats",
+          artwork: [{ src: artSrc, sizes: "512x512", type: "image/jpeg" }],
+        });
+      }
+
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: beat.title,
+          artist: beat.artist || "silachomka",
+          album: beat.genre || "Beat",
+          artwork: [{ src: beat.image ? window.location.origin + beat.image : window.location.origin + "/og-image.png", sizes: "512x512", type: "image/jpeg" }]
+        });
+      }
+
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: beat.title,
+          artist: beat.artist || "silachomka",
+          album: beat.genre || "Beat",
+          artwork: [{ src: beat.image ? window.location.origin + beat.image : window.location.origin + "/og-image.png", sizes: "512x512", type: "image/jpeg" }]
+        });
+      }
+
       const isCurrentAudio = () =>
         audioRef.current === audio &&
         audioGenerationRef.current === generation;
@@ -530,7 +561,7 @@ export default function BeatsPage() {
   return (
     <main className="beats-page">
       <SeoHead
-        title="chomkaMUSIC™ Studio Beats | Silachomka"
+        title="chomkaMUSIC™ Studio Beats | silachomka"
         description="Explore original studio beats by silachomka. Listen, license on Selar, and craft your next release with chomkaMUSIC™ Studio."
         path="/beats"
         image={(beats.length > 0 && beats[0].image) ? beats[0].image : "/og-image.png"}
@@ -583,7 +614,7 @@ export default function BeatsPage() {
               aria-expanded={isFilterMenuOpen}
             >
               {filters.find(f => f.id === activeFilter)?.label} 
-              <span className="filter-icon">▼</span>
+              <span className="filter-icon"><DownCaretIcon /></span>
             </button>
             
             {isFilterMenuOpen && (
@@ -675,7 +706,7 @@ export default function BeatsPage() {
             className="exclusive-link-btn"
             onClick={() => setIsExclusiveModalOpen(true)}
           >
-            Make an Exclusive Offer →
+            Make an Exclusive Offer <RightArrowIcon />
           </button>
         </section>
       </div>

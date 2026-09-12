@@ -1,3 +1,4 @@
+import { PlayIcon, PauseIcon, LeftArrowIcon, RightArrowIcon } from '../components/Icons';
 // src/pages/BeatDetailPage.jsx
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -82,6 +83,18 @@ export default function BeatDetailPage() {
     if (!audioRef.current) {
       const audio = new Audio(beat.audio);
       audioRef.current = audio;
+
+      if ("mediaSession" in navigator) {
+        const artSrc = beat.image
+          ? window.location.origin + beat.image
+          : window.location.origin + "/og-image.png";
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: beat.title,
+          artist: "silachomka",
+          album: "chomkaMUSIC™ Studio Beats",
+          artwork: [{ src: artSrc, sizes: "512x512", type: "image/jpeg" }],
+        });
+      }
 
       setIsLoading(true);
 
@@ -207,7 +220,7 @@ export default function BeatDetailPage() {
             The beat you requested does not exist in the official studio catalogue.
           </p>
           <Link className="primary-button" to="/beats">
-            ← Back to All Beats
+            <LeftArrowIcon /> Back to All Beats
           </Link>
         </div>
       </main>
@@ -217,7 +230,7 @@ export default function BeatDetailPage() {
   return (
     <main className="beat-detail-view">
       <SeoHead
-        title={`${beat.title} | chomkaMUSIC™ Studio Beats | Silachomka`}
+        title={`${beat.title} | chomkaMUSIC™ Studio Beats | silachomka`}
         description={`${beat.title} is an original${beat.genre ? ` ${beat.genre}` : ""} instrumental by silachomka, available to listen to and license through chomkaMUSIC™ Studio.`}
         path={`/beats/${beat.id}`}
         image={beat.image || (beat.video ? beat.video.replace('.mp4', '.jpg') : null) || beat.ogImage || beat.cover || beat.thumbnail || beat.poster || "/og-image.png"}
@@ -225,7 +238,7 @@ export default function BeatDetailPage() {
       />
       {/* Breadcrumb Navigation */}
       <Link className="release-breadcrumb" to="/beats">
-        ← All Beats
+        <LeftArrowIcon /> All Beats
       </Link>
 
       <div className="beat-detail-grid">
@@ -313,7 +326,7 @@ export default function BeatDetailPage() {
                   {isLoading ? (
                     <div className="beat-detail-loading-spinner" aria-hidden="true" />
                   ) : (
-                    isPlaying ? "❚❚" : "▶"
+                    isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} />
                   )}
                 </button>
                 <button
@@ -456,7 +469,7 @@ export default function BeatDetailPage() {
                   href="#offer-form" 
                   className="license-buy-btn"
                 >
-                  {activeLicenseData.btnText} →
+                  {activeLicenseData.btnText} <RightArrowIcon />
                 </a>
               )}
             </div>
@@ -577,7 +590,7 @@ export default function BeatDetailPage() {
                     style={{ width: "100%", marginTop: "10px", opacity: offerSubmitting ? 0.6 : 1 }}
                     disabled={offerSubmitting}
                   >
-                    {offerSubmitting ? "Sending…" : "Draft Studio Licensing Inquiry →"}
+                    {offerSubmitting ? "Sending…" : <><span>Draft Studio Licensing Inquiry</span> <RightArrowIcon size={14} /></>}
                   </button>
                 </>
               )}
