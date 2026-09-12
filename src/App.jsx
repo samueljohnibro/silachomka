@@ -926,7 +926,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
             <div className="filter-dropdown">
               {visibleFilters.map((filterId) => {
                 const active = isFilterActive(filterId);
-                const showX = active && filterId !== "all";
+                const showX = isConjoined && (filterId === "silachomka" || filterId === subFilter);
 
                 return (
                   <button
@@ -960,7 +960,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
         <div className="filter-desktop-list">
           {visibleFilters.map((filterId) => {
             const active = isFilterActive(filterId);
-            const showX = active && filterId !== "all";
+            const showX = isConjoined && (filterId === "silachomka" || filterId === subFilter);
 
             return (
               <button
