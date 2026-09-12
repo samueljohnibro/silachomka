@@ -1,4 +1,4 @@
-import { DownCaretIcon , UpRightArrowIcon} from './components/Icons';
+import { DownCaretIcon , UpRightArrowIcon, RightArrowIcon } from './components/Icons';
 // src/App.jsx
 
 import { useEffect, useMemo, useState, useRef } from "react";

@@ -1,4 +1,4 @@
-import { UpRightArrowIcon } from '../components/Icons';
+import { UpRightArrowIcon, RightArrowIcon } from '../components/Icons';
 // src/components/GalleryPostModal.jsx
 
 import { useState, useEffect, useCallback } from "react";
