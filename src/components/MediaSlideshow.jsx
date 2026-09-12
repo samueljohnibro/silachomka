@@ -48,7 +48,9 @@ export default function MediaSlideshow({
     () => (Array.isArray(media) ? media.filter(Boolean) : []),
     [media]
   );
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(() => 
+    safeMedia.length > 0 ? Math.floor(Math.random() * safeMedia.length) : 0
+  );
   const [prevIndex, setPrevIndex] = useState(null);
   const [panIndex, setPanIndex] = useState(0);
   const transitionTimerRef = useRef(null);
@@ -71,7 +73,13 @@ export default function MediaSlideshow({
     const timer = setInterval(() => {
       setActiveIndex((current) => {
         setPrevIndex(current);
-        const next = (current + 1) % safeMedia.length;
+        
+        let next = Math.floor(Math.random() * safeMedia.length);
+        // Ensure it doesn't pick the same image twice in a row
+        if (next === current) {
+          next = (current + 1) % safeMedia.length;
+        }
+
         setPanIndex((p) => (p + 1) % PAN_CLASSES.length);
 
         if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
