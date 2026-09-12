@@ -292,6 +292,13 @@ async function generateSocialPages() {
 
   await writeFile(baseHtmlPath, homeHtml, "utf8");
   await writePage(["beats"], withSocialMetadata(homeHtml, createBeatHubMetadata()));
+  await writePage(["studio"], withSocialMetadata(homeHtml, {
+    title: "chomkaMUSIC™ Studio Publishing",
+    description: "Official publishing catalog and sync licensing for silachomka. Explore rights, master ownership, and sync opportunities.",
+    canonicalPath: "/studio",
+    image: DEFAULT_SOCIAL_IMAGE,
+    imageAlt: "chomkaMUSIC™ Studio Publishing",
+  }));
 
   const canonicalBeats = validEntries(beats, "id");
   const canonicalGallery = validEntries(gallery, "id");
