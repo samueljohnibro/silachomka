@@ -87,7 +87,7 @@ export default function StudioPublisherPage() {
   const [galleryCaption, setGalleryCaption] = useState("");
   const [galleryCategory, setGalleryCategory] = useState("portraits");
   const [galleryMediaItems, setGalleryMediaItems] = useState([
-    { id: "init-1", type: "image", src: "/covers/noisemaker.png" },
+    { id: "init-1", type: "image", src: "/covers/noisemaker.jpg" },
   ]);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [manualMediaUrl, setManualMediaUrl] = useState("");
@@ -191,7 +191,7 @@ export default function StudioPublisherPage() {
   const [releaseEdition, setReleaseEdition] = useState("1");
   const [releaseDate, setReleaseDate] = useState(todayStr);
   const [releaseDisplayDate, setReleaseDisplayDate] = useState(todayDisplay);
-  const [releaseCover, setReleaseCover] = useState("/covers/noisemaker.png");
+  const [releaseCover, setReleaseCover] = useState("/covers/noisemaker.jpg");
   const [releaseDesc, setReleaseDesc] = useState("");
   const [releaseSpotify, setReleaseSpotify] = useState("");
   const [releaseApple, setReleaseApple] = useState("");
@@ -411,7 +411,7 @@ export default function StudioPublisherPage() {
           .filter(Boolean);
 
         const isMulti = galleryMediaItems.length > 1;
-        const primaryMedia = galleryMediaItems[0] || { type: "image", src: "/covers/noisemaker.png" };
+        const primaryMedia = galleryMediaItems[0] || { type: "image", src: "/covers/noisemaker.jpg" };
 
         const postObj = {
           id,
@@ -1166,7 +1166,7 @@ export default function StudioPublisherPage() {
                   <div style={{ marginTop: "10px" }}>
                     <input
                       type="text"
-                      placeholder="Or cover art path (e.g. /covers/noisemaker.png)"
+                      placeholder="Or cover art path (e.g. /covers/noisemaker.jpg)"
                       value={releaseCover}
                       onChange={(e) => setReleaseCover(e.target.value)}
                       className="studio-input"

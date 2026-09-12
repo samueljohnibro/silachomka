@@ -440,7 +440,7 @@ const releases = [
     edition: 4,
     date: "2026-01-23",
     displayDate: "Friday, 23rd January, 2026",
-    cover: "/covers/noisemaker.png",
+    cover: "/covers/noisemaker.jpg",
     platforms: {
       spotify: "https://open.spotify.com/album/55sdC94v3Vy0lU2mUXwgQY?si=ci_hsqyVRMmTy4E32hrYUg",
       appleMusic: "https://music.apple.com/us/album/noisemaker-ep/1869379789",

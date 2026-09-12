@@ -520,7 +520,7 @@ function HeroSlideshow() {
     // Fallbacks if nothing is found
     if (combined.length === 0) {
       return [
-        { id: "fallback-noisemaker", src: "/covers/noisemaker.png", title: "NOISEMAKER", type: "image" },
+        { id: "fallback-noisemaker", src: "/covers/noisemaker.jpg", title: "NOISEMAKER", type: "image" },
         { id: "fallback-item5", src: "/covers/item5.jpg", title: "ITEM5", type: "image" },
         { id: "fallback-love-language", src: "/covers/love-language.png", title: "LOVE LANGUAGE", type: "image" },
       ];
