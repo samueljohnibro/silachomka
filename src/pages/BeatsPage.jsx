@@ -447,8 +447,8 @@ export default function BeatsPage() {
           : window.location.origin + "/og-image.png";
         navigator.mediaSession.metadata = new MediaMetadata({
           title: beat.title,
-          artist: "chomkaMUSIC™ Studio",
-          album: "chomkaMUSIC™ Studio Beats",
+          artist: "chomkaMUSIC\u2122 Studio",
+          album: "chomkaMUSIC\u2122 Studio Beats",
           artwork: [{ src: artSrc, sizes: "512x512", type: "image/jpeg" }],
         });
       }
