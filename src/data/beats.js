@@ -2,6 +2,24 @@
 
 const rawBeats = [
   {
+    id: "john-stewart",
+    title: "JOHN STEWART",
+    genre: "Trap × Alternative Rap Type Beat",
+    shortGenre: "Trap × Alternative Rap",
+    categories: ["trap"],
+    bpm: "145 BPM",
+    key: "D minor",
+    image: "/beats/john-stewart.jpg",
+    video: "/beats/john-stewart.gif",
+    audio: "/beats/john-stewart.mp3",
+    status: "available",
+    selar: {
+      basic: "https://selar.com/chomkamusicstudio-johnstewart-basic",
+      premium: "https://selar.com/chomkamusicstudio-johnstewart-premium",
+      ultimate: "https://selar.com/chomkamusicstudio-johnstewart-ultimate",
+    },
+  },
+  {
     id: "faces",
     title: "FACES",
     genre: "Afro-Alternative Rap × Afro Trap",

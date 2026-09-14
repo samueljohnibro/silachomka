@@ -447,27 +447,9 @@ export default function BeatsPage() {
           : window.location.origin + "/og-image.png";
         navigator.mediaSession.metadata = new MediaMetadata({
           title: beat.title,
-          artist: "silachomka",
+          artist: "chomkaMUSIC™ Studio",
           album: "chomkaMUSIC™ Studio Beats",
           artwork: [{ src: artSrc, sizes: "512x512", type: "image/jpeg" }],
-        });
-      }
-
-      if ("mediaSession" in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: beat.title,
-          artist: beat.artist || "silachomka",
-          album: beat.genre || "Beat",
-          artwork: [{ src: beat.image ? window.location.origin + beat.image : window.location.origin + "/og-image.png", sizes: "512x512", type: "image/jpeg" }]
-        });
-      }
-
-      if ("mediaSession" in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: beat.title,
-          artist: beat.artist || "silachomka",
-          album: beat.genre || "Beat",
-          artwork: [{ src: beat.image ? window.location.origin + beat.image : window.location.origin + "/og-image.png", sizes: "512x512", type: "image/jpeg" }]
         });
       }
 
