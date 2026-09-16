@@ -186,7 +186,7 @@ function createBeatHubMetadata() {
     description:
       "Explore original studio beats by silachomka. Listen, license on Selar, and craft your next release with chomkaMUSIC™ Studio.",
     canonicalPath: "/beats",
-    image: DEFAULT_SOCIAL_IMAGE,
+    image: "/beats-image.png",
     imageAlt: "chomkaMUSIC™ Studio Beats by silachomka",
   };
 }
