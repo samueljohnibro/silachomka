@@ -27,9 +27,11 @@ export default function SeoHead({
   path = "/",
   image = "/og-image.png",
   imageAlt,
+  icon,
 }) {
   const canonical = toAbsolute(path);
   const imageUrl = toAbsolute(image);
+  const iconUrl = icon ? toAbsolute(icon) : null;
   const alt = imageAlt || title;
   const mimeType = imageMimeType(imageUrl);
 
@@ -38,6 +40,7 @@ export default function SeoHead({
       <title>{title}</title>
       <meta name="description" content={description} />
       <link rel="canonical" href={canonical} />
+      {iconUrl && <link rel="icon" href={iconUrl} />}
       <meta property="og:type" content="website" />
       <meta property="og:url" content={canonical} />
       <meta property="og:site_name" content="silachomka" />

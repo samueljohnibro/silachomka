@@ -234,6 +234,7 @@ export default function BeatDetailPage() {
         description={`${beat.title} is an original${beat.genre ? ` ${beat.genre}` : ""} instrumental by silachomka, available to listen to and license through chomkaMUSIC™ Studio.`}
         path={`/beats/${beat.id}`}
         image={beat.image || (beat.video ? beat.video.replace('.mp4', '.jpg') : null) || beat.ogImage || beat.cover || beat.thumbnail || beat.poster || "/og-image.png"}
+        icon="/beats-image.png"
         imageAlt={`${beat.title} beat by silachomka`}
       />
       {/* Breadcrumb Navigation */}

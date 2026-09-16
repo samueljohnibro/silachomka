@@ -2,6 +2,20 @@
 
 const rawBeats = [
   {
+    id: "shine",
+    title: "SHINE",
+    image: "/beats/shine.jpg",
+    video: "/beats/shine.gif",
+    audio: "/beats/shine.mp3",
+    showVisualTitle: true,
+    status: "available",
+    selar: {
+      basic: "https://selar.com/chomkamusicstudio-shine-basic",
+      premium: "https://selar.com/chomkamusicstudio-shine-premium",
+      ultimate: "https://selar.com/chomkamusicstudio-shine-ultimate",
+    },
+  },
+  {
     id: "john-stewart",
     title: "JOHN STEWART",
     genre: "Trap × Alternative Rap Type Beat",
@@ -12,6 +26,7 @@ const rawBeats = [
     image: "/beats/john-stewart.jpg",
     video: "/beats/john-stewart.gif",
     audio: "/beats/john-stewart.mp3",
+    showVisualTitle: true,
     status: "available",
     selar: {
       basic: "https://selar.com/chomkamusicstudio-johnstewart-basic",

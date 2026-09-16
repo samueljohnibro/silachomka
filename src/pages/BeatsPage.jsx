@@ -546,7 +546,8 @@ export default function BeatsPage() {
         title="chomkaMUSIC™ Studio Beats | silachomka"
         description="Explore original studio beats by silachomka. Listen, license on Selar, and craft your next release with chomkaMUSIC™ Studio."
         path="/beats"
-        image={(beats.length > 0 && beats[0].image) ? beats[0].image : "/og-image.png"}
+        image="/beats-image.png"
+        icon="/beats-image.png"
         imageAlt="chomkaMUSIC™ Studio Beats by silachomka"
       />
       {/* =================================================
