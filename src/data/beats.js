@@ -4,6 +4,11 @@ const rawBeats = [
   {
     id: "shine",
     title: "SHINE",
+    genre: "Afro \u00D7 Alternative Type Beat",
+    shortGenre: "Afro \u00D7 Alternative",
+    categories: ["afro"],
+    bpm: "100 BPM",
+    key: "C\u266F major",
     image: "/beats/shine.jpg",
     video: "/beats/shine.gif",
     audio: "/beats/shine.mp3",
