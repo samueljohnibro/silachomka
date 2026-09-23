@@ -640,7 +640,7 @@ const releases = [
     tracks: [
       {
         title: "Don't Play silachomka",
-        featuring: ["ýħēmö"],
+        featuring: ["ÝĦĒMÖ"],
         platforms: {
           spotify: "https://open.spotify.com/track/55P1ISJpsBGiXaFuKmgaH3?si=313f515c77934b4f",
           appleMusic: "https://music.apple.com/us/song/dont-play-silachomka-feat-%C3%BD%C4%A7%C4%93m%C3%B6/1809372244",

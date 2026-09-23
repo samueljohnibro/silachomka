@@ -10,7 +10,9 @@ enabled = true
 # [vars]
 # DATABASE_URL = ""
 
-# Future R2 Bucket configuration placeholder
+# R2 Bucket configuration
+# TEMPORARILY DISABLED — R2 billing activation pending.
+# Restore when R2 is activated on the Cloudflare dashboard.
 # [[r2_buckets]]
-# binding = "BUCKET"
+# binding = "MEDIA_BUCKET"
 # bucket_name = "silachomka-media"
