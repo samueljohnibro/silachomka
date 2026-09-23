@@ -1,24 +1,16 @@
 // src/data/store.js
 
 import { useEffect, useState } from "react";
-import canonicalReleases from "./releases";
-import canonicalBeats from "./beats";
-import canonicalGallery from "./gallery";
-import canonicalVideos from "./videos";
+import { fetchAllCatalogue } from "./api";
 
 const DB_NAME = "silachomka_db";
 const DB_VERSION = 1;
 const STORE_NAME = "chomka_kv";
 
-const KEY_RELEASES = "silachomka_store_releases";
-const KEY_BEATS = "silachomka_store_beats";
-const KEY_GALLERY = "silachomka_store_gallery";
-const KEY_VIDEOS = "silachomka_store_videos";
-
 const EVENT_NAME = "chomka_store_update";
 
 /* =========================================================
-   INDEXEDDB UNLIMITED STORAGE DRIVER
+   INDEXEDDB UNLIMITED STORAGE DRIVER (KEPT FOR STUDIO)
    ========================================================= */
 
 function openDB() {
@@ -70,61 +62,20 @@ async function dbSet(key, val) {
 }
 
 /* =========================================================
-   IN-MEMORY CACHE INITIALIZED WITH LOCALSTORAGE / CANONICAL
+   IN-MEMORY STORE & API FETCH LOGIC
    ========================================================= */
 
-function loadInitial(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return [...fallback];
-}
-
 const memoryStore = {
-  releases: loadInitial(KEY_RELEASES, canonicalReleases),
-  beats: loadInitial(KEY_BEATS, canonicalBeats),
-  gallery: loadInitial(KEY_GALLERY, canonicalGallery),
-  videos: loadInitial(KEY_VIDEOS, canonicalVideos),
+  releases: [],
+  beats: [],
+  gallery: [],
+  videos: [],
 };
 
-/* Asynchronously populate from IndexedDB on startup */
-if (typeof window !== "undefined") {
-  Promise.all([
-    dbGet(KEY_RELEASES),
-    dbGet(KEY_BEATS),
-    dbGet(KEY_GALLERY),
-    dbGet(KEY_VIDEOS),
-  ]).then(([dbRels, dbBts, dbGal, dbVids]) => {
-    let changed = false;
-    if (Array.isArray(dbRels) && dbRels.length > 0) {
-      memoryStore.releases = dbRels;
-      changed = true;
-    }
-    if (Array.isArray(dbBts) && dbBts.length > 0) {
-      memoryStore.beats = dbBts;
-      changed = true;
-    }
-    if (Array.isArray(dbGal) && dbGal.length > 0) {
-      memoryStore.gallery = dbGal;
-      changed = true;
-    }
-    if (Array.isArray(dbVids) && dbVids.length > 0) {
-      memoryStore.videos = dbVids;
-      changed = true;
-    }
-    if (changed) {
-      notifyUpdate();
-    }
-  });
-}
+let globalSocials = { artist: [], ecosystem: [] };
+let globalIsLoaded = false;
+let isFetching = false;
+let globalError = null;
 
 function notifyUpdate() {
   if (typeof window !== "undefined") {
@@ -132,12 +83,31 @@ function notifyUpdate() {
   }
 }
 
-function safeLocalStorageSet(key, val) {
+async function initializeStore() {
+  if (globalIsLoaded || isFetching) return;
+  isFetching = true;
+  
   try {
-    localStorage.setItem(key, JSON.stringify(val));
-  } catch {
-    // QuotaExceededError is safely caught; IndexedDB acts as master store
+    const data = await fetchAllCatalogue();
+    memoryStore.releases = data.releases;
+    memoryStore.beats = data.beats;
+    memoryStore.gallery = data.gallery;
+    memoryStore.videos = data.videos;
+    globalSocials = data.socials;
+    
+    globalIsLoaded = true;
+    globalError = null;
+  } catch (err) {
+    globalError = err.message;
+  } finally {
+    isFetching = false;
+    notifyUpdate();
   }
+}
+
+// Kick off fetch early
+if (typeof window !== "undefined") {
+  initializeStore();
 }
 
 /* =========================================================
@@ -164,8 +134,7 @@ export async function saveRelease(release) {
   }
   updated.sort((a, b) => new Date(b.date || "2026-01-01").getTime() - new Date(a.date || "2026-01-01").getTime());
   memoryStore.releases = updated;
-  safeLocalStorageSet(KEY_RELEASES, updated);
-  await dbSet(KEY_RELEASES, updated);
+  await dbSet("silachomka_store_releases", updated);
   notifyUpdate();
   return updated;
 }
@@ -174,8 +143,7 @@ export async function deleteRelease(slug) {
   const current = getReleases();
   const updated = current.filter((r) => r.slug !== slug);
   memoryStore.releases = updated;
-  safeLocalStorageSet(KEY_RELEASES, updated);
-  await dbSet(KEY_RELEASES, updated);
+  await dbSet("silachomka_store_releases", updated);
   notifyUpdate();
   return updated;
 }
@@ -199,8 +167,7 @@ export async function saveBeat(beat) {
     updated = [beat, ...current];
   }
   memoryStore.beats = updated;
-  safeLocalStorageSet(KEY_BEATS, updated);
-  await dbSet(KEY_BEATS, updated);
+  await dbSet("silachomka_store_beats", updated);
   notifyUpdate();
   return updated;
 }
@@ -209,8 +176,7 @@ export async function deleteBeat(id) {
   const current = getBeats();
   const updated = current.filter((b) => b.id !== id);
   memoryStore.beats = updated;
-  safeLocalStorageSet(KEY_BEATS, updated);
-  await dbSet(KEY_BEATS, updated);
+  await dbSet("silachomka_store_beats", updated);
   notifyUpdate();
   return updated;
 }
@@ -237,8 +203,7 @@ export async function saveGalleryPost(post) {
   }
   updated.sort((a, b) => new Date(b.date || "2026-01-01").getTime() - new Date(a.date || "2026-01-01").getTime());
   memoryStore.gallery = updated;
-  safeLocalStorageSet(KEY_GALLERY, updated);
-  await dbSet(KEY_GALLERY, updated);
+  await dbSet("silachomka_store_gallery", updated);
   notifyUpdate();
   return updated;
 }
@@ -247,8 +212,7 @@ export async function deleteGalleryPost(id) {
   const current = getGallery();
   const updated = current.filter((p) => p.id !== id);
   memoryStore.gallery = updated;
-  safeLocalStorageSet(KEY_GALLERY, updated);
-  await dbSet(KEY_GALLERY, updated);
+  await dbSet("silachomka_store_gallery", updated);
   notifyUpdate();
   return updated;
 }
@@ -258,9 +222,7 @@ export async function deleteGalleryPost(id) {
    ========================================================= */
 
 export function getVideos() {
-  return [...memoryStore.videos].sort(
-    (a, b) => new Date(b.date || "2026-01-01").getTime() - new Date(a.date || "2026-01-01").getTime()
-  );
+  return [...memoryStore.videos];
 }
 
 export async function saveVideo(video) {
@@ -274,8 +236,7 @@ export async function saveVideo(video) {
     updated = [video, ...current];
   }
   memoryStore.videos = updated;
-  safeLocalStorageSet(KEY_VIDEOS, updated);
-  await dbSet(KEY_VIDEOS, updated);
+  await dbSet("silachomka_store_videos", updated);
   notifyUpdate();
   return updated;
 }
@@ -284,14 +245,13 @@ export async function deleteVideo(id) {
   const current = getVideos();
   const updated = current.filter((v) => v.id !== id);
   memoryStore.videos = updated;
-  safeLocalStorageSet(KEY_VIDEOS, updated);
-  await dbSet(KEY_VIDEOS, updated);
+  await dbSet("silachomka_store_videos", updated);
   notifyUpdate();
   return updated;
 }
 
 /* =========================================================
-   REACT HOOK (AUTO-SUBSCRIBING)
+   GLOBAL HOOK
    ========================================================= */
 
 export function useChomkaStore() {
@@ -299,6 +259,9 @@ export function useChomkaStore() {
   const [beats, setBeats] = useState(getBeats);
   const [gallery, setGallery] = useState(getGallery);
   const [videos, setVideos] = useState(getVideos);
+  const [socials, setSocials] = useState(globalSocials);
+  const [isLoading, setIsLoading] = useState(!globalIsLoaded);
+  const [error, setError] = useState(globalError);
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -306,6 +269,9 @@ export function useChomkaStore() {
       setBeats(getBeats());
       setGallery(getGallery());
       setVideos(getVideos());
+      setSocials(globalSocials);
+      setIsLoading(!globalIsLoaded && isFetching);
+      setError(globalError);
     };
 
     window.addEventListener(EVENT_NAME, handleUpdate);
@@ -317,6 +283,9 @@ export function useChomkaStore() {
     beats,
     gallery,
     videos,
+    socials,
+    isLoading,
+    error,
     saveRelease,
     deleteRelease,
     saveBeat,

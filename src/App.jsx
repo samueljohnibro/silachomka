@@ -13,7 +13,7 @@ import {
 } from "react-router-dom";
 
 import { useChomkaStore } from "./data/store";
-import { ARTIST_SOCIALS, ECOSYSTEM_SOCIALS } from "./data/socials";
+
 
 
 import MediaSlideshow from "./components/MediaSlideshow";
@@ -344,6 +344,7 @@ function SiteHeader({
 
 function SiteFooter() {
   const navigate = useNavigate();
+  const { socials } = useChomkaStore();
   const [clickCount, setClickCount] = useState(0);
 
   const handleSecretClick = () => {
@@ -377,7 +378,7 @@ function SiteFooter() {
       </div>
 
       <nav className="footer-social-links" aria-label="Artist social links">
-        {ARTIST_SOCIALS.slice(0, 5).map((s) => (
+        {socials?.artist?.slice(0, 5).map((s) => (
           <a
             key={s.id}
             href={s.url}
@@ -1343,6 +1344,7 @@ function WorldSection() {
    ========================================================= */
 
 function SocialsSection() {
+  const { socials } = useChomkaStore();
   return (
     <section className="socials-section" id="connect">
       <div className="section-heading">
@@ -1359,7 +1361,7 @@ function SocialsSection() {
         <div className="social-group">
           <h3 className="social-group-title">silachomka Official</h3>
           <div className="social-grid">
-            {ARTIST_SOCIALS.map((soc) => (
+            {socials?.artist?.map((soc) => (
               <a
                 key={soc.id}
                 href={soc.url}
@@ -1382,7 +1384,7 @@ function SocialsSection() {
         <div className="social-group" style={{ marginTop: "40px" }}>
           <h3 className="social-group-title">Ecosystem Brands</h3>
           <div className="social-grid">
-            {ECOSYSTEM_SOCIALS.map((eco) => (
+            {socials?.ecosystem?.map((eco) => (
               <a
                 key={eco.id}
                 href={eco.url}
@@ -1613,6 +1615,7 @@ function NotFoundPage() {
 
 function App() {
   const navigate = useNavigate();
+  const { isLoading, error } = useChomkaStore();
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1624,6 +1627,39 @@ function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [navigate]);
+
+  
+
+
+  if (isLoading) {
+    return (
+      <>
+        <StarrySpaceBackground />
+        <div className="ambient-glow-layer" aria-hidden="true" />
+        <div style={{ display: "flex", height: "100vh", alignItems: "center", justifyContent: "center" }}>
+          <p className="eyebrow" style={{ animation: "pulse 1.5s infinite" }}>LOADING ARCHIVE...</p>
+        </div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <StarrySpaceBackground />
+        <div className="ambient-glow-layer" aria-hidden="true" />
+        <div style={{ display: "flex", flexDirection: "column", height: "100vh", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+          <p className="eyebrow">CONNECTION ERROR</p>
+          <h2 style={{ fontSize: "24px", color: "var(--foreground)" }}>Failed to load catalogue</h2>
+          <p style={{ color: "var(--muted)", maxWidth: "400px", textAlign: "center" }}>{error}</p>
+          <button className="primary-button" style={{ marginTop: "20px" }} onClick={() => window.location.reload()}>RETRY</button>
+        </div>
+      </>
+    );
+  }
+
+
+
 
   return (
     <>
