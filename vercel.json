@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/$1"
+    },
+    {
       "source": "/beats",
       "destination": "/beats/index.html"
     },
