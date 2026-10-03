@@ -14,7 +14,25 @@ import {
 
 import { useChomkaStore } from "./data/store";
 
+// Admin CMS Imports
+import { AdminAuthProvider } from "./pages/admin/AdminAuthProvider";
+import { ProtectedRoute, GuestRoute } from "./pages/admin/AdminRoutes";
+import AdminLayout from "./pages/admin/AdminLayout";
+import AdminLoginPage from "./pages/admin/AdminLoginPage";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import { 
+  AdminMediaPlaceholder, 
+  AdminLinksPlaceholder, 
+  AdminSettingsPlaceholder 
+} from "./pages/admin/AdminPlaceholders";
 
+import AdminMusicPage from "./pages/admin/AdminMusicPage";
+import AdminGalleryPage from "./pages/admin/AdminGalleryPage";
+import AdminBeatsPage from "./pages/admin/AdminBeatsPage";
+import AdminTracksPage from "./pages/admin/AdminTracksPage";
+import AdminMediaPage from "./pages/admin/AdminMediaPage";
+import AdminLinksPage from "./pages/admin/AdminLinksPage";
+import AdminMerchandisePage from "./pages/admin/AdminMerchandisePage";
 
 import MediaSlideshow from "./components/MediaSlideshow";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
@@ -1662,67 +1680,98 @@ function App() {
 
 
   return (
-    <>
-      {/* Dynamic Starry Space Atmosphere */}
-      <StarrySpaceBackground />
-
-      {/* Ambient Celestial Glow Layer */}
-      <div className="ambient-glow-layer" aria-hidden="true" />
-
-      {/* Cross-Page Hash Scroll Engine */}
-      <ScrollToHash />
-
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <HomePage />
-          }
-        />
-
-        <Route
-          path="/beats"
-          element={
-            <BeatsRoute />
-          }
-        />
-
-        <Route
-          path="/beats/:id"
-          element={
-            <BeatDetailRoute />
-          }
-        />
-
-        <Route
-          path="/studio"
-          element={
-            <StudioRoute />
-          }
-        />
-
-        <Route
-          path="/gallery/:id"
-          element={
-            <GalleryPostRoute />
-          }
-        />
-
-        <Route
-          path="/release/:slug"
-          element={
-            <ReleaseRoute />
-          }
-        />
-
-        <Route
-          path="*"
-          element={
-            <NotFoundPage />
-          }
-        />
-      </Routes>
-    </>
+    <AdminAuthProvider>
+      <>
+        {/* Dynamic Starry Space Atmosphere */}
+        <StarrySpaceBackground />
+  
+        {/* Ambient Celestial Glow Layer */}
+        <div className="ambient-glow-layer" aria-hidden="true" />
+  
+        {/* Cross-Page Hash Scroll Engine */}
+        <ScrollToHash />
+  
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <HomePage />
+            }
+          />
+  
+          <Route
+            path="/beats"
+            element={
+              <BeatsRoute />
+            }
+          />
+  
+          <Route
+            path="/beats/:id"
+            element={
+              <BeatDetailRoute />
+            }
+          />
+  
+          <Route
+            path="/studio"
+            element={
+              <StudioRoute />
+            }
+          />
+  
+          <Route
+            path="/gallery/:id"
+            element={
+              <GalleryPostRoute />
+            }
+          />
+  
+          <Route
+            path="/release/:slug"
+            element={
+              <ReleaseRoute />
+            }
+          />
+          
+          {/* Admin Routes */}
+          <Route 
+            path="/admin/login" 
+            element={
+              <GuestRoute>
+                <AdminLoginPage />
+              </GuestRoute>
+            } 
+          />
+          
+          <Route 
+            path="/admin" 
+            element={
+              <ProtectedRoute>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<AdminDashboard />} />
+            <Route path="gallery" element={<AdminGalleryPage />} />
+            <Route path="music" element={<AdminMusicPage />} />
+            <Route path="tracks" element={<AdminTracksPage />} />
+            <Route path="beats" element={<AdminBeatsPage />} />
+            <Route path="media" element={<AdminMediaPage />} />
+            <Route path="links" element={<AdminLinksPage />} />
+            <Route path="merchandise" element={<AdminMerchandisePage />} />
+            <Route path="settings" element={<AdminSettingsPlaceholder />} />
+          </Route>
+  
+          <Route
+            path="*"
+            element={
+              <NotFoundPage />
+            }
+          />
+        </Routes>
+      </>
+    </AdminAuthProvider>
   );
 }
 

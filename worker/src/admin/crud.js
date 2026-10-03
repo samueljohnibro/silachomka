@@ -585,8 +585,7 @@ r2_key = ${up.r2_key},
         height = ${up.height},
         duration_seconds = ${up.duration_seconds},
         alt_text = ${up.alt_text},
-        blurhash = ${up.blurhash},
-        updated_at = CURRENT_TIMESTAMP
+        blurhash = ${up.blurhash}
       WHERE id = ${id}
     RETURNING *
   `
