@@ -28,4 +28,4 @@ dist-ssr
 !.env.example
 # Cloudflare Wrangler
 worker/.wrangler/
-worker/.dev.vars
+worker/.dev.vars*

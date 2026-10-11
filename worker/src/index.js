@@ -3,7 +3,7 @@ import { cors } from 'hono/cors'
 import { neon } from '@neondatabase/serverless'
 import { sign } from 'hono/jwt'
 import { setCookie, deleteCookie } from 'hono/cookie'
-import { adminAuth, hashPassword, COOKIE_NAME } from './auth.js'
+import { adminAuth, hashPassword, verifyPassword, COOKIE_NAME } from './auth.js'
 
 const app = new Hono()
 
@@ -11,8 +11,27 @@ const app = new Hono()
 // Middleware & Globals
 // ==========================================
 
+const ALLOWED_ORIGINS = new Set([
+  'https://silachomka.com',
+  'https://www.silachomka.com',
+  'https://silachomka-api.samueljohnibrotech.workers.dev',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+  'http://localhost:8787',
+  'http://127.0.0.1:8787',
+])
+
+function isAllowedOrigin(origin) {
+  if (!origin) return false
+  if (ALLOWED_ORIGINS.has(origin)) return true
+  if (/^https:\/\/[a-z0-9-]+\.silachomka\.pages\.dev$/.test(origin)) return true
+  return false
+}
+
 app.use('*', cors({
-  origin: '*',
+  origin: (origin) => (isAllowedOrigin(origin) ? origin : null),
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -26,8 +45,6 @@ app.use('*', async (c, next) => {
   c.set('sql', neon(c.env.DATABASE_URL))
   await next()
 })
-
-const JWT_SECRET = 'temporary-secret-key-change-in-production';
 
 // ==========================================
 // Public API Routes
@@ -291,26 +308,47 @@ app.post('/api/admin/login', async (c) => {
   
   const user = users[0]
 
-  // 2. Hash provided password and compare
-  const incomingHash = await hashPassword(body.password)
+  // 2. Verify password with format detection and constant-time byte comparison
+  const { valid, needsRehash } = await verifyPassword(body.password, user.password_hash)
   
-  if (!user.password_hash || user.password_hash !== incomingHash) {
+  if (!valid) {
     return c.json({ error: 'Invalid credentials' }, 401)
   }
 
+  // Opportunistic hash upgrade for legacy or outdated hashes
+  if (needsRehash) {
+    try {
+      const newHash = await hashPassword(body.password)
+      // Conditional optimistic update matching both user ID and prior hash
+      await sql`
+        UPDATE admin_users
+        SET password_hash = ${newHash}, updated_at = NOW()
+        WHERE id = ${user.id} AND password_hash = ${user.password_hash}
+      `
+    } catch (upgradeErr) {
+      // Preserve existing login behavior; NEVER log credentials, password, hash, or token values
+      console.warn('Non-fatal: Opportunistic password hash upgrade failed during login')
+    }
+  }
+
   // 3. Generate JWT
+  if (!c.env?.JWT_SECRET || typeof c.env.JWT_SECRET !== 'string' || c.env.JWT_SECRET.trim() === '') {
+    console.error('Server configuration error: JWT_SECRET is missing or invalid')
+    return c.json({ error: 'Internal Server Error', message: 'Authentication misconfigured' }, 500)
+  }
+
   const payload = {
     sub: user.id,
     email: user.email,
     role: user.role,
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // 24 hours
   }
-  const token = await sign(payload, c.env.JWT_SECRET || JWT_SECRET)
+  const token = await sign(payload, c.env.JWT_SECRET)
 
   // 4. Set HttpOnly Cookie
   setCookie(c, COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: c.req.url.startsWith('https://'),
     sameSite: 'Strict',
     path: '/',
     maxAge: 60 * 60 * 24
@@ -323,7 +361,11 @@ app.post('/api/admin/login', async (c) => {
 })
 
 app.post('/api/admin/logout', (c) => {
-  deleteCookie(c, COOKIE_NAME, { path: '/' })
+  deleteCookie(c, COOKIE_NAME, {
+    path: '/',
+    secure: c.req.url.startsWith('https://'),
+    sameSite: 'Strict'
+  })
   return c.json({ success: true })
 })
 

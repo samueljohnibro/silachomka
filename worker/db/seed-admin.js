@@ -24,19 +24,23 @@ function loadDatabaseUrl() {
   throw new Error('DATABASE_URL not found in worker/.dev.vars');
 }
 
-// Exactly matches worker/src/index.js
+// Generates modern modular format with unique cryptographically random 16-byte salt
 async function hashPassword(password) {
   const enc = new TextEncoder();
+  const saltBytes = new Uint8Array(16);
+  (globalThis.crypto || webcrypto).getRandomValues(saltBytes);
+  const saltHex = Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
   const keyMaterial = await cryptoSubtle.importKey(
-    'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveBits', 'deriveKey']
+    'raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveBits']
   );
-  const salt = enc.encode('silachomka-secure-salt');
-  const key = await cryptoSubtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-    keyMaterial, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+  const bits = await cryptoSubtle.deriveBits(
+    { name: 'PBKDF2', salt: saltBytes, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    256
   );
-  const exported = await cryptoSubtle.exportKey('raw', key);
-  return Array.from(new Uint8Array(exported)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const derivedHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `$pbkdf2-sha256$i=100000$${saltHex}$${derivedHex}`;
 }
 
 // Secure hidden password prompt

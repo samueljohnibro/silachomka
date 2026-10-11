@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { adminAuth } from '../auth.js'
+import { adminAuth, requireSuperadmin } from '../auth.js'
 
 export const adminApp = new Hono()
 
@@ -7,7 +7,7 @@ export const adminApp = new Hono()
 adminApp.use('*', adminAuth)
 
 // Basic validator for slugs
-const isValidSlug = (slug) => /^[a-z0-9-]+$/.test(slug)
+const isValidSlug = (slug) => typeof slug === 'string' && /^[a-z0-9-]+$/.test(slug)
 
 // Helper for Audit Logs
 async function logAudit(sql, userId, action, entityType, entityId, oldData, newData) {
@@ -58,21 +58,21 @@ adminApp.put('/releases/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const body = await c.req.json()
-  
-  const existing = await sql`SELECT * FROM releases WHERE id = ${id}`
-  if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
-  const e = existing[0]
-  try {
-    const existing = await sql`SELECT * FROM releases WHERE id = ${id}`
+  if (body.slug !== undefined && !isValidSlug(body.slug)) {
+    return c.json({ error: 'Invalid slug' }, 400)
+  }
+
+  const existing = await sql`SELECT * FROM releases WHERE id = ${id}`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const rows = await sql`
-    UPDATE releases SET
-slug = ${up.slug},
+  try {
+    const rows = await sql`
+      UPDATE releases SET
+        slug = ${up.slug},
         number = ${up.number},
         title = ${up.title},
         edition = ${up.edition},
@@ -89,14 +89,14 @@ slug = ${up.slug},
         status = ${up.status},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-    RETURNING *
-  `
+      RETURNING *
+    `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'releases', id, e, rows[0])
     return c.json(rows[0])
   } catch (err) { return c.json({ error: err.message }, 400) }
 })
 
-adminApp.delete('/releases/:id', async (c) => {
+adminApp.delete('/releases/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM releases WHERE id = ${id}`
@@ -148,28 +148,25 @@ adminApp.put('/tracks/:id', async (c) => {
   const existing = await sql`SELECT * FROM tracks WHERE id = ${id}`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
-  try {
-    const existing = await sql`SELECT * FROM tracks WHERE id = ${id}`
-  if (!existing.length) return c.json({ error: 'Not found' }, 404)
-
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const rows = await sql`
-    UPDATE tracks SET
-track_number = ${up.track_number},
+  try {
+    const rows = await sql`
+      UPDATE tracks SET
+        track_number = ${up.track_number},
         title = ${up.title},
         platforms = ${up.platforms ? JSON.stringify(body.platforms) : null},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-    RETURNING *
-  `
+      RETURNING *
+    `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'tracks', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/tracks/:id', async (c) => {
+adminApp.delete('/tracks/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM tracks WHERE id = ${id}`
@@ -207,7 +204,7 @@ adminApp.post('/track-credits', async (c) => {
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/track-credits/:id', async (c) => {
+adminApp.delete('/track-credits/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM track_credits WHERE id = ${id}`
@@ -257,19 +254,21 @@ adminApp.put('/beats/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const body = await c.req.json()
-  const existing = await sql`SELECT * FROM beats WHERE id = ${id}`
-  if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
-  try {
-    const existing = await sql`SELECT * FROM beats WHERE id = ${id}`
+  if (body.slug !== undefined && !isValidSlug(body.slug)) {
+    return c.json({ error: 'Invalid slug' }, 400)
+  }
+
+  const existing = await sql`SELECT * FROM beats WHERE id = ${id}`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const rows = await sql`
-    UPDATE beats SET
-slug = ${up.slug},
+  try {
+    const rows = await sql`
+      UPDATE beats SET
+        slug = ${up.slug},
         title = ${up.title},
         genre = ${up.genre},
         short_genre = ${up.short_genre},
@@ -288,14 +287,14 @@ slug = ${up.slug},
         status = ${up.status},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-    RETURNING *
-  `
+      RETURNING *
+    `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'beats', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/beats/:id', async (c) => {
+adminApp.delete('/beats/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM beats WHERE id = ${id}`
@@ -321,6 +320,7 @@ adminApp.post('/music-videos', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
   if (!body.slug || !body.title || !body.youtube_id || !body.youtube_url) return c.json({ error: 'Missing required fields' }, 400)
+  if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
   try {
     const rows = await sql`
@@ -337,19 +337,21 @@ adminApp.put('/music-videos/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const body = await c.req.json()
-  const existing = await sql`SELECT * FROM music_videos WHERE id = ${id}`
-  if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
-  try {
-    const existing = await sql`SELECT * FROM music_videos WHERE id = ${id}`
+  if (body.slug !== undefined && !isValidSlug(body.slug)) {
+    return c.json({ error: 'Invalid slug' }, 400)
+  }
+
+  const existing = await sql`SELECT * FROM music_videos WHERE id = ${id}`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const rows = await sql`
-    UPDATE music_videos SET
-slug = ${up.slug},
+  try {
+    const rows = await sql`
+      UPDATE music_videos SET
+        slug = ${up.slug},
         title = ${up.title},
         subtitle = ${up.subtitle},
         category = ${up.category},
@@ -362,14 +364,14 @@ slug = ${up.slug},
         status = ${up.status},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-    RETURNING *
-  `
+      RETURNING *
+    `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'music_videos', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/music-videos/:id', async (c) => {
+adminApp.delete('/music-videos/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM music_videos WHERE id = ${id}`
@@ -408,7 +410,7 @@ adminApp.post('/music-video-features', async (c) => {
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/music-video-features/:video_id/:artist_name', async (c) => {
+adminApp.delete('/music-video-features/:video_id/:artist_name', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const { video_id, artist_name } = c.req.param()
   
@@ -433,6 +435,7 @@ adminApp.post('/gallery-posts', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
   if (!body.slug || !body.title || !body.post_type || !body.post_date) return c.json({ error: 'Missing required fields' }, 400)
+  if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
   try {
     const rows = await sql`
@@ -449,19 +452,21 @@ adminApp.put('/gallery-posts/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const body = await c.req.json()
-  const existing = await sql`SELECT * FROM gallery_posts WHERE id = ${id}`
-  if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
-  try {
-    const existing = await sql`SELECT * FROM gallery_posts WHERE id = ${id}`
+  if (body.slug !== undefined && !isValidSlug(body.slug)) {
+    return c.json({ error: 'Invalid slug' }, 400)
+  }
+
+  const existing = await sql`SELECT * FROM gallery_posts WHERE id = ${id}`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const rows = await sql`
-    UPDATE gallery_posts SET
-slug = ${up.slug},
+  try {
+    const rows = await sql`
+      UPDATE gallery_posts SET
+        slug = ${up.slug},
         title = ${up.title},
         caption = ${up.caption},
         category = ${up.category},
@@ -477,14 +482,14 @@ slug = ${up.slug},
         status = ${up.status},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-    RETURNING *
-  `
+      RETURNING *
+    `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'gallery_posts', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/gallery-posts/:id', async (c) => {
+adminApp.delete('/gallery-posts/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM gallery_posts WHERE id = ${id}`
@@ -522,7 +527,7 @@ adminApp.post('/gallery-slides', async (c) => {
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/gallery-slides/:id', async (c) => {
+adminApp.delete('/gallery-slides/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM gallery_slides WHERE id = ${id}`
@@ -567,16 +572,13 @@ adminApp.put('/media-assets/:id', async (c) => {
   const existing = await sql`SELECT * FROM media_assets WHERE id = ${id}`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
-  try {
-    const existing = await sql`SELECT * FROM media_assets WHERE id = ${id}`
-  if (!existing.length) return c.json({ error: 'Not found' }, 404)
-
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const rows = await sql`
-    UPDATE media_assets SET
-r2_key = ${up.r2_key},
+  try {
+    const rows = await sql`
+      UPDATE media_assets SET
+        r2_key = ${up.r2_key},
         original_filename = ${up.original_filename},
         asset_type = ${up.asset_type},
         mime_type = ${up.mime_type},
@@ -587,14 +589,14 @@ r2_key = ${up.r2_key},
         alt_text = ${up.alt_text},
         blurhash = ${up.blurhash}
       WHERE id = ${id}
-    RETURNING *
-  `
+      RETURNING *
+    `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'media_assets', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/media-assets/:id', async (c) => {
+adminApp.delete('/media-assets/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM media_assets WHERE id = ${id}`
@@ -640,16 +642,13 @@ adminApp.put('/social-links/:id', async (c) => {
   const existing = await sql`SELECT * FROM social_links WHERE id = ${id}`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
-  try {
-    const existing = await sql`SELECT * FROM social_links WHERE id = ${id}`
-  if (!existing.length) return c.json({ error: 'Not found' }, 404)
-
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const rows = await sql`
-    UPDATE social_links SET
-name = ${up.name},
+  try {
+    const rows = await sql`
+      UPDATE social_links SET
+        name = ${up.name},
         handle = ${up.handle},
         url = ${up.url},
         platform = ${up.platform},
@@ -660,14 +659,14 @@ name = ${up.name},
         is_active = ${up.is_active},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-    RETURNING *
-  `
+      RETURNING *
+    `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'social_links', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/social-links/:id', async (c) => {
+adminApp.delete('/social-links/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM social_links WHERE id = ${id}`
@@ -693,6 +692,7 @@ adminApp.post('/merchandise', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
   if (!body.slug || !body.name) return c.json({ error: 'Missing required fields' }, 400)
+  if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
   try {
     const rows = await sql`
@@ -709,19 +709,21 @@ adminApp.put('/merchandise/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const body = await c.req.json()
-  const existing = await sql`SELECT * FROM merchandise WHERE id = ${id}`
-  if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
-  try {
-    const existing = await sql`SELECT * FROM merchandise WHERE id = ${id}`
+  if (body.slug !== undefined && !isValidSlug(body.slug)) {
+    return c.json({ error: 'Invalid slug' }, 400)
+  }
+
+  const existing = await sql`SELECT * FROM merchandise WHERE id = ${id}`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const rows = await sql`
-    UPDATE merchandise SET
-slug = ${up.slug},
+  try {
+    const rows = await sql`
+      UPDATE merchandise SET
+        slug = ${up.slug},
         name = ${up.name},
         description = ${up.description},
         primary_asset_id = ${up.primary_asset_id},
@@ -731,14 +733,14 @@ slug = ${up.slug},
         status = ${up.status},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-    RETURNING *
-  `
+      RETURNING *
+    `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'merchandise', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
-adminApp.delete('/merchandise/:id', async (c) => {
+adminApp.delete('/merchandise/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const existing = await sql`SELECT * FROM merchandise WHERE id = ${id}`
