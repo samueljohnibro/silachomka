@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:staging": "node run-staging.js",
+    "test:security": "node test-security-isolated.js",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

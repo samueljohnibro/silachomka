@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:staging": "node scripts/dev-staging.js",
+    "worker:staging": "npm --prefix worker run dev:staging",
+    "test:security": "npm --prefix worker run test:security",
     "build": "vite build && node scripts/generate-social-pages.js",
     "build:app": "vite build",
     "generate:social-pages": "node scripts/generate-social-pages.js",

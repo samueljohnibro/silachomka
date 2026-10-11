@@ -56,7 +56,7 @@ function report(task, success, detail = "") {
     await page.evaluate((title, release_id) => {
       const setReactValue = (selector, value) => {
         const input = document.querySelector(selector);
-        const proto = input.tagName === "TEXTAREA" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        const proto = input.tagName === "SELECT" ? window.HTMLSelectElement.prototype : input.tagName === "TEXTAREA" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
         const nativeSetter = Object.getOwnPropertyDescriptor(proto, "value").set;
         nativeSetter.call(input, value);
         input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -64,7 +64,7 @@ function report(task, success, detail = "") {
       };
       setReactValue("input[name=\"title\"]", title);
       setReactValue("input[name=\"track_number\"]", "1");
-      setReactValue("input[name=\"release_id\"]", release_id);
+      setReactValue("[name=\"release_id\"]", release_id);
     }, TEST_TITLE, TEST_RELEASE_ID);
     
     await page.evaluate(() => document.querySelector("form").requestSubmit());

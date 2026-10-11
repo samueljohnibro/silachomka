@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://silachomka-api.samueljohnibrotech.workers.dev',
+        target: process.env.VITE_API_PROXY_TARGET || 'https://silachomka-api.samueljohnibrotech.workers.dev',
         changeOrigin: true
       }
     }
