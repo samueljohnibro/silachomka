@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import AdminSortControl from "../../components/admin/AdminSortControl";
+import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import "./admin.css";
 
 const AdminGalleryPage = () => {
@@ -9,6 +11,14 @@ const AdminGalleryPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [view, setView] = useState("LIST");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem("admin_listing_view_mode") || "table";
+    } catch {
+      return "table";
+    }
+  });
 
   const [currentPost, setCurrentPost] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -429,23 +439,126 @@ const AdminGalleryPage = () => {
     );
   }
 
+  // Sort posts by post_date || created_at
+  const sortedPosts = [...posts].sort((a, b) => {
+    const da = a.post_date ? new Date(a.post_date).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+    const db = b.post_date ? new Date(b.post_date).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+    return sortOrder === "desc" ? db - da : da - db;
+  });
+
   // LIST VIEW
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
-        <h2 className="studio-section-heading" style={{ margin: 0 }}>Gallery Management</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
+        <div>
+          <h2 className="studio-section-heading" style={{ margin: 0 }}>Gallery Management</h2>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+            <AdminSortControl sortOrder={sortOrder} onChange={setSortOrder} label="Sort Gallery" />
+            <AdminViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
         <button className="primary-button" onClick={handleCreateClick}>+ Create Post</button>
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
 
-      {posts.length === 0 ? (
+      {sortedPosts.length === 0 ? (
         <div className="admin-placeholder">
           <h2>No Gallery Posts Found</h2>
           <p>You haven't added any posts to the gallery yet.</p>
           <button className="primary-button" style={{ marginTop: 16 }} onClick={handleCreateClick}>Create First Post</button>
         </div>
+      ) : viewMode === "grid" ? (
+        /* GRID / CARDS VIEW */
+        <div className="admin-listing-grid">
+          {sortedPosts.map((post) => {
+            const postSlides = slides.filter((s) => s.post_id === post.id);
+            const primaryAsset = mediaAssets.find((m) => m.id === post.primary_asset_id) || (postSlides[0] ? mediaAssets.find((m) => m.id === postSlides[0].asset_id) : null);
+            const assetUrl = primaryAsset ? '/' + primaryAsset.r2_key : null;
+            return (
+              <div key={post.id} className="admin-item-card">
+                <div>
+                  <div style={{ position: "relative", width: "100%", paddingBottom: "75%", background: "#000", borderRadius: "4px", overflow: "hidden", marginBottom: "12px", border: "1px solid var(--border)" }}>
+                    {assetUrl ? (
+                      <img
+                        src={assetUrl}
+                        alt={post.title}
+                        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "var(--muted)", fontSize: "12px" }}>
+                        No Image
+                      </div>
+                    )}
+                    <span style={{ 
+                      position: "absolute", 
+                      top: 8, 
+                      right: 8, 
+                      padding: "2px 8px", 
+                      borderRadius: "4px", 
+                      fontSize: 10, 
+                      fontWeight: 700, 
+                      textTransform: "uppercase",
+                      background: post.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.9)" : "rgba(245, 158, 11, 0.9)",
+                      color: "#000"
+                    }}>
+                      {post.status || "DRAFT"}
+                    </span>
+                  </div>
+
+                  <h3 style={{ fontSize: 16, margin: "0 0 4px 0", color: "var(--text-h)" }}>{post.title}</h3>
+                  <div style={{ fontSize: 12, color: "var(--gold)", textTransform: "uppercase", fontWeight: 600 }}>
+                    {post.post_type} • {post.display_date || post.post_date}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                    {postSlides.length} slide(s) • category: {post.category || "General"}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                  <button
+                    onClick={() => handleEditClick(post)}
+                    className="studio-pill-btn"
+                    style={{ fontSize: 12 }}
+                  >
+                    Edit
+                  </button>
+                  {deleteConfirmId === post.id ? (
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, color: "#fca5a5" }}>Delete?</span>
+                      <button
+                        onClick={() => handleDelete(post.id)}
+                        className="studio-pill-btn"
+                        style={{ background: "rgba(220,38,38,0.2)", color: "#fca5a5", borderColor: "#fca5a5", fontSize: 11, padding: "2px 8px" }}
+                        disabled={isDeleting}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(null)}
+                        className="studio-pill-btn"
+                        style={{ fontSize: 11, padding: "2px 8px" }}
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteConfirmId(post.id)}
+                      className="studio-pill-btn"
+                      style={{ background: "transparent", color: "var(--muted)", fontSize: 12 }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* TABLE / LIST VIEW */
         <div className="admin-card" style={{ padding: 0, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 14 }}>
             <thead>
@@ -458,7 +571,7 @@ const AdminGalleryPage = () => {
               </tr>
             </thead>
             <tbody>
-              {posts.map((post) => {
+              {sortedPosts.map((post) => {
                 const postSlides = slides.filter((s) => s.post_id === post.id);
                 return (
                   <tr key={post.id} style={{ borderBottom: "1px solid var(--border)" }}>

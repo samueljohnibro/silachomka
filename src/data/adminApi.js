@@ -111,6 +111,26 @@ export const adminApi = {
     method: 'POST',
     body: JSON.stringify(data)
   }),
+  uploadMediaAsset: async (file, assetType = 'IMAGE') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('asset_type', assetType);
+    const response = await fetch('/api/admin/media-assets/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const contentType = response.headers.get('content-type');
+    let data;
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+    if (!response.ok) {
+      throw new Error(data?.error || data?.message || 'File upload failed');
+    }
+    return data;
+  },
   updateMediaAsset: async (id, data) => fetchAdmin(`/media-assets/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data)

@@ -240,9 +240,10 @@ adminApp.post('/beats', async (c) => {
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
   try {
+    const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
     const rows = await sql`
-      INSERT INTO beats (slug, title, genre, short_genre, categories, bpm, beat_key, description, mood, producer, audio_asset_id, image_asset_id, video_asset_id, selar_basic_url, selar_premium_url, selar_ultimate_url, status)
-      VALUES (${body.slug}, ${body.title}, ${body.genre || null}, ${body.short_genre || null}, ${body.categories ? JSON.stringify(body.categories) : null}, ${body.bpm || null}, ${body.beat_key || null}, ${body.description || null}, ${body.mood || null}, ${body.producer || 'silachomka'}, ${body.audio_asset_id || null}, ${body.image_asset_id || null}, ${body.video_asset_id || null}, ${body.selar_basic_url || null}, ${body.selar_premium_url || null}, ${body.selar_ultimate_url || null}, ${body.status || 'DRAFT'})
+      INSERT INTO beats (slug, title, genre, short_genre, categories, bpm, beat_key, description, mood, producer, audio_asset_id, image_asset_id, video_asset_id, selar_basic_url, selar_premium_url, selar_ultimate_url, status, created_at)
+      VALUES (${body.slug}, ${body.title}, ${body.genre || null}, ${body.short_genre || null}, ${body.categories ? JSON.stringify(body.categories) : null}, ${body.bpm || null}, ${body.beat_key || null}, ${body.description || null}, ${body.mood || null}, ${body.producer || 'silachomka'}, ${body.audio_asset_id || null}, ${body.image_asset_id || null}, ${body.video_asset_id || null}, ${body.selar_basic_url || null}, ${body.selar_premium_url || null}, ${body.selar_ultimate_url || null}, ${body.status || 'DRAFT'}, ${createdAt})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'beats', rows[0].id, null, rows[0])
@@ -264,6 +265,7 @@ adminApp.put('/beats/:id', async (c) => {
 
   const e = existing[0]
   const up = { ...e, ...body }
+  const createdAt = up.created_at ? new Date(up.created_at).toISOString() : e.created_at
 
   try {
     const rows = await sql`
@@ -285,6 +287,7 @@ adminApp.put('/beats/:id', async (c) => {
         selar_premium_url = ${up.selar_premium_url},
         selar_ultimate_url = ${up.selar_ultimate_url},
         status = ${up.status},
+        created_at = ${createdAt},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
@@ -323,9 +326,10 @@ adminApp.post('/music-videos', async (c) => {
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
   try {
+    const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
     const rows = await sql`
-      INSERT INTO music_videos (slug, title, subtitle, category, youtube_id, youtube_url, aspect_ratio, platforms, related_release_id, related_track_id, status)
-      VALUES (${body.slug}, ${body.title}, ${body.subtitle || null}, ${body.category || 'Visualizer'}, ${body.youtube_id}, ${body.youtube_url}, ${body.aspect_ratio || '16:9'}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.status || 'DRAFT'})
+      INSERT INTO music_videos (slug, title, subtitle, category, youtube_id, youtube_url, aspect_ratio, platforms, related_release_id, related_track_id, status, created_at)
+      VALUES (${body.slug}, ${body.title}, ${body.subtitle || null}, ${body.category || 'Visualizer'}, ${body.youtube_id}, ${body.youtube_url}, ${body.aspect_ratio || '16:9'}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.status || 'DRAFT'}, ${createdAt})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'music_videos', rows[0].id, null, rows[0])
@@ -347,6 +351,7 @@ adminApp.put('/music-videos/:id', async (c) => {
 
   const e = existing[0]
   const up = { ...e, ...body }
+  const createdAt = up.created_at ? new Date(up.created_at).toISOString() : e.created_at
 
   try {
     const rows = await sql`
@@ -362,6 +367,7 @@ adminApp.put('/music-videos/:id', async (c) => {
         related_release_id = ${up.related_release_id},
         related_track_id = ${up.related_track_id},
         status = ${up.status},
+        created_at = ${createdAt},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
@@ -594,6 +600,71 @@ adminApp.put('/media-assets/:id', async (c) => {
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'media_assets', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
+})
+
+adminApp.post('/media-assets/upload', async (c) => {
+  const sql = c.get('sql')
+  const user = c.get('user')
+
+  try {
+    const formData = await c.req.formData()
+    const file = formData.get('file')
+    const assetType = formData.get('asset_type') || 'IMAGE'
+
+    if (!file || typeof file === 'string') {
+      return c.json({ error: 'No file provided' }, 400)
+    }
+
+    const filename = file.name || `upload-${Date.now()}`
+    const cleanBasename = filename.replace(/[^a-zA-Z0-9._-]/g, '_')
+
+    // Determine storage folder prefix
+    const folder = assetType === 'AUDIO' ? 'beats' : assetType === 'VIDEO' ? 'beats' : 'covers'
+    const storageKey = `${folder}/${cleanBasename}`
+
+    // If Cloudflare R2 bucket is bound in env, write to R2
+    if (c.env?.MEDIA_BUCKET) {
+      const buffer = await file.arrayBuffer()
+      await c.env.MEDIA_BUCKET.put(storageKey, buffer, {
+        httpMetadata: { contentType: file.type || 'application/octet-stream' }
+      })
+    }
+
+    // Determine MIME type
+    const ext = cleanBasename.split('.').pop().toLowerCase()
+    const mimeMap = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      gif: 'image/gif', webp: 'image/webp', mp3: 'audio/mpeg',
+      wav: 'audio/wav', mp4: 'video/mp4', m4a: 'audio/mp4'
+    }
+    const detectedMime = file.type || mimeMap[ext] || (assetType === 'AUDIO' ? 'audio/mpeg' : assetType === 'VIDEO' ? 'video/mp4' : 'image/jpeg')
+
+    // Check if asset with this r2_key already exists in DB
+    const existing = await sql`SELECT * FROM media_assets WHERE r2_key = ${storageKey}`
+    if (existing.length > 0) {
+      const updated = await sql`
+        UPDATE media_assets SET
+          original_filename = ${filename},
+          asset_type = ${assetType},
+          mime_type = ${detectedMime},
+          size_bytes = ${file.size || null}
+        WHERE id = ${existing[0].id}
+        RETURNING *
+      `
+      await logAudit(sql, user?.sub, 'UPDATE', 'media_assets', existing[0].id, existing[0], updated[0])
+      return c.json(updated[0])
+    }
+
+    const inserted = await sql`
+      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by)
+      VALUES (${storageKey}, ${filename}, ${assetType}, ${detectedMime}, ${file.size || null}, ${user?.sub || null})
+      RETURNING *
+    `
+    await logAudit(sql, user?.sub, 'CREATE', 'media_assets', inserted[0].id, null, inserted[0])
+    return c.json(inserted[0], 201)
+  } catch (err) {
+    return c.json({ error: err.message || 'File upload failed' }, 400)
+  }
 })
 
 adminApp.delete('/media-assets/:id', requireSuperadmin, async (c) => {

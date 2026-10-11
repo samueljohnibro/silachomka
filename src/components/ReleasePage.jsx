@@ -5,6 +5,7 @@ import { useState, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
+import { useChomkaStore } from "../data/store";
 import {
   absoluteUrl,
   getReleaseSourceString,
@@ -184,6 +185,18 @@ export default function ReleasePage({ release }) {
     return allTracks;
   }, [allTracks, activeFilter]);
 
+  const { videos: storeVideos } = useChomkaStore();
+
+  const associatedVideos = useMemo(() => {
+    const directVideos = Array.isArray(release.videos) ? release.videos : [];
+    if (directVideos.length > 0) return directVideos;
+
+    if (!release.id || !Array.isArray(storeVideos)) return [];
+    return storeVideos.filter(
+      (v) => v.relatedReleaseId === release.id || v.related_release_id === release.id
+    );
+  }, [release.videos, release.id, storeVideos]);
+
   const trackCount = tracks.length;
   const releaseNumber = String(release.number ?? "").padStart(2, "0");
   const currentUrl = absoluteUrl(`/release/${release.slug}`);
@@ -342,6 +355,165 @@ export default function ReleasePage({ release }) {
               Source: <strong>{source}</strong>
             </div>
           </div>
+
+          {/* =========================================================
+              ASSOCIATED MUSIC VIDEOS & VISUALIZERS SECTION
+              ========================================================= */}
+          {associatedVideos.length > 0 && (
+            <div className="release-videos-section" style={{ marginTop: "32px" }}>
+              <div className="platform-section-title" style={{ marginBottom: "16px" }}>
+                Official Music Videos & Visualizers ({associatedVideos.length})
+              </div>
+              <div
+                className="release-videos-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "20px",
+                }}
+              >
+                {associatedVideos.map((video) => {
+                  const yId = video.youtubeId || video.youtube_id;
+                  const isPortrait =
+                    video.aspectRatio === "9:16" || video.aspect_ratio === "9:16";
+                  return (
+                    <div
+                      key={video.id || yId}
+                      className="release-video-card"
+                      style={{
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        overflow: "hidden",
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          paddingTop: isPortrait ? "177.78%" : "56.25%",
+                          background: "#000",
+                        }}
+                      >
+                        {yId ? (
+                          <iframe
+                            src={`https://www.youtube-nocookie.com/embed/${yId}?rel=0&modestbranding=1`}
+                            title={video.title}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                            style={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              width: "100%",
+                              height: "100%",
+                              border: "none",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "50%",
+                              left: "50%",
+                              transform: "translate(-50%, -50%)",
+                              color: "var(--muted)",
+                            }}
+                          >
+                            Video Preview Unavailable
+                          </div>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          padding: "16px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "6px",
+                          flexGrow: 1,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--gold)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.1em",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {video.category || "Official Visual"}
+                          </span>
+                          {isPortrait && (
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                padding: "2px 6px",
+                                background: "rgba(223,194,125,0.15)",
+                                borderRadius: "4px",
+                                color: "var(--gold)",
+                              }}
+                            >
+                              9:16 Reel
+                            </span>
+                          )}
+                        </div>
+                        <h4
+                          style={{
+                            margin: "2px 0 0",
+                            fontSize: "15px",
+                            color: "var(--text-h)",
+                          }}
+                        >
+                          {video.title}
+                        </h4>
+                        {video.subtitle && (
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: "12px",
+                              color: "var(--muted)",
+                            }}
+                          >
+                            {video.subtitle}
+                          </p>
+                        )}
+                        {video.youtubeUrl || video.youtube_url ? (
+                          <a
+                            href={video.youtubeUrl || video.youtube_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              marginTop: "auto",
+                              paddingTop: "8px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              color: "var(--gold)",
+                              fontSize: "12px",
+                              textDecoration: "none",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Watch on YouTube <UpRightArrowIcon size={12} />
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </main>

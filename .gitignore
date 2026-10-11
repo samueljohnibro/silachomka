@@ -29,3 +29,15 @@ dist-ssr
 # Cloudflare Wrangler
 worker/.wrangler/
 worker/.dev.vars*
+
+# Backups and temporary test artifacts
+backups/
+scratch/
+*.png
+audit-results.json
+audit-production.cjs
+check-beats.cjs
+check-text.cjs
+f3.6-audit.cjs
+f3.6a_*.md
+test-videos-cms.cjs

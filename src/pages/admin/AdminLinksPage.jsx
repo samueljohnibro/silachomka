@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import AdminSortControl from "../../components/admin/AdminSortControl";
+import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import "./admin.css";
 
 const AdminLinksPage = () => {
@@ -7,6 +9,14 @@ const AdminLinksPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [view, setView] = useState("LIST");
+  const [sortOrder, setSortOrder] = useState("asc"); // Default asc for links or toggleable
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem("admin_listing_view_mode") || "table";
+    } catch {
+      return "table";
+    }
+  });
   
   const [currentLink, setCurrentLink] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -202,23 +212,109 @@ const AdminLinksPage = () => {
     );
   }
 
+  // Sort links by created_at or sort_order
+  const sortedLinks = [...links].sort((a, b) => {
+    const da = a.created_at ? new Date(a.created_at).getTime() : (a.sort_order ?? 0);
+    const db = b.created_at ? new Date(b.created_at).getTime() : (b.sort_order ?? 0);
+    return sortOrder === "desc" ? db - da : da - db;
+  });
+
   // LIST VIEW
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
-        <h2 className="studio-section-heading" style={{ margin: 0 }}>Social Links Management</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
+        <div>
+          <h2 className="studio-section-heading" style={{ margin: 0 }}>Social Links Management</h2>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+            <AdminSortControl sortOrder={sortOrder} onChange={setSortOrder} label="Sort Links" />
+            <AdminViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
         <button className="primary-button" onClick={handleCreateClick}>+ Create Link</button>
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
 
-      {links.length === 0 ? (
+      {sortedLinks.length === 0 ? (
         <div className="admin-placeholder">
           <h2>No Links Found</h2>
           <p>You haven't added any social links yet.</p>
           <button className="primary-button" style={{ marginTop: 16 }} onClick={handleCreateClick}>Create First Link</button>
         </div>
+      ) : viewMode === "grid" ? (
+        /* GRID / CARDS VIEW */
+        <div className="admin-listing-grid">
+          {sortedLinks.map(link => (
+            <div key={link.id} className="admin-item-card" style={{ opacity: link.is_active ? 1 : 0.6 }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, textTransform: "uppercase", color: "var(--gold)", fontWeight: 600 }}>
+                    {link.link_type || "ARTIST"} {link.platform ? `• ${link.platform}` : ""}
+                  </span>
+                  <span style={{
+                    padding: "2px 6px",
+                    borderRadius: "3px",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    background: link.is_active ? "rgba(16, 185, 129, 0.15)" : "rgba(156, 163, 175, 0.15)",
+                    color: link.is_active ? "#34d399" : "var(--muted)"
+                  }}>
+                    {link.is_active ? "Active" : "Hidden"}
+                  </span>
+                </div>
+
+                <h3 style={{ fontSize: 16, margin: "0 0 4px 0", color: "var(--text-h)" }}>{link.name}</h3>
+                {link.handle && <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{link.handle}</div>}
+                <div style={{ fontSize: 12, wordBreak: "break-all" }}>
+                  <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--gold)", textDecoration: "none" }}>
+                    {link.url} ↗
+                  </a>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                <button 
+                  onClick={() => handleEditClick(link)}
+                  className="studio-pill-btn"
+                  style={{ fontSize: 12 }}
+                >
+                  Edit
+                </button>
+                {deleteConfirmId === link.id ? (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "#fca5a5" }}>Delete?</span>
+                    <button 
+                      onClick={() => handleDelete(link.id)} 
+                      className="studio-pill-btn" 
+                      style={{ background: "rgba(220,38,38,0.2)", color: "#fca5a5", borderColor: "#fca5a5", fontSize: 11, padding: "2px 8px" }}
+                      disabled={isDeleting}
+                    >
+                      Yes
+                    </button>
+                    <button 
+                      onClick={() => setDeleteConfirmId(null)} 
+                      className="studio-pill-btn"
+                      style={{ fontSize: 11, padding: "2px 8px" }}
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setDeleteConfirmId(link.id)}
+                    className="studio-pill-btn"
+                    style={{ background: "transparent", color: "var(--muted)", fontSize: 12 }}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
+        /* TABLE / LIST VIEW */
         <div className="admin-card" style={{ padding: 0, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 14 }}>
             <thead>
@@ -229,7 +325,7 @@ const AdminLinksPage = () => {
               </tr>
             </thead>
             <tbody>
-              {links.map(link => (
+              {sortedLinks.map(link => (
                 <tr key={link.id} style={{ borderBottom: "1px solid var(--border)", opacity: link.is_active ? 1 : 0.5 }}>
                   <td style={{ padding: "16px", color: "var(--text-h)", fontWeight: 500 }}>
                     {link.name}

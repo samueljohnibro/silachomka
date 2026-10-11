@@ -87,7 +87,23 @@ app.get('/api/releases', async (c) => {
           FROM tracks t WHERE t.release_id = r.id
         ),
         '[]'::json
-      ) as tracks
+      ) as tracks,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object(
+            'id', mv.slug,
+            'title', mv.title,
+            'subtitle', mv.subtitle,
+            'category', mv.category,
+            'youtubeId', mv.youtube_id,
+            'youtubeUrl', mv.youtube_url,
+            'aspectRatio', mv.aspect_ratio,
+            'links', mv.platforms
+          ))
+          FROM music_videos mv WHERE mv.related_release_id = r.id AND mv.status = 'PUBLISHED'
+        ),
+        '[]'::json
+      ) as videos
     FROM releases r
     LEFT JOIN media_assets m ON r.cover_asset_id = m.id
     WHERE r.status = 'PUBLISHED'
@@ -124,7 +140,23 @@ app.get('/api/releases/:slug', async (c) => {
           FROM tracks t WHERE t.release_id = r.id
         ),
         '[]'::json
-      ) as tracks
+      ) as tracks,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object(
+            'id', mv.slug,
+            'title', mv.title,
+            'subtitle', mv.subtitle,
+            'category', mv.category,
+            'youtubeId', mv.youtube_id,
+            'youtubeUrl', mv.youtube_url,
+            'aspectRatio', mv.aspect_ratio,
+            'links', mv.platforms
+          ))
+          FROM music_videos mv WHERE mv.related_release_id = r.id AND mv.status = 'PUBLISHED'
+        ),
+        '[]'::json
+      ) as videos
     FROM releases r
     LEFT JOIN media_assets m ON r.cover_asset_id = m.id
     WHERE r.slug = ${slug} AND r.status = 'PUBLISHED'
@@ -210,6 +242,8 @@ app.get('/api/music-videos', async (c) => {
     SELECT 
       v.slug as id, v.title, v.subtitle, v.category, v.youtube_id as "youtubeId", 
       v.youtube_url as "youtubeUrl", v.aspect_ratio as "aspectRatio", v.platforms as links,
+      v.related_release_id as "relatedReleaseId",
+      v.related_track_id as "relatedTrackId",
       COALESCE(
         (SELECT json_agg(f.artist_name) FROM music_video_features f WHERE f.video_id = v.id),
         '[]'::json

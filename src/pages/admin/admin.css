@@ -145,6 +145,34 @@
   border: 1px solid var(--line, var(--border));
   padding: 20px;
   border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.admin-stat-card:hover {
+  border-color: var(--gold);
+  background: rgba(223, 194, 125, 0.05);
+  transform: translateY(-2px);
+}
+
+.admin-listing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.admin-item-card {
+  background: var(--surface, #111116);
+  border: 1px solid var(--line, var(--border));
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: border-color 0.2s ease;
+}
+
+.admin-item-card:hover {
+  border-color: rgba(223, 194, 125, 0.4);
 }
 
 .admin-stat-title {

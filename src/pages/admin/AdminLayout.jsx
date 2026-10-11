@@ -11,7 +11,6 @@ const AdminSidebar = ({ mobileOpen, setMobileOpen }) => {
     { name: 'Tracks', path: '/admin/tracks' },
     { name: 'Beats', path: '/admin/beats' },
     { name: 'Videos', path: '/admin/videos' },
-    { name: 'Media', path: '/admin/media' },
     { name: 'Links', path: '/admin/links' },
     { name: 'Merchandise', path: '/admin/merchandise' },
     { name: 'Settings', path: '/admin/settings' },

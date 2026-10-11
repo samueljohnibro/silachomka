@@ -1,4 +1,4 @@
-const API_URL = "https://silachomka-api.samueljohnibrotech.workers.dev";
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 // Normalize Releases
 const normalizeRelease = (r) => {

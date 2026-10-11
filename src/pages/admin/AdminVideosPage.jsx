@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import PlatformLinksEditor from "../../components/admin/PlatformLinksEditor";
+import AdminSortControl from "../../components/admin/AdminSortControl";
+import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import "./admin.css";
 
 const isValidSlug = (slug) => /^[a-z0-9-]+$/.test(slug);
+const slugify = (text) => (text || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 const AdminVideosPage = () => {
   const [videos, setVideos] = useState([]);
@@ -12,6 +16,14 @@ const AdminVideosPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [view, setView] = useState("LIST"); // LIST, CREATE, EDIT
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem("admin_listing_view_mode") || "table";
+    } catch {
+      return "table";
+    }
+  });
 
   const [currentVideo, setCurrentVideo] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -58,10 +70,11 @@ const AdminVideosPage = () => {
       youtube_id: "",
       youtube_url: "",
       aspect_ratio: "16:9",
-      platforms: "",
+      platforms: {},
       related_release_id: "",
       related_track_id: "",
-      status: "DRAFT",
+      status: "PUBLISHED",
+      created_at: new Date().toISOString().split("T")[0],
     });
     setView("CREATE");
     setError(null);
@@ -72,7 +85,7 @@ const AdminVideosPage = () => {
   const handleEditClick = (video) => {
     setCurrentVideo({
       ...video,
-      platforms: video.platforms ? JSON.stringify(video.platforms, null, 2) : "",
+      platforms: video.platforms && typeof video.platforms === "object" ? video.platforms : {},
     });
     setView("EDIT");
     setError(null);
@@ -123,18 +136,31 @@ const AdminVideosPage = () => {
     e.preventDefault();
     setError(null);
 
-    if (!currentVideo.slug || !currentVideo.title || !currentVideo.youtube_id || !currentVideo.youtube_url) {
-      setError("Slug, Title, YouTube ID, and YouTube URL are required.");
+    if (!currentVideo.title || !currentVideo.title.trim()) {
+      setError("Title is required.");
       return;
     }
 
-    if (!isValidSlug(currentVideo.slug)) {
+    if (!currentVideo.youtube_id || !currentVideo.youtube_url) {
+      setError("YouTube ID and YouTube URL are required.");
+      return;
+    }
+
+    let slug = currentVideo.slug ? currentVideo.slug.trim() : slugify(currentVideo.title);
+    if (!slug) {
+      slug = "video-" + Date.now();
+    }
+
+    if (!isValidSlug(slug)) {
       setError("Invalid slug format. Use lowercase letters, numbers, and hyphens only.");
       return;
     }
 
     try {
-      const payload = { ...currentVideo };
+      const payload = {
+        ...currentVideo,
+        slug
+      };
       const nullableFields = ["subtitle", "category", "aspect_ratio", "related_release_id", "related_track_id"];
       nullableFields.forEach((field) => {
         if (payload[field] === "") {
@@ -142,15 +168,8 @@ const AdminVideosPage = () => {
         }
       });
 
-      if (payload.platforms === "") {
+      if (payload.platforms && typeof payload.platforms === "object" && Object.keys(payload.platforms).length === 0) {
         payload.platforms = null;
-      } else if (typeof payload.platforms === "string" && payload.platforms.trim()) {
-        try {
-          payload.platforms = JSON.parse(payload.platforms);
-        } catch {
-          setError("Invalid JSON format in Platforms field.");
-          return;
-        }
       }
 
       setIsSaving(true);
@@ -340,7 +359,7 @@ const AdminVideosPage = () => {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Aspect Ratio</label>
               <select
@@ -355,6 +374,17 @@ const AdminVideosPage = () => {
                 <option value="4:3">4:3 (Classic)</option>
                 <option value="1:1">1:1 (Square)</option>
               </select>
+            </div>
+            <div className="studio-field" style={{ textAlign: "left" }}>
+              <label>Release Date * (Editable)</label>
+              <input
+                type="date"
+                name="created_at"
+                className="studio-input"
+                value={currentVideo.created_at ? currentVideo.created_at.split("T")[0] : ""}
+                onChange={handleChange}
+                disabled={isSaving}
+              />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Status</label>
@@ -411,19 +441,13 @@ const AdminVideosPage = () => {
             </div>
           </div>
 
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Platform Links (JSON)</h3>
-          <div className="studio-field" style={{ textAlign: "left" }}>
-            <label>Platforms</label>
-            <textarea
-              name="platforms"
-              className="studio-input"
-              style={{ minHeight: "100px", resize: "vertical", fontFamily: "monospace" }}
-              value={currentVideo.platforms || ""}
-              onChange={handleChange}
-              disabled={isSaving}
-              placeholder={'{\n  "youtube": "https://youtu.be/...",\n  "soundcloud": "https://..."\n}'}
-            />
-          </div>
+          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Streaming & Platform Links</h3>
+          <PlatformLinksEditor
+            label="Video Streaming & Platform Links"
+            value={currentVideo.platforms}
+            onChange={(platforms) => setCurrentVideo(prev => ({ ...prev, platforms }))}
+            disabled={isSaving}
+          />
 
           <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end" }}>
             <button type="submit" className="primary-button" disabled={isSaving}>
@@ -488,7 +512,7 @@ const AdminVideosPage = () => {
               <input
                 type="text"
                 className="studio-input"
-                placeholder="Artist name (e.g. K4MY)"
+                placeholder="Artist name (e.g. Kendrick Lamar)"
                 value={newFeatureArtist}
                 onChange={(e) => setNewFeatureArtist(e.target.value)}
                 disabled={isAddingFeature}
@@ -508,17 +532,30 @@ const AdminVideosPage = () => {
     );
   }
 
+  // Sort videos by created_at
+  const sortedVideos = [...videos].sort((a, b) => {
+    const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return sortOrder === "desc" ? db - da : da - db;
+  });
+
   // LIST VIEW
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
-        <h2 className="studio-section-heading" style={{ margin: 0 }}>Music Videos Management</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
+        <div>
+          <h2 className="studio-section-heading" style={{ margin: 0 }}>Music Videos Management</h2>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+            <AdminSortControl sortOrder={sortOrder} onChange={setSortOrder} label="Sort Videos" />
+            <AdminViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
         <button className="primary-button" onClick={handleCreateClick}>+ Create Video</button>
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
 
-      {videos.length === 0 ? (
+      {sortedVideos.length === 0 ? (
         <div className="admin-placeholder">
           <h2>No Music Videos Found</h2>
           <p>You haven't added any videos yet.</p>
@@ -526,19 +563,128 @@ const AdminVideosPage = () => {
             Create First Video
           </button>
         </div>
+      ) : viewMode === "grid" ? (
+        /* GRID / CARDS VIEW */
+        <div className="admin-listing-grid">
+          {sortedVideos.map((vid) => {
+            const rel = releases.find(r => r.id === vid.related_release_id);
+            const thumbUrl = vid.youtube_id ? `https://img.youtube.com/vi/${vid.youtube_id}/mqdefault.jpg` : null;
+            return (
+              <div key={vid.id} className="admin-item-card">
+                <div>
+                  <div style={{ position: "relative", width: "100%", paddingBottom: vid.aspect_ratio === "9:16" ? "120%" : "56.25%", background: "#000", borderRadius: "4px", overflow: "hidden", marginBottom: "12px", border: "1px solid var(--border)" }}>
+                    {thumbUrl ? (
+                      <img
+                        src={thumbUrl}
+                        alt={vid.title}
+                        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "var(--muted)", fontSize: "12px" }}>
+                        No Thumbnail
+                      </div>
+                    )}
+                    <span style={{ 
+                      position: "absolute", 
+                      top: 8, 
+                      left: 8, 
+                      padding: "2px 6px", 
+                      borderRadius: "3px", 
+                      fontSize: 10, 
+                      fontWeight: 700, 
+                      textTransform: "uppercase",
+                      background: "rgba(0,0,0,0.8)",
+                      color: "var(--gold)"
+                    }}>
+                      {vid.aspect_ratio || "16:9"}
+                    </span>
+                    <span style={{ 
+                      position: "absolute", 
+                      top: 8, 
+                      right: 8, 
+                      padding: "2px 8px", 
+                      borderRadius: "4px", 
+                      fontSize: 10, 
+                      fontWeight: 700, 
+                      textTransform: "uppercase",
+                      background: vid.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.9)" : "rgba(245, 158, 11, 0.9)",
+                      color: "#000"
+                    }}>
+                      {vid.status || "DRAFT"}
+                    </span>
+                  </div>
+
+                  <h3 style={{ fontSize: 16, margin: "0 0 4px 0", color: "var(--text-h)" }}>{vid.title}</h3>
+                  <div style={{ fontSize: 12, color: "var(--gold)", textTransform: "uppercase", fontWeight: 600 }}>
+                    {vid.category || "Visualizer"}
+                  </div>
+                  {rel && (
+                    <div style={{ fontSize: 12, color: "var(--text)", marginTop: 2 }}>
+                      Project: <span style={{ color: "var(--gold)" }}>{rel.title}</span>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                    Date: {vid.created_at ? vid.created_at.split("T")[0] : "—"} • ID: {vid.youtube_id}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                  <button
+                    onClick={() => handleEditClick(vid)}
+                    className="studio-pill-btn"
+                    style={{ fontSize: 12 }}
+                  >
+                    Edit
+                  </button>
+                  {deleteConfirmId === vid.id ? (
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, color: "#fca5a5" }}>Delete?</span>
+                      <button
+                        onClick={() => handleDelete(vid.id)}
+                        className="studio-pill-btn"
+                        style={{ background: "rgba(220,38,38,0.2)", color: "#fca5a5", borderColor: "#fca5a5", fontSize: 11, padding: "2px 8px" }}
+                        disabled={isDeleting}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(null)}
+                        className="studio-pill-btn"
+                        style={{ fontSize: 11, padding: "2px 8px" }}
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteConfirmId(vid.id)}
+                      className="studio-pill-btn"
+                      style={{ background: "transparent", color: "var(--muted)", fontSize: 12 }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* TABLE / LIST VIEW */
         <div className="admin-card" style={{ padding: 0, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)", background: "rgba(223, 194, 125, 0.05)" }}>
                 <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Video</th>
                 <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Category / YouTube</th>
+                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Date</th>
                 <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Status</th>
                 <th style={{ padding: "16px", textAlign: "right", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {videos.map((vid) => (
+              {sortedVideos.map((vid) => (
                 <tr key={vid.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={{ padding: "16px" }}>
                     <div style={{ color: "var(--text-h)", fontWeight: 500 }}>{vid.title}</div>
@@ -552,6 +698,9 @@ const AdminVideosPage = () => {
                         {vid.youtube_id} ↗
                       </a>
                     </div>
+                  </td>
+                  <td style={{ padding: "16px", fontSize: 13, color: "var(--muted)" }}>
+                    {vid.created_at ? vid.created_at.split("T")[0] : "—"}
                   </td>
                   <td style={{ padding: "16px" }}>
                     <span

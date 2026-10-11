@@ -190,6 +190,412 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay }) {
 }
 
 /* =========================================================
+   BEAT REEL PLAYER (PORTRAIT 9:16 EXPERIENCE)
+   ========================================================= */
+
+function BeatReelPlayer({
+  beats,
+  currentIndex,
+  onNext,
+  onPrev,
+  onReplay,
+  isShuffle,
+  onToggleShuffle,
+  isPlaying,
+  isLoading,
+  progress,
+  onPlay,
+  onExitReel,
+}) {
+  const currentBeat = beats[currentIndex];
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.loop = true;
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {});
+    }
+  }, [currentBeat?.video]);
+
+  if (!currentBeat) return null;
+
+  const elapsedSeconds = Math.min(60, Math.floor(progress * 60));
+
+  return (
+    <div className="beat-reel-wrapper" style={{ margin: "20px auto 40px", maxWidth: "440px", padding: "0 12px" }}>
+      {/* 9:16 Portrait Reel Viewport */}
+      <div
+        className="beat-reel-viewport"
+        style={{
+          position: "relative",
+          width: "100%",
+          aspectRatio: "9 / 16",
+          maxHeight: "82vh",
+          margin: "0 auto",
+          borderRadius: "16px",
+          overflow: "hidden",
+          background: "#080808",
+          boxShadow: "0 24px 60px rgba(0,0,0,0.8), 0 0 30px rgba(223, 194, 125, 0.15)",
+          border: "1px solid rgba(223, 194, 125, 0.3)",
+        }}
+      >
+        {/* Background Visualizer / Video */}
+        {currentBeat.video?.endsWith(".gif") ? (
+          <img
+            src={currentBeat.video}
+            alt=""
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            src={currentBeat.video}
+            poster={currentBeat.image}
+            muted
+            autoPlay
+            playsInline
+            loop
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
+        )}
+
+        {/* Cinematic Gradient Overlays */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.92) 100%)",
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Top Header Bar: 60s Progress Bar & Controls */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            padding: "16px 16px 8px",
+            zIndex: 10,
+          }}
+        >
+          {/* 60-Second Segment Progress Bar */}
+          <div
+            style={{
+              width: "100%",
+              height: "4px",
+              background: "rgba(255, 255, 255, 0.2)",
+              borderRadius: "2px",
+              overflow: "hidden",
+              marginBottom: "12px",
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.max(0, Math.min(progress * 100, 100))}%`,
+                height: "100%",
+                background: "var(--gold)",
+                boxShadow: "0 0 8px var(--gold)",
+                transition: "width 0.1s linear",
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              color: "#fff",
+              fontSize: "12px",
+              fontWeight: 500,
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "rgba(0,0,0,0.5)",
+                padding: "4px 10px",
+                borderRadius: "20px",
+                border: "1px solid rgba(223, 194, 125, 0.3)",
+              }}
+            >
+              <span
+                style={{
+                  width: "6px",
+                  height: "6px",
+                  borderRadius: "50%",
+                  background: isPlaying ? "var(--gold)" : "#888",
+                  boxShadow: isPlaying ? "0 0 6px var(--gold)" : "none",
+                }}
+              />
+              0:{String(elapsedSeconds).padStart(2, "0")} / 1:00 Preview
+            </span>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
+                {currentIndex + 1} of {beats.length}
+              </span>
+              <button
+                type="button"
+                onClick={onExitReel}
+                style={{
+                  background: "rgba(0,0,0,0.6)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  color: "#fff",
+                  borderRadius: "50%",
+                  width: "28px",
+                  height: "28px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+                title="Exit Reel Mode"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Center Tap to Play/Pause Area */}
+        <div
+          onClick={() => onPlay(currentBeat)}
+          style={{
+            position: "absolute",
+            inset: "80px 0 190px 0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            zIndex: 5,
+          }}
+        >
+          {(!isPlaying || isLoading) && (
+            <div
+              style={{
+                width: "64px",
+                height: "64px",
+                borderRadius: "50%",
+                background: "rgba(0,0,0,0.65)",
+                border: "2px solid var(--gold)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--gold)",
+                boxShadow: "0 0 24px rgba(0,0,0,0.8)",
+                transition: "transform 0.2s ease",
+              }}
+            >
+              {isLoading ? (
+                <div className="beat-loading-spinner" />
+              ) : (
+                <PlayIcon size={28} />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Reel Content & Interactive Controls */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: "20px 18px",
+            zIndex: 10,
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+              <span
+                style={{
+                  fontSize: "10px",
+                  color: "var(--gold)",
+                  letterSpacing: "0.1em",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  background: "rgba(223,194,125,0.15)",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                }}
+              >
+                {currentBeat.genre || "Instrumental"}
+              </span>
+              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>
+                ₦15,000+
+              </span>
+            </div>
+            <h2 style={{ margin: "2px 0 4px", fontSize: "20px", color: "#fff", fontWeight: 700 }}>
+              {currentBeat.title}
+            </h2>
+            <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
+              prod. {getBeatProducer(currentBeat)} · {getBeatSource(currentBeat)}
+            </p>
+          </div>
+
+          {/* Prominent Button to Open Beat Detail Page & Selar Licensing */}
+          <Link
+            to={`/beats/${currentBeat.id}`}
+            className="primary-button"
+            style={{
+              width: "100%",
+              textAlign: "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              padding: "10px 16px",
+              fontSize: "13px",
+              fontWeight: 600,
+              textDecoration: "none",
+              borderRadius: "8px",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
+            }}
+          >
+            <span>View Beat Details & Licensing</span>
+            <RightArrowIcon size={16} />
+          </Link>
+
+          {/* Dedicated Playback & Navigation Controls Bar */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingTop: "6px",
+              borderTop: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            {/* Shuffle Toggle */}
+            <button
+              type="button"
+              onClick={onToggleShuffle}
+              title={isShuffle ? "Shuffle On" : "Shuffle Off"}
+              style={{
+                background: isShuffle ? "rgba(223, 194, 125, 0.25)" : "transparent",
+                border: isShuffle ? "1px solid var(--gold)" : "1px solid transparent",
+                color: isShuffle ? "var(--gold)" : "rgba(255,255,255,0.6)",
+                borderRadius: "6px",
+                padding: "6px 10px",
+                fontSize: "15px",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+            >
+              🔀
+            </button>
+
+            {/* Previous Beat */}
+            <button
+              type="button"
+              onClick={onPrev}
+              title="Previous Beat"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#fff",
+                fontSize: "18px",
+                cursor: "pointer",
+                padding: "6px 10px",
+              }}
+            >
+              ⏮
+            </button>
+
+            {/* Play / Pause Toggle */}
+            <button
+              type="button"
+              onClick={() => onPlay(currentBeat)}
+              title={isPlaying ? "Pause Preview" : "Play Preview"}
+              style={{
+                width: "42px",
+                height: "42px",
+                borderRadius: "50%",
+                background: "var(--gold)",
+                border: "none",
+                color: "#000",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "0 0 12px var(--gold-glow)",
+              }}
+            >
+              {isPlaying ? <PauseIcon size={20} color="#000" /> : <PlayIcon size={20} color="#000" />}
+            </button>
+
+            {/* Next Beat */}
+            <button
+              type="button"
+              onClick={onNext}
+              title="Next Beat"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#fff",
+                fontSize: "18px",
+                cursor: "pointer",
+                padding: "6px 10px",
+              }}
+            >
+              ⏭
+            </button>
+
+            {/* Replay 60s Preview */}
+            <button
+              type="button"
+              onClick={onReplay}
+              title="Replay 60s Preview"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "rgba(255,255,255,0.7)",
+                fontSize: "16px",
+                cursor: "pointer",
+                padding: "6px 10px",
+              }}
+            >
+              🔄
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
    BEATS PAGE
    ========================================================= */
 
@@ -212,6 +618,9 @@ export default function BeatsPage() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [isExclusiveModalOpen, setIsExclusiveModalOpen] = useState(false);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [isReelMode, setIsReelMode] = useState(false);
+  const [reelIndex, setReelIndex] = useState(0);
+  const [isShuffle, setIsShuffle] = useState(false);
 
   useEffect(() => {
     activeBeatRef.current = activeBeat;
@@ -540,6 +949,72 @@ export default function BeatsPage() {
     setActiveFilter(filter);
   }, []);
 
+  // Synchronize reelIndex when activeBeat changes externally
+  useEffect(() => {
+    if (activeBeat && filteredBeats.length > 0) {
+      const idx = filteredBeats.findIndex((b) => b.id === activeBeat.id);
+      if (idx !== -1) {
+        setReelIndex(idx);
+      }
+    }
+  }, [activeBeat, filteredBeats]);
+
+  const handleNextReel = useCallback(() => {
+    if (filteredBeats.length === 0) return;
+    let nextIdx;
+    if (isShuffle && filteredBeats.length > 1) {
+      do {
+        nextIdx = Math.floor(Math.random() * filteredBeats.length);
+      } while (nextIdx === reelIndex);
+    } else {
+      nextIdx = (reelIndex + 1) % filteredBeats.length;
+    }
+    setReelIndex(nextIdx);
+    const nextBeat = filteredBeats[nextIdx];
+    if (nextBeat) {
+      handlePlay(nextBeat);
+    }
+  }, [filteredBeats, isShuffle, reelIndex, handlePlay]);
+
+  const handlePrevReel = useCallback(() => {
+    if (filteredBeats.length === 0) return;
+    const prevIdx = (reelIndex - 1 + filteredBeats.length) % filteredBeats.length;
+    setReelIndex(prevIdx);
+    const prevBeat = filteredBeats[prevIdx];
+    if (prevBeat) {
+      handlePlay(prevBeat);
+    }
+  }, [filteredBeats, reelIndex, handlePlay]);
+
+  const handleReplayReel = useCallback(async () => {
+    if (audioRef.current) {
+      await replayCurrentBeat(audioRef.current);
+    }
+  }, [replayCurrentBeat]);
+
+  useEffect(() => {
+    if (!isReelMode) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        e.preventDefault();
+        handleNextReel();
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        handlePrevReel();
+      } else if (e.key === " " && e.target === document.body) {
+        e.preventDefault();
+        if (filteredBeats[reelIndex]) {
+          handlePlay(filteredBeats[reelIndex]);
+        }
+      } else if (e.key === "Escape") {
+        setIsReelMode(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isReelMode, handleNextReel, handlePrevReel, filteredBeats, reelIndex, handlePlay]);
+
   return (
     <main className="beats-page">
       <SeoHead
@@ -582,11 +1057,49 @@ export default function BeatsPage() {
           CATALOG TOOLBAR
           ================================================= */}
       <section className="beats-toolbar" aria-label="Beat catalog filters">
-        <div>
-          <span className="toolbar-label">Catalog</span>
-          <span className="toolbar-count">
-            {filteredBeats.length} {filteredBeats.length === 1 ? "Beat" : "Beats"}
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+          <div>
+            <span className="toolbar-label">Catalog</span>
+            <span className="toolbar-count">
+              {filteredBeats.length} {filteredBeats.length === 1 ? "Beat" : "Beats"}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="reel-mode-toggle-btn"
+            onClick={() => {
+              const nextMode = !isReelMode;
+              setIsReelMode(nextMode);
+              if (nextMode && filteredBeats.length > 0) {
+                const idx = activeBeat ? filteredBeats.findIndex((b) => b.id === activeBeat.id) : 0;
+                const targetIdx = idx !== -1 ? idx : 0;
+                setReelIndex(targetIdx);
+                if (!isPlaying && filteredBeats[targetIdx]) {
+                  handlePlay(filteredBeats[targetIdx]);
+                }
+              }
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 14px",
+              fontSize: "12px",
+              fontWeight: 700,
+              borderRadius: "20px",
+              background: isReelMode ? "var(--gold)" : "rgba(223, 194, 125, 0.12)",
+              color: isReelMode ? "#000" : "var(--gold)",
+              border: "1px solid var(--gold)",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+            aria-pressed={isReelMode}
+          >
+            {isReelMode ? "⏹ Grid View" : "🎬 Reels Mode"}
+          </button>
         </div>
 
         <div className="filter-toolbar beats-filter-toolbar" role="group" aria-label="Filter beats by genre">
@@ -639,20 +1152,37 @@ export default function BeatsPage() {
       </section>
 
       {/* =================================================
-          BEAT GRID
+          BEAT CONTENT (REEL MODE OR GRID VIEW)
           ================================================= */}
-      <section className="beats-grid" aria-label="Beat catalog">
-        {filteredBeats.map((beat) => (
-          <BeatCard
-            key={beat.id}
-            beat={beat}
-            isPlaying={activeBeat?.id === beat.id && isPlaying}
-            isLoading={loadingBeatId === beat.id}
-            progress={activeBeat?.id === beat.id ? progress : 0}
-            onPlay={handlePlay}
-          />
-        ))}
-      </section>
+      {isReelMode ? (
+        <BeatReelPlayer
+          beats={filteredBeats}
+          currentIndex={reelIndex}
+          onNext={handleNextReel}
+          onPrev={handlePrevReel}
+          onReplay={handleReplayReel}
+          isShuffle={isShuffle}
+          onToggleShuffle={() => setIsShuffle((prev) => !prev)}
+          isPlaying={isPlaying}
+          isLoading={loadingBeatId === filteredBeats[reelIndex]?.id}
+          progress={progress}
+          onPlay={handlePlay}
+          onExitReel={() => setIsReelMode(false)}
+        />
+      ) : (
+        <section className="beats-grid" aria-label="Beat catalog">
+          {filteredBeats.map((beat) => (
+            <BeatCard
+              key={beat.id}
+              beat={beat}
+              isPlaying={activeBeat?.id === beat.id && isPlaying}
+              isLoading={loadingBeatId === beat.id}
+              progress={activeBeat?.id === beat.id ? progress : 0}
+              onPlay={handlePlay}
+            />
+          ))}
+        </section>
+      )}
 
       {/* =================================================
           EMPTY STATE

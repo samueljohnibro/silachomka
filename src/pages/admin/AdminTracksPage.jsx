@@ -1,8 +1,14 @@
 import { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import PlatformLinksEditor from "../../components/admin/PlatformLinksEditor";
+import MediaAssetPicker from "../../components/admin/MediaAssetPicker";
+import AdminSortControl from "../../components/admin/AdminSortControl";
+import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import "./admin.css";
 
 const CREDIT_ROLES = ["FEATURING", "PRODUCER", "WRITER", "ENGINEER", "DIRECTOR"];
+
+const slugify = (text) => (text || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 const AdminTracksPage = () => {
   const [tracks, setTracks] = useState([]);
@@ -11,9 +17,27 @@ const AdminTracksPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [view, setView] = useState("LIST");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem("admin_listing_view_mode") || "table";
+    } catch {
+      return "table";
+    }
+  });
 
   const [currentTrack, setCurrentTrack] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Direct New Release Creation State
+  const [isCreatingNewRelease, setIsCreatingNewRelease] = useState(false);
+  const [newReleaseForm, setNewReleaseForm] = useState({
+    title: "",
+    type: "single",
+    release_date: new Date().toISOString().split("T")[0],
+    cover_asset_id: null,
+    platforms: {}
+  });
 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -52,7 +76,15 @@ const AdminTracksPage = () => {
       release_id: releases[0]?.id || "",
       track_number: 1,
       title: "",
-      platforms: "",
+      platforms: {},
+    });
+    setIsCreatingNewRelease(false);
+    setNewReleaseForm({
+      title: "",
+      type: "single",
+      release_date: new Date().toISOString().split("T")[0],
+      cover_asset_id: null,
+      platforms: {}
     });
     setView("CREATE");
     setError(null);
@@ -63,8 +95,9 @@ const AdminTracksPage = () => {
   const handleEditClick = (track) => {
     setCurrentTrack({
       ...track,
-      platforms: track.platforms ? JSON.stringify(track.platforms, null, 2) : "",
+      platforms: track.platforms && typeof track.platforms === "object" ? track.platforms : {},
     });
+    setIsCreatingNewRelease(false);
     setView("EDIT");
     setError(null);
     setNewCreditName("");
@@ -75,6 +108,7 @@ const AdminTracksPage = () => {
     if (e) e.preventDefault();
     setView("LIST");
     setCurrentTrack(null);
+    setIsCreatingNewRelease(false);
     setError(null);
     setNewCreditName("");
     setCreditError(null);
@@ -82,6 +116,10 @@ const AdminTracksPage = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (name === "release_id" && value === "__NEW__") {
+      setIsCreatingNewRelease(true);
+      return;
+    }
     setCurrentTrack((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
@@ -92,29 +130,60 @@ const AdminTracksPage = () => {
     e.preventDefault();
     setError(null);
 
-    if (!currentTrack.release_id || !currentTrack.track_number || !currentTrack.title) {
-      setError("Release ID, Track Number, and Title are required.");
+    if (!currentTrack.title || !currentTrack.title.trim()) {
+      setError("Track title is required.");
       return;
     }
 
-    try {
-      const payload = {
-        ...currentTrack,
-        track_number: parseInt(currentTrack.track_number, 10),
-      };
+    if (!currentTrack.track_number) {
+      setError("Track number is required.");
+      return;
+    }
 
-      if (payload.platforms === "") {
-        payload.platforms = null;
-      } else if (typeof payload.platforms === "string" && payload.platforms.trim()) {
-        try {
-          payload.platforms = JSON.parse(payload.platforms);
-        } catch {
-          setError("Invalid JSON format in Platforms field.");
+    setIsSaving(true);
+
+    try {
+      let targetReleaseId = currentTrack.release_id;
+
+      // If user chose to create a new release on the fly
+      if (isCreatingNewRelease) {
+        if (!newReleaseForm.title || !newReleaseForm.title.trim()) {
+          setError("New Release title is required.");
+          setIsSaving(false);
           return;
         }
+
+        const generatedSlug = slugify(newReleaseForm.title) || ("release-" + Date.now());
+        const createdRelease = await adminApi.createRelease({
+          title: newReleaseForm.title.trim(),
+          slug: generatedSlug,
+          type: newReleaseForm.type || "single",
+          release_date: newReleaseForm.release_date || new Date().toISOString().split("T")[0],
+          cover_asset_id: newReleaseForm.cover_asset_id || null,
+          platforms: newReleaseForm.platforms && Object.keys(newReleaseForm.platforms).length > 0 ? newReleaseForm.platforms : null,
+          primary_artist: "silachomka",
+          sources: ["chomkaMUSIC™"],
+          edition: 1,
+          status: "PUBLISHED"
+        });
+
+        targetReleaseId = createdRelease.id;
+        setReleases(prev => [createdRelease, ...prev]);
       }
 
-      setIsSaving(true);
+      if (!targetReleaseId) {
+        setError("A release must be selected or created for this track.");
+        setIsSaving(false);
+        return;
+      }
+
+      const payload = {
+        ...currentTrack,
+        release_id: targetReleaseId,
+        track_number: parseInt(currentTrack.track_number, 10),
+        platforms: currentTrack.platforms && typeof currentTrack.platforms === "object" && Object.keys(currentTrack.platforms).length > 0 ? currentTrack.platforms : null
+      };
+
       if (view === "CREATE") {
         await adminApi.createTrack(payload);
       } else {
@@ -124,6 +193,7 @@ const AdminTracksPage = () => {
       await fetchData();
       setView("LIST");
       setCurrentTrack(null);
+      setIsCreatingNewRelease(false);
     } catch (err) {
       setError(err.message || "Failed to save track.");
     } finally {
@@ -182,20 +252,37 @@ const AdminTracksPage = () => {
     }
   };
 
-  // Helper to find release title
+  // Helper to find release
+  const getRelease = (relId) => {
+    return releases.find((r) => r.id === relId);
+  };
+
   const getReleaseTitle = (relId) => {
-    const rel = releases.find((r) => r.id === relId);
+    const rel = getRelease(relId);
     return rel ? rel.title : relId;
   };
 
+  // Sort tracks by inherited release_date || created_at, then track_number
+  const getTrackDate = (t) => {
+    const rel = getRelease(t.release_id);
+    return rel?.release_date ? new Date(rel.release_date).getTime() : (t.created_at ? new Date(t.created_at).getTime() : 0);
+  };
+
+  const sortedTracks = [...tracks].sort((a, b) => {
+    const da = getTrackDate(a);
+    const db = getTrackDate(b);
+    if (da !== db) return sortOrder === "desc" ? db - da : da - db;
+    return (a.track_number || 0) - (b.track_number || 0);
+  });
+
   if (isLoading && view === "LIST") {
-    return <div style={{ color: "var(--muted)" }}>Loading tracks...</div>;
+    return <div style={{ color: "var(--muted)", padding: "48px", textAlign: "center" }}>Loading tracks...</div>;
   }
 
   // CREATE / EDIT VIEW
   if (view === "CREATE" || view === "EDIT") {
     return (
-      <div>
+      <div className="admin-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <h2 className="studio-section-heading" style={{ margin: 0 }}>
             {view === "CREATE" ? "Create Track" : "Edit Track"}
@@ -213,7 +300,7 @@ const AdminTracksPage = () => {
         {error && <div className="admin-login-error">{error}</div>}
 
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>Basic Information</h3>
+          <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>Track Details</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div className="studio-field" style={{ textAlign: "left", gridColumn: "span 2" }}>
               <label>Title *</label>
@@ -225,6 +312,7 @@ const AdminTracksPage = () => {
                 onChange={handleChange}
                 required
                 disabled={isSaving}
+                placeholder="e.g. No Be Jazz"
               />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
@@ -237,45 +325,148 @@ const AdminTracksPage = () => {
                 onChange={handleChange}
                 required
                 disabled={isSaving}
+                min="1"
               />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Release *</label>
-              <select
-                name="release_id"
-                className="studio-input"
-                value={currentTrack.release_id || ""}
-                onChange={handleChange}
-                required
-                disabled={isSaving}
-              >
-                <option value="">-- Select Release --</option>
-                {releases.map((rel) => (
-                  <option key={rel.id} value={rel.id}>
-                    {rel.title} ({rel.type})
-                  </option>
-                ))}
-              </select>
+              <label>Release Project *</label>
+              {isCreatingNewRelease ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", border: "1px solid var(--gold)", borderRadius: "4px", background: "rgba(223, 194, 125, 0.05)" }}>
+                  <span style={{ fontSize: "13px", color: "var(--gold)", fontWeight: 500 }}>
+                    + Creating New Release
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingNewRelease(false)}
+                    style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "12px", textDecoration: "underline" }}
+                  >
+                    Select existing
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <select
+                    name="release_id"
+                    className="studio-input"
+                    value={currentTrack.release_id || ""}
+                    onChange={handleChange}
+                    required
+                    disabled={isSaving}
+                    style={{ flex: 1, height: "48px" }}
+                  >
+                    <option value="">-- Select Release --</option>
+                    {releases.map((rel) => (
+                      <option key={rel.id} value={rel.id}>
+                        {rel.title} ({rel.type})
+                      </option>
+                    ))}
+                    <option value="__NEW__">+ Create New Release...</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingNewRelease(true)}
+                    className="studio-pill-btn"
+                    style={{ whiteSpace: "nowrap", height: "48px", borderColor: "var(--gold)", color: "var(--gold)" }}
+                    title="Create a new release for this track"
+                  >
+                    + New
+                  </button>
+                </div>
+              )}
+              {currentTrack.release_id && !isCreatingNewRelease && (
+                <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "6px" }}>
+                  Inherited Release Date: <strong style={{ color: "var(--gold)" }}>{getRelease(currentTrack.release_id)?.display_date || getRelease(currentTrack.release_id)?.release_date || "N/A"}</strong>
+                </div>
+              )}
             </div>
           </div>
 
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>
-            Platforms (JSON)
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "16px" }}>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Platforms</label>
-              <textarea
-                name="platforms"
-                className="studio-input"
-                style={{ minHeight: "120px", resize: "vertical", fontFamily: "monospace" }}
-                value={currentTrack.platforms || ""}
-                onChange={handleChange}
-                disabled={isSaving}
-                placeholder={'{\n  "spotify": "url"\n}'}
+          {/* INLINE NEW RELEASE CREATION CARD */}
+          {isCreatingNewRelease && (
+            <div className="inline-release-card" style={{
+              padding: "16px",
+              border: "1px solid var(--gold)",
+              borderRadius: "6px",
+              background: "rgba(223, 194, 125, 0.03)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h4 style={{ margin: 0, color: "var(--gold)", fontSize: "14px" }}>
+                  Define New Release Project
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingNewRelease(false)}
+                  style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "12px" }}
+                >
+                  Cancel new release
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 180px", gap: "12px" }}>
+                <div className="studio-field" style={{ textAlign: "left" }}>
+                  <label>Release Title *</label>
+                  <input
+                    type="text"
+                    className="studio-input"
+                    value={newReleaseForm.title}
+                    onChange={(e) => setNewReleaseForm(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="e.g. MY NEW EP"
+                    required={isCreatingNewRelease}
+                  />
+                </div>
+                <div className="studio-field" style={{ textAlign: "left" }}>
+                  <label>Type *</label>
+                  <select
+                    className="studio-input"
+                    value={newReleaseForm.type}
+                    onChange={(e) => setNewReleaseForm(prev => ({ ...prev, type: e.target.value }))}
+                    style={{ height: "48px" }}
+                  >
+                    <option value="single">Single</option>
+                    <option value="ep">EP</option>
+                    <option value="album">Album</option>
+                  </select>
+                </div>
+                <div className="studio-field" style={{ textAlign: "left" }}>
+                  <label>Release Date</label>
+                  <input
+                    type="date"
+                    className="studio-input"
+                    value={newReleaseForm.release_date}
+                    onChange={(e) => setNewReleaseForm(prev => ({ ...prev, release_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <MediaAssetPicker
+                label="Release Cover Art"
+                assetType="IMAGE"
+                value={newReleaseForm.cover_asset_id}
+                onChange={(id) => setNewReleaseForm(prev => ({ ...prev, cover_asset_id: id }))}
+                hint="Select existing cover or enter path (e.g. covers/my-release.jpg)"
+              />
+
+              <PlatformLinksEditor
+                label="Release-Level Streaming Links (Optional)"
+                value={newReleaseForm.platforms}
+                onChange={(platforms) => setNewReleaseForm(prev => ({ ...prev, platforms }))}
               />
             </div>
-          </div>
+          )}
+
+          {/* TRACK STREAMING LINKS */}
+          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>
+            Track Streaming Links
+          </h3>
+          <PlatformLinksEditor
+            label="Streaming Links for this specific Track"
+            value={currentTrack.platforms}
+            onChange={(platforms) => setCurrentTrack(prev => ({ ...prev, platforms }))}
+            disabled={isSaving}
+          />
 
           <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end" }}>
             <button type="submit" className="primary-button" disabled={isSaving}>
@@ -357,11 +548,11 @@ const AdminTracksPage = () => {
               )}
             </div>
 
-            <form onSubmit={handleAddCredit} style={{ display: "grid", gridTemplateColumns: "1fr 160px auto", gap: 8, maxWidth: 500 }}>
+            <form onSubmit={handleAddCredit} style={{ display: "grid", gridTemplateColumns: "1fr 160px auto", gap: 8, maxWidth: 540 }}>
               <input
                 type="text"
                 className="studio-input"
-                placeholder="Credit name (e.g. K4MY)"
+                placeholder="Credit name (e.g. Kendrick Lamar)"
                 value={newCreditName}
                 onChange={(e) => setNewCreditName(e.target.value)}
                 disabled={isAddingCredit}
@@ -382,18 +573,12 @@ const AdminTracksPage = () => {
               <button
                 type="submit"
                 className="studio-pill-btn"
-                style={{ background: "rgba(223, 194, 125, 0.15)", color: "var(--gold)", whiteSpace: "nowrap" }}
+                style={{ background: "var(--gold)", color: "#000", fontWeight: 600, border: "none" }}
                 disabled={isAddingCredit || !newCreditName.trim()}
               >
-                {isAddingCredit ? "Adding..." : "+ Add Credit"}
+                {isAddingCredit ? "..." : "+ Add"}
               </button>
             </form>
-          </div>
-        )}
-
-        {view === "CREATE" && (
-          <div style={{ marginTop: 24, padding: 16, background: "rgba(255, 255, 255, 0.02)", border: "1px dashed var(--border)", borderRadius: 4, color: "var(--muted)", fontSize: 13 }}>
-            💡 Tip: Save this track first, and you will be able to add Featuring and Producer credits immediately.
           </div>
         )}
       </div>
@@ -403,68 +588,166 @@ const AdminTracksPage = () => {
   // LIST VIEW
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
-        <h2 className="studio-section-heading" style={{ margin: 0 }}>Tracks Management</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
+        <div>
+          <h2 className="studio-section-heading" style={{ margin: 0 }}>Tracks Management</h2>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+            <AdminSortControl sortOrder={sortOrder} onChange={setSortOrder} label="Sort Tracks" />
+            <AdminViewToggle viewMode={viewMode} onChange={setViewMode} />
+          </div>
+        </div>
         <button className="primary-button" onClick={handleCreateClick}>+ Create Track</button>
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
 
-      {tracks.length === 0 ? (
+      {sortedTracks.length === 0 ? (
         <div className="admin-placeholder">
           <h2>No Tracks Found</h2>
-          <p>You haven't added any tracks yet.</p>
-          <button className="primary-button" style={{ marginTop: 16 }} onClick={handleCreateClick}>
-            Create First Track
-          </button>
+          <p>You haven't added any tracks to the catalogue yet.</p>
+          <button className="primary-button" style={{ marginTop: 16 }} onClick={handleCreateClick}>Create First Track</button>
+        </div>
+      ) : viewMode === "grid" ? (
+        /* GRID / CARDS VIEW */
+        <div className="admin-listing-grid">
+          {sortedTracks.map((track) => {
+            const rel = getRelease(track.release_id);
+            const trackCredits = credits.filter((c) => c.track_id === track.id);
+            const platformCount = track.platforms && typeof track.platforms === "object" ? Object.keys(track.platforms).length : 0;
+            return (
+              <div key={track.id} className="admin-item-card">
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--gold)" }}>
+                      Track #{track.track_number}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                      {platformCount > 0 ? `${platformCount} platform(s)` : "No links"}
+                    </span>
+                  </div>
+
+                  <h3 style={{ fontSize: 16, margin: "0 0 6px 0", color: "var(--text-h)" }}>{track.title}</h3>
+                  <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>
+                    Project: <span style={{ color: "var(--gold)" }}>{rel ? rel.title : "Unassigned"}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                    Release Date: {rel?.display_date || rel?.release_date || "N/A"}
+                  </div>
+
+                  {trackCredits.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
+                      {trackCredits.map((c) => (
+                        <span
+                          key={c.id}
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: 3,
+                            fontSize: 10,
+                            background: "rgba(255, 255, 255, 0.05)",
+                            border: "1px solid var(--border)",
+                            color: "var(--muted)",
+                          }}
+                        >
+                          {c.credit_name} ({c.role.toLowerCase()})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                  <button
+                    onClick={() => handleEditClick(track)}
+                    className="studio-pill-btn"
+                    style={{ fontSize: 12 }}
+                  >
+                    Edit
+                  </button>
+                  {deleteConfirmId === track.id ? (
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, color: "#fca5a5" }}>Delete?</span>
+                      <button
+                        onClick={() => handleDelete(track.id)}
+                        className="studio-pill-btn"
+                        style={{ background: "rgba(220,38,38,0.2)", color: "#fca5a5", borderColor: "#fca5a5", fontSize: 11, padding: "2px 8px" }}
+                        disabled={isDeleting}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(null)}
+                        className="studio-pill-btn"
+                        style={{ fontSize: 11, padding: "2px 8px" }}
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteConfirmId(track.id)}
+                      className="studio-pill-btn"
+                      style={{ background: "transparent", color: "var(--muted)", fontSize: 12 }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
+        /* TABLE / LIST VIEW */
         <div className="admin-card" style={{ padding: 0, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)", background: "rgba(223, 194, 125, 0.05)" }}>
-                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Track Title</th>
-                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Number / Release</th>
+                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>#</th>
+                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Title</th>
+                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Project / Date</th>
                 <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Credits</th>
                 <th style={{ padding: "16px", textAlign: "right", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {tracks.map((track) => {
+              {sortedTracks.map((track) => {
+                const rel = getRelease(track.release_id);
                 const trackCredits = credits.filter((c) => c.track_id === track.id);
-                const feats = trackCredits.filter((c) => c.role === "FEATURING").map((c) => c.credit_name);
-                const prods = trackCredits.filter((c) => c.role === "PRODUCER").map((c) => c.credit_name);
-
                 return (
                   <tr key={track.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td style={{ padding: "16px", color: "var(--text-h)", fontWeight: 500 }}>
-                      <div>{track.title}</div>
-                      {feats.length > 0 && (
-                        <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
-                          feat. {feats.join(", ")}
-                        </div>
-                      )}
+                    <td style={{ padding: "16px", color: "var(--gold)", fontWeight: 600 }}>
+                      {track.track_number}
                     </td>
-                    <td style={{ padding: "16px", fontSize: 13 }}>
-                      <span style={{ fontWeight: 600, color: "var(--gold)" }}>#{track.track_number}</span>
-                      <div style={{ color: "var(--muted)", marginTop: 4 }}>{getReleaseTitle(track.release_id)}</div>
+                    <td style={{ padding: "16px", color: "var(--text-h)", fontWeight: 500 }}>
+                      {track.title}
                     </td>
                     <td style={{ padding: "16px" }}>
-                      {trackCredits.length === 0 ? (
-                        <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>
-                      ) : (
+                      <span style={{ color: "var(--text)" }}>{rel ? rel.title : track.release_id}</span>
+                      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                        {rel?.display_date || rel?.release_date || "—"}
+                      </div>
+                    </td>
+                    <td style={{ padding: "16px" }}>
+                      {trackCredits.length > 0 ? (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                          {feats.length > 0 && (
-                            <span style={{ padding: "2px 6px", background: "rgba(34, 197, 94, 0.1)", color: "#4ade80", borderRadius: 3, fontSize: 11 }}>
-                              {feats.length} feat
+                          {trackCredits.map((c) => (
+                            <span
+                              key={c.id}
+                              style={{
+                                padding: "2px 6px",
+                                borderRadius: 3,
+                                fontSize: 10,
+                                background: "rgba(255, 255, 255, 0.05)",
+                                border: "1px solid var(--border)",
+                                color: "var(--muted)",
+                              }}
+                            >
+                              {c.credit_name} ({c.role.toLowerCase()})
                             </span>
-                          )}
-                          {prods.length > 0 && (
-                            <span style={{ padding: "2px 6px", background: "rgba(223, 194, 125, 0.1)", color: "var(--gold)", borderRadius: 3, fontSize: 11 }}>
-                              {prods.length} prod
-                            </span>
-                          )}
+                          ))}
                         </div>
+                      ) : (
+                        <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>
                       )}
                     </td>
                     <td style={{ padding: "16px", textAlign: "right" }}>
