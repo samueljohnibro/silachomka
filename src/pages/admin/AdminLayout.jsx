@@ -10,6 +10,7 @@ const AdminSidebar = ({ mobileOpen, setMobileOpen }) => {
     { name: 'Music', path: '/admin/music' },
     { name: 'Tracks', path: '/admin/tracks' },
     { name: 'Beats', path: '/admin/beats' },
+    { name: 'Videos', path: '/admin/videos' },
     { name: 'Media', path: '/admin/media' },
     { name: 'Links', path: '/admin/links' },
     { name: 'Merchandise', path: '/admin/merchandise' },
@@ -58,6 +59,7 @@ const AdminHeader = ({ user, logout, toggleMobile }) => {
     if (path.includes('/music')) return 'Music Management';
     if (path.includes('/tracks')) return 'Tracks Management';
     if (path.includes('/beats')) return 'Beats Management';
+    if (path.includes('/videos')) return 'Music Videos';
     if (path.includes('/media')) return 'Media Assets';
     if (path.includes('/links')) return 'Social Links';
     if (path.includes('/merchandise')) return 'Merchandise';

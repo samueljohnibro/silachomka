@@ -144,4 +144,47 @@ export const adminApi = {
   deleteMerchandise: async (id) => fetchAdmin(`/merchandise/${id}`, {
     method: 'DELETE'
   }),
+
+  // Music Videos CRUD
+  createVideo: async (data) => fetchAdmin('/music-videos', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  updateVideo: async (id, data) => fetchAdmin(`/music-videos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  }),
+  deleteVideo: async (id) => fetchAdmin(`/music-videos/${id}`, {
+    method: 'DELETE'
+  }),
+
+  // Music Video Features CRUD
+  getVideoFeatures: async () => fetchAdmin('/music-video-features'),
+  createVideoFeature: async (data) => fetchAdmin('/music-video-features', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  deleteVideoFeature: async (videoId, artistName) => fetchAdmin(`/music-video-features/${videoId}/${encodeURIComponent(artistName)}`, {
+    method: 'DELETE'
+  }),
+
+  // Track Credits CRUD
+  getTrackCredits: async () => fetchAdmin('/track-credits'),
+  createTrackCredit: async (data) => fetchAdmin('/track-credits', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  deleteTrackCredit: async (id) => fetchAdmin(`/track-credits/${id}`, {
+    method: 'DELETE'
+  }),
+
+  // Gallery Slides CRUD
+  getGallerySlides: async () => fetchAdmin('/gallery-slides'),
+  createGallerySlide: async (data) => fetchAdmin('/gallery-slides', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  deleteGallerySlide: async (id) => fetchAdmin(`/gallery-slides/${id}`, {
+    method: 'DELETE'
+  }),
 };

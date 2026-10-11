@@ -33,6 +33,7 @@ import AdminTracksPage from "./pages/admin/AdminTracksPage";
 import AdminMediaPage from "./pages/admin/AdminMediaPage";
 import AdminLinksPage from "./pages/admin/AdminLinksPage";
 import AdminMerchandisePage from "./pages/admin/AdminMerchandisePage";
+import AdminVideosPage from "./pages/admin/AdminVideosPage";
 
 import MediaSlideshow from "./components/MediaSlideshow";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
@@ -1757,6 +1758,7 @@ function App() {
             <Route path="music" element={<AdminMusicPage />} />
             <Route path="tracks" element={<AdminTracksPage />} />
             <Route path="beats" element={<AdminBeatsPage />} />
+            <Route path="videos" element={<AdminVideosPage />} />
             <Route path="media" element={<AdminMediaPage />} />
             <Route path="links" element={<AdminLinksPage />} />
             <Route path="merchandise" element={<AdminMerchandisePage />} />
