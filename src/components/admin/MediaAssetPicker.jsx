@@ -63,10 +63,11 @@ export const MediaAssetPicker = ({
 
     try {
       const uploadedRecord = await adminApi.uploadMediaAsset(file, assetType);
-      // Refresh asset list to include the newly uploaded or updated asset
-      await fetchAssets();
+      // Immediately inject into local state so selectedAsset resolves without waiting for network re-fetch
+      setAssets(prev => [uploadedRecord, ...prev.filter(a => a.id !== uploadedRecord.id)]);
       onChange(uploadedRecord.id, uploadedRecord);
       setShowLibrarySelect(false);
+      await fetchAssets();
     } catch (err) {
       setUploadError(err.message || 'File upload failed. Please try again.');
     } finally {
@@ -191,10 +192,17 @@ export const MediaAssetPicker = ({
           {assetType === 'IMAGE' && (
             <div style={{ position: 'relative', width: '56px', height: '56px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', background: '#000', border: '1px solid var(--border)' }}>
               <img
-                src={'/' + selectedAsset.r2_key}
+                src={selectedAsset.has_file_data ? `/api/media/asset/${selectedAsset.id}` : '/' + selectedAsset.r2_key}
                 alt={selectedAsset.original_filename || 'Preview'}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
+                onError={(e) => {
+                  if (!e.target.dataset.fallbackTried && selectedAsset.r2_key) {
+                    e.target.dataset.fallbackTried = 'true';
+                    e.target.src = '/' + selectedAsset.r2_key;
+                  } else {
+                    e.target.src = '/og-image.png';
+                  }
+                }}
               />
             </div>
           )}
@@ -203,7 +211,7 @@ export const MediaAssetPicker = ({
             <div style={{ flexShrink: 0 }}>
               <audio
                 controls
-                src={'/' + selectedAsset.r2_key}
+                src={selectedAsset.has_file_data ? `/api/media/asset/${selectedAsset.id}` : '/' + selectedAsset.r2_key}
                 style={{ height: '36px', maxWidth: '280px' }}
               />
             </div>
@@ -212,7 +220,7 @@ export const MediaAssetPicker = ({
           {assetType === 'VIDEO' && (
             <div style={{ position: 'relative', width: '56px', height: '56px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', background: '#000', border: '1px solid var(--border)' }}>
               <img
-                src={'/' + selectedAsset.r2_key}
+                src={selectedAsset.has_file_data ? `/api/media/asset/${selectedAsset.id}` : '/' + selectedAsset.r2_key}
                 alt="Visualizer"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={(e) => { e.target.style.display = 'none'; }}

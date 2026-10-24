@@ -21,18 +21,33 @@ async function logAudit(sql, userId, action, entityType, entityId, oldData, newD
   }
 }
 
+// Helper to queue subscriber notifications on publication
+export async function queueSubscriberNotifications(sql, contentType, contentId, contentTitle) {
+  try {
+    const activeSubs = await sql`SELECT id, email FROM subscribers WHERE status = 'ACTIVE'`
+    for (const sub of activeSubs) {
+      await sql`
+        INSERT INTO subscriber_notifications (subscriber_id, content_type, content_id, content_title, status, error_message)
+        VALUES (${sub.id}, ${contentType}, ${contentId}, ${contentTitle}, 'QUEUED_NO_SMTP_CONFIGURED', 'Notification queued; automated delivery awaiting external SMTP/Resend API configuration')
+      `
+    }
+  } catch (err) {
+    console.warn('Non-fatal: Failed to queue subscriber notifications:', err.message)
+  }
+}
+
 // ---------------------------------------------------------
 // 1. RELEASES
 // ---------------------------------------------------------
 adminApp.get('/releases', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM releases ORDER BY created_at DESC`
+  const rows = await sql`SELECT * FROM releases WHERE deleted_at IS NULL ORDER BY created_at DESC`
   return c.json(rows)
 })
 
 adminApp.get('/releases/:id', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM releases WHERE id = ${c.req.param('id')}`
+  const rows = await sql`SELECT * FROM releases WHERE id = ${c.req.param('id')} AND deleted_at IS NULL`
   if (!rows.length) return c.json({ error: 'Not found' }, 404)
   return c.json(rows[0])
 })
@@ -43,13 +58,23 @@ adminApp.post('/releases', async (c) => {
   if (!body.slug || !body.title || !body.release_date || !body.type) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
+  // Scheduling logic: if scheduled_at in future and not draft, set SCHEDULED
+  let status = body.status || 'DRAFT'
+  const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
+  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
+    status = 'SCHEDULED'
+  }
+
   try {
     const rows = await sql`
-      INSERT INTO releases (slug, number, title, edition, release_date, display_date, type, primary_artist, feats_silachomka, produced_by_silachomka, description, cover_asset_id, sources, platforms, status)
-      VALUES (${body.slug}, ${body.number || null}, ${body.title}, ${body.edition || 1}, ${body.release_date}, ${body.display_date || null}, ${body.type}, ${body.primary_artist || 'silachomka'}, ${body.feats_silachomka || false}, ${body.produced_by_silachomka !== false}, ${body.description || null}, ${body.cover_asset_id || null}, ${body.sources ? JSON.stringify(body.sources) : null}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${body.status || 'DRAFT'})
+      INSERT INTO releases (slug, number, title, edition, release_date, display_date, type, primary_artist, feats_silachomka, produced_by_silachomka, description, cover_asset_id, sources, platforms, status, scheduled_at)
+      VALUES (${body.slug}, ${body.number || null}, ${body.title}, ${body.edition || 1}, ${body.release_date}, ${body.display_date || null}, ${body.type}, ${body.primary_artist || 'silachomka'}, ${body.feats_silachomka || false}, ${body.produced_by_silachomka !== false}, ${body.description || null}, ${body.cover_asset_id || null}, ${body.sources ? JSON.stringify(body.sources) : null}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${status}, ${scheduledAt})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'releases', rows[0].id, null, rows[0])
+    if (rows[0].status === 'PUBLISHED') {
+      await queueSubscriberNotifications(sql, 'release', rows[0].id, rows[0].title)
+    }
     return c.json(rows[0], 201)
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -63,11 +88,17 @@ adminApp.put('/releases/:id', async (c) => {
     return c.json({ error: 'Invalid slug' }, 400)
   }
 
-  const existing = await sql`SELECT * FROM releases WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM releases WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
+
+  let status = up.status
+  const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
+  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
+    status = 'SCHEDULED'
+  }
 
   try {
     const rows = await sql`
@@ -86,12 +117,16 @@ adminApp.put('/releases/:id', async (c) => {
         cover_asset_id = ${up.cover_asset_id},
         sources = ${up.sources ? JSON.stringify(body.sources) : null},
         platforms = ${up.platforms ? JSON.stringify(body.platforms) : null},
-        status = ${up.status},
+        status = ${status},
+        scheduled_at = ${scheduledAt},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'releases', id, e, rows[0])
+    if (rows[0].status === 'PUBLISHED' && e.status !== 'PUBLISHED') {
+      await queueSubscriberNotifications(sql, 'release', rows[0].id, rows[0].title)
+    }
     return c.json(rows[0])
   } catch (err) { return c.json({ error: err.message }, 400) }
 })
@@ -99,13 +134,14 @@ adminApp.put('/releases/:id', async (c) => {
 adminApp.delete('/releases/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
-  const existing = await sql`SELECT * FROM releases WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM releases WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   try {
-    await sql`DELETE FROM releases WHERE id = ${id}`
-    await logAudit(sql, c.get('user').sub, 'DELETE', 'releases', id, existing[0], null)
-    return c.json({ success: true })
+    // Soft-delete for 60-day Recycle Bin retention
+    await sql`UPDATE releases SET deleted_at = NOW() WHERE id = ${id}`
+    await logAudit(sql, c.get('user').sub, 'SOFT_DELETE', 'releases', id, existing[0], null)
+    return c.json({ success: true, message: 'Moved to Recycle Bin' })
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
@@ -114,13 +150,13 @@ adminApp.delete('/releases/:id', requireSuperadmin, async (c) => {
 // ---------------------------------------------------------
 adminApp.get('/tracks', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM tracks ORDER BY release_id, track_number ASC`
+  const rows = await sql`SELECT * FROM tracks WHERE deleted_at IS NULL ORDER BY release_id, track_number ASC`
   return c.json(rows)
 })
 
 adminApp.get('/tracks/:id', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM tracks WHERE id = ${c.req.param('id')}`
+  const rows = await sql`SELECT * FROM tracks WHERE id = ${c.req.param('id')} AND deleted_at IS NULL`
   if (!rows.length) return c.json({ error: 'Not found' }, 404)
   return c.json(rows[0])
 })
@@ -145,7 +181,7 @@ adminApp.put('/tracks/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const body = await c.req.json()
-  const existing = await sql`SELECT * FROM tracks WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM tracks WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
@@ -169,13 +205,13 @@ adminApp.put('/tracks/:id', async (c) => {
 adminApp.delete('/tracks/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
-  const existing = await sql`SELECT * FROM tracks WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM tracks WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   try {
-    await sql`DELETE FROM tracks WHERE id = ${id}`
-    await logAudit(sql, c.get('user').sub, 'DELETE', 'tracks', id, existing[0], null)
-    return c.json({ success: true })
+    await sql`UPDATE tracks SET deleted_at = NOW() WHERE id = ${id}`
+    await logAudit(sql, c.get('user').sub, 'SOFT_DELETE', 'tracks', id, existing[0], null)
+    return c.json({ success: true, message: 'Moved to Recycle Bin' })
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
@@ -222,13 +258,13 @@ adminApp.delete('/track-credits/:id', requireSuperadmin, async (c) => {
 // ---------------------------------------------------------
 adminApp.get('/beats', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM beats ORDER BY created_at DESC`
+  const rows = await sql`SELECT * FROM beats WHERE deleted_at IS NULL ORDER BY created_at DESC`
   return c.json(rows)
 })
 
 adminApp.get('/beats/:id', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM beats WHERE id = ${c.req.param('id')}`
+  const rows = await sql`SELECT * FROM beats WHERE id = ${c.req.param('id')} AND deleted_at IS NULL`
   if (!rows.length) return c.json({ error: 'Not found' }, 404)
   return c.json(rows[0])
 })
@@ -239,14 +275,27 @@ adminApp.post('/beats', async (c) => {
   if (!body.slug || !body.title) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
+  let status = body.status || 'DRAFT'
+  const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
+  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
+    status = 'SCHEDULED'
+  }
+
   try {
     const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
+    const priceBasic = body.price_basic !== undefined && body.price_basic !== '' && body.price_basic !== null ? Number(body.price_basic) : 15000.00
+    const pricePremium = body.price_premium !== undefined && body.price_premium !== '' && body.price_premium !== null ? Number(body.price_premium) : 30000.00
+    const priceExclusive = body.price_exclusive !== undefined && body.price_exclusive !== '' && body.price_exclusive !== null ? Number(body.price_exclusive) : 60000.00
+
     const rows = await sql`
-      INSERT INTO beats (slug, title, genre, short_genre, categories, bpm, beat_key, description, mood, producer, audio_asset_id, image_asset_id, video_asset_id, selar_basic_url, selar_premium_url, selar_ultimate_url, status, created_at)
-      VALUES (${body.slug}, ${body.title}, ${body.genre || null}, ${body.short_genre || null}, ${body.categories ? JSON.stringify(body.categories) : null}, ${body.bpm || null}, ${body.beat_key || null}, ${body.description || null}, ${body.mood || null}, ${body.producer || 'silachomka'}, ${body.audio_asset_id || null}, ${body.image_asset_id || null}, ${body.video_asset_id || null}, ${body.selar_basic_url || null}, ${body.selar_premium_url || null}, ${body.selar_ultimate_url || null}, ${body.status || 'DRAFT'}, ${createdAt})
+      INSERT INTO beats (slug, title, genre, short_genre, categories, bpm, beat_key, description, mood, producer, audio_asset_id, image_asset_id, video_asset_id, selar_basic_url, selar_premium_url, selar_ultimate_url, status, scheduled_at, created_at, price_basic, price_premium, price_exclusive)
+      VALUES (${body.slug}, ${body.title}, ${body.genre || null}, ${body.short_genre || null}, ${body.categories ? JSON.stringify(body.categories) : null}, ${body.bpm || null}, ${body.beat_key || null}, ${body.description || null}, ${body.mood || null}, ${body.producer || 'silachomka'}, ${body.audio_asset_id || null}, ${body.image_asset_id || null}, ${body.video_asset_id || null}, ${body.selar_basic_url || null}, ${body.selar_premium_url || null}, ${body.selar_ultimate_url || null}, ${status}, ${scheduledAt}, ${createdAt}, ${priceBasic}, ${pricePremium}, ${priceExclusive})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'beats', rows[0].id, null, rows[0])
+    if (rows[0].status === 'PUBLISHED') {
+      await queueSubscriberNotifications(sql, 'beat', rows[0].id, rows[0].title)
+    }
     return c.json(rows[0], 201)
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -260,14 +309,24 @@ adminApp.put('/beats/:id', async (c) => {
     return c.json({ error: 'Invalid slug' }, 400)
   }
 
-  const existing = await sql`SELECT * FROM beats WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM beats WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
   const createdAt = up.created_at ? new Date(up.created_at).toISOString() : e.created_at
 
+  let status = up.status
+  const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
+  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
+    status = 'SCHEDULED'
+  }
+
   try {
+    const priceBasic = up.price_basic !== undefined && up.price_basic !== '' && up.price_basic !== null ? Number(up.price_basic) : (e.price_basic !== null ? e.price_basic : 15000.00)
+    const pricePremium = up.price_premium !== undefined && up.price_premium !== '' && up.price_premium !== null ? Number(up.price_premium) : (e.price_premium !== null ? e.price_premium : 30000.00)
+    const priceExclusive = up.price_exclusive !== undefined && up.price_exclusive !== '' && up.price_exclusive !== null ? Number(up.price_exclusive) : (e.price_exclusive !== null ? e.price_exclusive : 60000.00)
+
     const rows = await sql`
       UPDATE beats SET
         slug = ${up.slug},
@@ -286,13 +345,20 @@ adminApp.put('/beats/:id', async (c) => {
         selar_basic_url = ${up.selar_basic_url},
         selar_premium_url = ${up.selar_premium_url},
         selar_ultimate_url = ${up.selar_ultimate_url},
-        status = ${up.status},
+        status = ${status},
+        scheduled_at = ${scheduledAt},
         created_at = ${createdAt},
+        price_basic = ${priceBasic},
+        price_premium = ${pricePremium},
+        price_exclusive = ${priceExclusive},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'beats', id, existing[0], rows[0])
+    if (rows[0].status === 'PUBLISHED' && e.status !== 'PUBLISHED') {
+      await queueSubscriberNotifications(sql, 'beat', rows[0].id, rows[0].title)
+    }
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -300,13 +366,13 @@ adminApp.put('/beats/:id', async (c) => {
 adminApp.delete('/beats/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
-  const existing = await sql`SELECT * FROM beats WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM beats WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   try {
-    await sql`DELETE FROM beats WHERE id = ${id}`
-    await logAudit(sql, c.get('user').sub, 'DELETE', 'beats', id, existing[0], null)
-    return c.json({ success: true })
+    await sql`UPDATE beats SET deleted_at = NOW() WHERE id = ${id}`
+    await logAudit(sql, c.get('user').sub, 'SOFT_DELETE', 'beats', id, existing[0], null)
+    return c.json({ success: true, message: 'Moved to Recycle Bin' })
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
@@ -315,7 +381,7 @@ adminApp.delete('/beats/:id', requireSuperadmin, async (c) => {
 // ---------------------------------------------------------
 adminApp.get('/music-videos', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM music_videos ORDER BY created_at DESC`
+  const rows = await sql`SELECT * FROM music_videos WHERE deleted_at IS NULL ORDER BY created_at DESC`
   return c.json(rows)
 })
 
@@ -325,14 +391,23 @@ adminApp.post('/music-videos', async (c) => {
   if (!body.slug || !body.title || !body.youtube_id || !body.youtube_url) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
+  let status = body.status || 'DRAFT'
+  const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
+  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
+    status = 'SCHEDULED'
+  }
+
   try {
     const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
     const rows = await sql`
-      INSERT INTO music_videos (slug, title, subtitle, category, youtube_id, youtube_url, aspect_ratio, platforms, related_release_id, related_track_id, status, created_at)
-      VALUES (${body.slug}, ${body.title}, ${body.subtitle || null}, ${body.category || 'Visualizer'}, ${body.youtube_id}, ${body.youtube_url}, ${body.aspect_ratio || '16:9'}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.status || 'DRAFT'}, ${createdAt})
+      INSERT INTO music_videos (slug, title, subtitle, category, youtube_id, youtube_url, aspect_ratio, platforms, related_release_id, related_track_id, status, scheduled_at, created_at)
+      VALUES (${body.slug}, ${body.title}, ${body.subtitle || null}, ${body.category || 'Visualizer'}, ${body.youtube_id}, ${body.youtube_url}, ${body.aspect_ratio || '16:9'}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${status}, ${scheduledAt}, ${createdAt})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'music_videos', rows[0].id, null, rows[0])
+    if (rows[0].status === 'PUBLISHED') {
+      await queueSubscriberNotifications(sql, 'video', rows[0].id, rows[0].title)
+    }
     return c.json(rows[0], 201)
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -346,12 +421,18 @@ adminApp.put('/music-videos/:id', async (c) => {
     return c.json({ error: 'Invalid slug' }, 400)
   }
 
-  const existing = await sql`SELECT * FROM music_videos WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM music_videos WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
   const createdAt = up.created_at ? new Date(up.created_at).toISOString() : e.created_at
+
+  let status = up.status
+  const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
+  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
+    status = 'SCHEDULED'
+  }
 
   try {
     const rows = await sql`
@@ -366,13 +447,17 @@ adminApp.put('/music-videos/:id', async (c) => {
         platforms = ${up.platforms ? JSON.stringify(body.platforms) : null},
         related_release_id = ${up.related_release_id},
         related_track_id = ${up.related_track_id},
-        status = ${up.status},
+        status = ${status},
+        scheduled_at = ${scheduledAt},
         created_at = ${createdAt},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'music_videos', id, existing[0], rows[0])
+    if (rows[0].status === 'PUBLISHED' && e.status !== 'PUBLISHED') {
+      await queueSubscriberNotifications(sql, 'video', rows[0].id, rows[0].title)
+    }
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -380,13 +465,13 @@ adminApp.put('/music-videos/:id', async (c) => {
 adminApp.delete('/music-videos/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
-  const existing = await sql`SELECT * FROM music_videos WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM music_videos WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   try {
-    await sql`DELETE FROM music_videos WHERE id = ${id}`
-    await logAudit(sql, c.get('user').sub, 'DELETE', 'music_videos', id, existing[0], null)
-    return c.json({ success: true })
+    await sql`UPDATE music_videos SET deleted_at = NOW() WHERE id = ${id}`
+    await logAudit(sql, c.get('user').sub, 'SOFT_DELETE', 'music_videos', id, existing[0], null)
+    return c.json({ success: true, message: 'Moved to Recycle Bin' })
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
@@ -410,7 +495,6 @@ adminApp.post('/music-video-features', async (c) => {
       VALUES (${body.video_id}, ${body.artist_name})
       RETURNING *
     `
-    // No UUID here, compound key, we'll log against the video
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'music_videos', body.video_id, null, rows[0])
     return c.json(rows[0], 201)
   } catch (e) { return c.json({ error: e.message }, 400) }
@@ -433,23 +517,32 @@ adminApp.delete('/music-video-features/:video_id/:artist_name', requireSuperadmi
 // ---------------------------------------------------------
 adminApp.get('/gallery-posts', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM gallery_posts ORDER BY post_date DESC`
+  const rows = await sql`SELECT * FROM gallery_posts WHERE deleted_at IS NULL ORDER BY post_date DESC`
   return c.json(rows)
 })
 
 adminApp.post('/gallery-posts', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
-  if (!body.slug || !body.title || !body.post_type || !body.post_date) return c.json({ error: 'Missing required fields' }, 400)
+  if (!body.slug || !body.post_type || !body.post_date) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
+
+  let status = body.status || 'DRAFT'
+  const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
+  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
+    status = 'SCHEDULED'
+  }
 
   try {
     const rows = await sql`
-      INSERT INTO gallery_posts (slug, title, caption, category, post_type, primary_asset_id, related_release_id, related_track_id, related_beat_id, legacy_link, tags, post_date, display_date, status)
-      VALUES (${body.slug}, ${body.title}, ${body.caption || null}, ${body.category || 'portraits'}, ${body.post_type}, ${body.primary_asset_id || null}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${body.display_date || null}, ${body.status || 'DRAFT'})
+      INSERT INTO gallery_posts (slug, title, caption, category, post_type, primary_asset_id, related_release_id, related_track_id, related_beat_id, legacy_link, tags, post_date, display_date, status, scheduled_at)
+      VALUES (${body.slug}, ${body.title || null}, ${body.caption || null}, ${body.category || 'portraits'}, ${body.post_type}, ${body.primary_asset_id || null}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${body.display_date || null}, ${status}, ${scheduledAt})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'gallery_posts', rows[0].id, null, rows[0])
+    if (rows[0].status === 'PUBLISHED') {
+      await queueSubscriberNotifications(sql, 'gallery', rows[0].id, rows[0].title || rows[0].slug)
+    }
     return c.json(rows[0], 201)
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -463,11 +556,17 @@ adminApp.put('/gallery-posts/:id', async (c) => {
     return c.json({ error: 'Invalid slug' }, 400)
   }
 
-  const existing = await sql`SELECT * FROM gallery_posts WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM gallery_posts WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
   const up = { ...e, ...body }
+
+  let status = up.status
+  const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
+  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
+    status = 'SCHEDULED'
+  }
 
   try {
     const rows = await sql`
@@ -485,12 +584,16 @@ adminApp.put('/gallery-posts/:id', async (c) => {
         tags = ${up.tags ? JSON.stringify(body.tags) : null},
         post_date = ${up.post_date},
         display_date = ${up.display_date},
-        status = ${up.status},
+        status = ${status},
+        scheduled_at = ${scheduledAt},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'gallery_posts', id, existing[0], rows[0])
+    if (rows[0].status === 'PUBLISHED' && e.status !== 'PUBLISHED') {
+      await queueSubscriberNotifications(sql, 'gallery', rows[0].id, rows[0].title || rows[0].slug)
+    }
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -498,13 +601,13 @@ adminApp.put('/gallery-posts/:id', async (c) => {
 adminApp.delete('/gallery-posts/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
-  const existing = await sql`SELECT * FROM gallery_posts WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM gallery_posts WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   try {
-    await sql`DELETE FROM gallery_posts WHERE id = ${id}`
-    await logAudit(sql, c.get('user').sub, 'DELETE', 'gallery_posts', id, existing[0], null)
-    return c.json({ success: true })
+    await sql`UPDATE gallery_posts SET deleted_at = NOW() WHERE id = ${id}`
+    await logAudit(sql, c.get('user').sub, 'SOFT_DELETE', 'gallery_posts', id, existing[0], null)
+    return c.json({ success: true, message: 'Moved to Recycle Bin' })
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
@@ -551,7 +654,12 @@ adminApp.delete('/gallery-slides/:id', requireSuperadmin, async (c) => {
 // ---------------------------------------------------------
 adminApp.get('/media-assets', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM media_assets ORDER BY created_at DESC`
+  const rows = await sql`
+    SELECT id, r2_key, original_filename, asset_type, mime_type, size_bytes, 
+      width, height, duration_seconds, alt_text, blurhash, uploaded_by, created_at, updated_at,
+      CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
+    FROM media_assets WHERE deleted_at IS NULL ORDER BY created_at DESC
+  `
   return c.json(rows)
 })
 
@@ -622,9 +730,28 @@ adminApp.post('/media-assets/upload', async (c) => {
     const folder = assetType === 'AUDIO' ? 'beats' : assetType === 'VIDEO' ? 'beats' : 'covers'
     const storageKey = `${folder}/${cleanBasename}`
 
-    // If Cloudflare R2 bucket is bound in env, write to R2
+    // Read file bytes for database storage
+    const buffer = await file.arrayBuffer()
+    const fileBytes = new Uint8Array(buffer)
+    // Convert to hex string for Postgres BYTEA (\\x prefix)
+    let hex = ''
+    if (typeof Buffer !== 'undefined') {
+      hex = Buffer.from(buffer).toString('hex')
+    } else {
+      const hexTable = []
+      for (let i = 0; i < 256; i++) {
+        hexTable[i] = i.toString(16).padStart(2, '0')
+      }
+      const parts = new Array(fileBytes.length)
+      for (let i = 0; i < fileBytes.length; i++) {
+        parts[i] = hexTable[fileBytes[i]]
+      }
+      hex = parts.join('')
+    }
+    const hexStr = '\\x' + hex
+
+    // If Cloudflare R2 bucket is bound in env, also write to R2
     if (c.env?.MEDIA_BUCKET) {
-      const buffer = await file.arrayBuffer()
       await c.env.MEDIA_BUCKET.put(storageKey, buffer, {
         httpMetadata: { contentType: file.type || 'application/octet-stream' }
       })
@@ -647,18 +774,21 @@ adminApp.post('/media-assets/upload', async (c) => {
           original_filename = ${filename},
           asset_type = ${assetType},
           mime_type = ${detectedMime},
-          size_bytes = ${file.size || null}
+          size_bytes = ${file.size || null},
+          file_data = decode(${hex}, 'hex')
         WHERE id = ${existing[0].id}
-        RETURNING *
+        RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by, created_at, updated_at,
+          CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
       `
       await logAudit(sql, user?.sub, 'UPDATE', 'media_assets', existing[0].id, existing[0], updated[0])
       return c.json(updated[0])
     }
 
     const inserted = await sql`
-      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by)
-      VALUES (${storageKey}, ${filename}, ${assetType}, ${detectedMime}, ${file.size || null}, ${user?.sub || null})
-      RETURNING *
+      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by, file_data)
+      VALUES (${storageKey}, ${filename}, ${assetType}, ${detectedMime}, ${file.size || null}, ${user?.sub || null}, decode(${hex}, 'hex'))
+      RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by, created_at, updated_at,
+        CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
     `
     await logAudit(sql, user?.sub, 'CREATE', 'media_assets', inserted[0].id, null, inserted[0])
     return c.json(inserted[0], 201)
@@ -670,12 +800,11 @@ adminApp.post('/media-assets/upload', async (c) => {
 adminApp.delete('/media-assets/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
-  const existing = await sql`SELECT * FROM media_assets WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM media_assets WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   try {
-    // Media assets are restricted in most cases. If this fails due to FK, Neon driver throws an error.
-    await sql`DELETE FROM media_assets WHERE id = ${id}`
+    await sql`UPDATE media_assets SET deleted_at = NOW() WHERE id = ${id}`
     await logAudit(sql, c.get('user').sub, 'DELETE', 'media_assets', id, existing[0], null)
     return c.json({ success: true })
   } catch (e) { return c.json({ error: e.message }, 400) }
@@ -686,7 +815,7 @@ adminApp.delete('/media-assets/:id', requireSuperadmin, async (c) => {
 // ---------------------------------------------------------
 adminApp.get('/social-links', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM social_links ORDER BY sort_order ASC`
+  const rows = await sql`SELECT * FROM social_links WHERE deleted_at IS NULL ORDER BY sort_order ASC`
   return c.json(rows)
 })
 
@@ -710,7 +839,7 @@ adminApp.put('/social-links/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
   const body = await c.req.json()
-  const existing = await sql`SELECT * FROM social_links WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM social_links WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
@@ -740,11 +869,11 @@ adminApp.put('/social-links/:id', async (c) => {
 adminApp.delete('/social-links/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
-  const existing = await sql`SELECT * FROM social_links WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM social_links WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   try {
-    await sql`DELETE FROM social_links WHERE id = ${id}`
+    await sql`UPDATE social_links SET deleted_at = NOW() WHERE id = ${id}`
     await logAudit(sql, c.get('user').sub, 'DELETE', 'social_links', id, existing[0], null)
     return c.json({ success: true })
   } catch (e) { return c.json({ error: e.message }, 400) }
@@ -755,7 +884,7 @@ adminApp.delete('/social-links/:id', requireSuperadmin, async (c) => {
 // ---------------------------------------------------------
 adminApp.get('/merchandise', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM merchandise ORDER BY created_at DESC`
+  const rows = await sql`SELECT * FROM merchandise WHERE deleted_at IS NULL ORDER BY created_at DESC`
   return c.json(rows)
 })
 
@@ -785,7 +914,7 @@ adminApp.put('/merchandise/:id', async (c) => {
     return c.json({ error: 'Invalid slug' }, 400)
   }
 
-  const existing = await sql`SELECT * FROM merchandise WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM merchandise WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   const e = existing[0]
@@ -814,12 +943,199 @@ adminApp.put('/merchandise/:id', async (c) => {
 adminApp.delete('/merchandise/:id', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
-  const existing = await sql`SELECT * FROM merchandise WHERE id = ${id}`
+  const existing = await sql`SELECT * FROM merchandise WHERE id = ${id} AND deleted_at IS NULL`
   if (!existing.length) return c.json({ error: 'Not found' }, 404)
 
   try {
-    await sql`DELETE FROM merchandise WHERE id = ${id}`
+    await sql`UPDATE merchandise SET deleted_at = NOW() WHERE id = ${id}`
     await logAudit(sql, c.get('user').sub, 'DELETE', 'merchandise', id, existing[0], null)
     return c.json({ success: true })
   } catch (e) { return c.json({ error: e.message }, 400) }
+})
+
+// ---------------------------------------------------------
+// 12. RECYCLE BIN
+// ---------------------------------------------------------
+adminApp.get('/recycle-bin', async (c) => {
+  const sql = c.get('sql')
+  try {
+    const rows = await sql`
+      SELECT id, title, 'releases' AS table_name, deleted_at FROM releases WHERE deleted_at IS NOT NULL
+      UNION ALL
+      SELECT id, title, 'tracks' AS table_name, deleted_at FROM tracks WHERE deleted_at IS NOT NULL
+      UNION ALL
+      SELECT id, title, 'beats' AS table_name, deleted_at FROM beats WHERE deleted_at IS NOT NULL
+      UNION ALL
+      SELECT id, title, 'music_videos' AS table_name, deleted_at FROM music_videos WHERE deleted_at IS NOT NULL
+      UNION ALL
+      SELECT id, COALESCE(title, caption, id::text) AS title, 'gallery_posts' AS table_name, deleted_at FROM gallery_posts WHERE deleted_at IS NOT NULL
+      UNION ALL
+      SELECT id, COALESCE(original_filename, r2_key) AS title, 'media_assets' AS table_name, deleted_at FROM media_assets WHERE deleted_at IS NOT NULL
+      UNION ALL
+      SELECT id, name AS title, 'social_links' AS table_name, deleted_at FROM social_links WHERE deleted_at IS NOT NULL
+      UNION ALL
+      SELECT id, name AS title, 'merchandise' AS table_name, deleted_at FROM merchandise WHERE deleted_at IS NOT NULL
+      ORDER BY deleted_at DESC
+    `
+    return c.json(rows)
+  } catch (err) {
+    return c.json({ error: err.message }, 500)
+  }
+})
+
+adminApp.post('/recycle-bin/restore', async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json()
+  const { table, id } = body || {}
+  const allowedTables = ['releases', 'tracks', 'beats', 'music_videos', 'gallery_posts', 'media_assets', 'social_links', 'merchandise']
+  if (!allowedTables.includes(table) || !id) {
+    return c.json({ error: 'Invalid table or id' }, 400)
+  }
+
+  try {
+    let rows
+    switch (table) {
+      case 'releases':
+        rows = await sql`UPDATE releases SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        break
+      case 'tracks':
+        rows = await sql`UPDATE tracks SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        break
+      case 'beats':
+        rows = await sql`UPDATE beats SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        break
+      case 'music_videos':
+        rows = await sql`UPDATE music_videos SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        break
+      case 'gallery_posts':
+        rows = await sql`UPDATE gallery_posts SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        break
+      case 'media_assets':
+        rows = await sql`UPDATE media_assets SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        break
+      case 'social_links':
+        rows = await sql`UPDATE social_links SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        break
+      case 'merchandise':
+        rows = await sql`UPDATE merchandise SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        break
+    }
+    if (!rows || !rows.length) return c.json({ error: 'Item not found in recycle bin' }, 404)
+    await logAudit(sql, c.get('user').sub, 'RESTORE', table, id, null, rows[0])
+    return c.json({ success: true, item: rows[0] })
+  } catch (err) {
+    return c.json({ error: err.message }, 400)
+  }
+})
+
+adminApp.delete('/recycle-bin/permanent', requireSuperadmin, async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json()
+  const { table, id } = body || {}
+  const allowedTables = ['releases', 'tracks', 'beats', 'music_videos', 'gallery_posts', 'media_assets', 'social_links', 'merchandise']
+  if (!allowedTables.includes(table) || !id) {
+    return c.json({ error: 'Invalid table or id' }, 400)
+  }
+
+  try {
+    switch (table) {
+      case 'releases':
+        await sql`DELETE FROM releases WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
+      case 'tracks':
+        await sql`DELETE FROM tracks WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
+      case 'beats':
+        await sql`DELETE FROM beats WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
+      case 'music_videos':
+        await sql`DELETE FROM music_videos WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
+      case 'gallery_posts':
+        await sql`DELETE FROM gallery_posts WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
+      case 'media_assets':
+        await sql`DELETE FROM media_assets WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
+      case 'social_links':
+        await sql`DELETE FROM social_links WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
+      case 'merchandise':
+        await sql`DELETE FROM merchandise WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
+    }
+    await logAudit(sql, c.get('user').sub, 'PERMANENT_DELETE', table, id, null, null)
+    return c.json({ success: true })
+  } catch (err) {
+    return c.json({ error: err.message }, 400)
+  }
+})
+
+adminApp.post('/recycle-bin/purge-expired', requireSuperadmin, async (c) => {
+  const sql = c.get('sql')
+  try {
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
+    const r1 = await sql`DELETE FROM releases WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+    const r2 = await sql`DELETE FROM tracks WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+    const r3 = await sql`DELETE FROM beats WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+    const r4 = await sql`DELETE FROM music_videos WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+    const r5 = await sql`DELETE FROM gallery_posts WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+    const r6 = await sql`DELETE FROM media_assets WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+    const r7 = await sql`DELETE FROM social_links WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+    const r8 = await sql`DELETE FROM merchandise WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+
+    const total = (r1.length || 0) + (r2.length || 0) + (r3.length || 0) + (r4.length || 0) +
+                  (r5.length || 0) + (r6.length || 0) + (r7.length || 0) + (r8.length || 0)
+
+    await logAudit(sql, c.get('user').sub, 'PURGE_EXPIRED', 'recycle_bin', null, null, { purgedCount: total })
+    return c.json({ success: true, count: total })
+  } catch (err) {
+    return c.json({ error: err.message }, 400)
+  }
+})
+
+// ---------------------------------------------------------
+// 13. SUBSCRIBERS
+// ---------------------------------------------------------
+adminApp.get('/subscribers', async (c) => {
+  const sql = c.get('sql')
+  try {
+    const rows = await sql`
+      SELECT id, email, status, consent_given, source, created_at, unsubscribed_at
+      FROM subscribers
+      ORDER BY created_at DESC
+    `
+    return c.json(rows)
+  } catch (err) {
+    return c.json({ error: err.message }, 500)
+  }
+})
+
+adminApp.delete('/subscribers/:id', requireSuperadmin, async (c) => {
+  const sql = c.get('sql')
+  const id = c.req.param('id')
+  try {
+    await sql`DELETE FROM subscribers WHERE id = ${id}`
+    await logAudit(sql, c.get('user').sub, 'DELETE', 'subscribers', id, null, null)
+    return c.json({ success: true })
+  } catch (err) {
+    return c.json({ error: err.message }, 400)
+  }
+})
+
+adminApp.get('/subscriber-notifications', async (c) => {
+  const sql = c.get('sql')
+  try {
+    const rows = await sql`
+      SELECT sn.id, sn.content_type, sn.content_id, sn.content_title, sn.status,
+             sn.error_message, sn.sent_at, sn.created_at, s.email
+      FROM subscriber_notifications sn
+      LEFT JOIN subscribers s ON sn.subscriber_id = s.id
+      ORDER BY sn.created_at DESC
+      LIMIT 100
+    `
+    return c.json(rows)
+  } catch (err) {
+    return c.json({ error: err.message }, 500)
+  }
 })

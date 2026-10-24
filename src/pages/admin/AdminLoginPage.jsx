@@ -53,34 +53,42 @@ export const AdminLoginPage = () => {
             />
           </div>
 
-          <div className="studio-field" style={{ position: 'relative' }}>
+          <div className="studio-field">
             <label htmlFor="password">Password</label>
-            <input 
-              id="password"
-              type={showPassword ? "text" : "password"} 
-              className="studio-input" 
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              disabled={isLoading}
-              required
-            />
-            <button 
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              style={{
-                position: 'absolute',
-                right: '12px',
-                top: '32px',
-                background: 'none',
-                border: 'none',
-                color: 'var(--muted)',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
-            >
-              {showPassword ? 'HIDE' : 'SHOW'}
-            </button>
+            <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
+              <input 
+                id="password"
+                type={showPassword ? "text" : "password"} 
+                className="studio-input" 
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                disabled={isLoading}
+                required
+                style={{ paddingRight: '56px', width: '100%' }}
+              />
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '14px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  letterSpacing: '0.05em',
+                  padding: '4px 6px',
+                  lineHeight: 1
+                }}
+              >
+                {showPassword ? 'HIDE' : 'SHOW'}
+              </button>
+            </div>
           </div>
 
           <button 

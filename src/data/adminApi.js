@@ -207,4 +207,25 @@ export const adminApi = {
   deleteGallerySlide: async (id) => fetchAdmin(`/gallery-slides/${id}`, {
     method: 'DELETE'
   }),
+
+  // Recycle Bin
+  getRecycleBin: async () => fetchAdmin('/recycle-bin'),
+  restoreItem: async (table, id) => fetchAdmin('/recycle-bin/restore', {
+    method: 'POST',
+    body: JSON.stringify({ table, id })
+  }),
+  permanentDeleteItem: async (table, id) => fetchAdmin('/recycle-bin/permanent', {
+    method: 'DELETE',
+    body: JSON.stringify({ table, id })
+  }),
+  purgeExpired: async () => fetchAdmin('/recycle-bin/purge-expired', {
+    method: 'POST'
+  }),
+
+  // Subscribers
+  getSubscribers: async () => fetchAdmin('/subscribers'),
+  deleteSubscriber: async (id) => fetchAdmin(`/subscribers/${id}`, {
+    method: 'DELETE'
+  }),
+  getSubscriberNotifications: async () => fetchAdmin('/subscriber-notifications'),
 };

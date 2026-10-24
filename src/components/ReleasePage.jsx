@@ -23,14 +23,45 @@ function formatFeatures(featuring) {
   return `with ${featuring.join(" & ")}`;
 }
 
-const PLATFORM_CONFIG = [
-  { key: "spotify", name: "Spotify", fallbackUrl: "https://open.spotify.com" },
-  { key: "appleMusic", name: "Apple Music", fallbackUrl: "https://music.apple.com" },
-  { key: "youtubeMusic", name: "YouTube Music", fallbackUrl: "https://music.youtube.com" },
-  { key: "audiomack", name: "Audiomack", fallbackUrl: "https://audiomack.com" },
-  { key: "boomplay", name: "Boomplay", fallbackUrl: "https://www.boomplay.com" },
-  { key: "deezer", name: "Deezer", fallbackUrl: "https://www.deezer.com" },
-];
+const KNOWN_PLATFORM_NAMES = {
+  spotify: "Spotify",
+  appleMusic: "Apple Music",
+  youtubeMusic: "YouTube Music",
+  youtube: "YouTube",
+  audiomack: "Audiomack",
+  boomplay: "Boomplay",
+  deezer: "Deezer",
+  tidal: "Tidal",
+  amazonMusic: "Amazon Music",
+  soundcloud: "SoundCloud",
+  soundCloud: "SoundCloud",
+  bandcamp: "Bandcamp",
+  pandora: "Pandora",
+  itunes: "iTunes",
+  selar: "Selar",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+};
+
+export function getPlatformName(key) {
+  if (KNOWN_PLATFORM_NAMES[key]) return KNOWN_PLATFORM_NAMES[key];
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[_-]/g, " ")
+    .replace(/^./, (str) => str.toUpperCase())
+    .trim();
+}
+
+export function getPlatformEntries(platformsObj) {
+  if (!platformsObj || typeof platformsObj !== "object") return [];
+  return Object.entries(platformsObj)
+    .filter(([_, url]) => Boolean(url && typeof url === "string" && url.trim().length > 0))
+    .map(([key, url]) => ({
+      key,
+      name: getPlatformName(key),
+      url: url.trim(),
+    }));
+}
 
 /* 
  * Utility to convert standard Spotify URLs to Embed URLs
@@ -69,9 +100,7 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
   };
 
   // Check if track has any valid individual platform links
-  const availablePlatforms = PLATFORM_CONFIG.filter((platform) => 
-    Boolean(trackPlatforms[platform.key])
-  );
+  const availablePlatforms = getPlatformEntries(trackPlatforms);
   
   const hasLinks = availablePlatforms.length > 0;
 
@@ -120,7 +149,7 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
             {availablePlatforms.map((platform) => (
               <a
                 key={platform.key}
-                href={trackPlatforms[platform.key]}
+                href={platform.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="track-platform-btn"
@@ -185,7 +214,7 @@ export default function ReleasePage({ release }) {
     return allTracks;
   }, [allTracks, activeFilter]);
 
-  const { videos: storeVideos } = useChomkaStore();
+  const { videos: storeVideos, gallery: storeGallery } = useChomkaStore();
 
   const associatedVideos = useMemo(() => {
     const directVideos = Array.isArray(release.videos) ? release.videos : [];
@@ -196,6 +225,16 @@ export default function ReleasePage({ release }) {
       (v) => v.relatedReleaseId === release.id || v.related_release_id === release.id
     );
   }, [release.videos, release.id, storeVideos]);
+
+  const associatedGallery = useMemo(() => {
+    const directGallery = Array.isArray(release.associatedGallery) ? release.associatedGallery : [];
+    if (directGallery.length > 0) return directGallery;
+
+    if (!release.id || !Array.isArray(storeGallery)) return [];
+    return storeGallery.filter(
+      (g) => g.relatedReleaseId === release.id || g.related_release_id === release.id
+    );
+  }, [release.associatedGallery, release.id, storeGallery]);
 
   const trackCount = tracks.length;
   const releaseNumber = String(release.number ?? "").padStart(2, "0");
@@ -227,6 +266,12 @@ export default function ReleasePage({ release }) {
               src={release.cover}
               alt={`${release.title} official cover art`}
               loading="eager"
+              onError={(e) => {
+                if (!e.target.dataset.triedFallback) {
+                  e.target.dataset.triedFallback = 'true';
+                  e.target.src = '/og-image.png';
+                }
+              }}
             />
           ) : (
             <div
@@ -289,25 +334,18 @@ export default function ReleasePage({ release }) {
           <div>
             <div className="platform-section-title">Stream / Listen On</div>
             <div className="platform-grid">
-              {PLATFORM_CONFIG.map((platform) => {
-                const targetUrl = platforms[platform.key];
-                
-                // Don't render button if we don't have a URL for it
-                if (!targetUrl) return null;
-
-                return (
-                  <a
-                    key={platform.key}
-                    href={targetUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="platform-btn"
-                    aria-label={`Listen to ${release.title} on ${platform.name}`}
-                  >
-                    {platform.name} <RightArrowIcon size={14} />
-                  </a>
-                );
-              })}
+              {getPlatformEntries(platforms).map((platform) => (
+                <a
+                  key={platform.key}
+                  href={platform.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="platform-btn"
+                  aria-label={`Listen to ${release.title} on ${platform.name}`}
+                >
+                  {platform.name} <RightArrowIcon size={14} />
+                </a>
+              ))}
             </div>
           </div>
 
@@ -505,6 +543,201 @@ export default function ReleasePage({ release }) {
                             }}
                           >
                             Watch on YouTube <UpRightArrowIcon size={12} />
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================
+              ASSOCIATED GALLERY, VISUALS & REELS SECTION
+              ========================================================= */}
+          {associatedGallery.length > 0 && (
+            <div className="release-gallery-section" style={{ marginTop: "32px" }}>
+              <div className="platform-section-title" style={{ marginBottom: "16px" }}>
+                Associated Gallery & Visuals ({associatedGallery.length})
+              </div>
+              <div
+                className="release-gallery-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gap: "20px",
+                }}
+              >
+                {associatedGallery.map((item) => {
+                  const mediaSrc = item.asset || (item.slides && item.slides[0]?.asset) || null;
+                  const isReel = item.type === "reel" || item.post_type === "reel";
+                  const itemTitle = item.title || item.caption || "Studio Visual";
+
+                  return (
+                    <div
+                      key={item.id || item.slug}
+                      className="release-gallery-card"
+                      style={{
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        overflow: "hidden",
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          paddingTop: isReel ? "125%" : "75%",
+                          background: "#0d0d11",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {mediaSrc ? (
+                          mediaSrc.endsWith(".mp4") || mediaSrc.endsWith(".webm") ? (
+                            <video
+                              src={mediaSrc}
+                              muted
+                              playsInline
+                              loop
+                              autoPlay
+                              style={{
+                                position: "absolute",
+                                top: 0,
+                                left: 0,
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          ) : (
+                            <img
+                              src={mediaSrc}
+                              alt={itemTitle}
+                              loading="lazy"
+                              style={{
+                                position: "absolute",
+                                top: 0,
+                                left: 0,
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          )
+                        ) : (
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--muted)",
+                              fontSize: "12px",
+                            }}
+                          >
+                            Visual Media
+                          </div>
+                        )}
+                        {item.type && (
+                          <span
+                            style={{
+                              position: "absolute",
+                              top: 8,
+                              right: 8,
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              textTransform: "uppercase",
+                              padding: "3px 8px",
+                              borderRadius: "4px",
+                              background: "rgba(0,0,0,0.75)",
+                              color: "var(--gold)",
+                              border: "1px solid rgba(223,194,125,0.4)",
+                            }}
+                          >
+                            {item.type}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          padding: "16px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "6px",
+                          flexGrow: 1,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--gold)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.1em",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {item.category || "Gallery"}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            {item.displayDate || item.date ? (item.displayDate || new Date(item.date).toLocaleDateString()) : ""}
+                          </span>
+                        </div>
+                        <h4
+                          style={{
+                            fontSize: "15px",
+                            fontWeight: 600,
+                            margin: 0,
+                            color: "var(--text-h)",
+                          }}
+                        >
+                          {itemTitle}
+                        </h4>
+                        {item.caption && item.title && (
+                          <p
+                            style={{
+                              fontSize: "13px",
+                              margin: 0,
+                              lineHeight: 1.4,
+                              color: "var(--muted)",
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }}
+                          >
+                            {item.caption}
+                          </p>
+                        )}
+                        {item.link ? (
+                          <a
+                            href={item.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              marginTop: "auto",
+                              paddingTop: "8px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              color: "var(--gold)",
+                              fontSize: "12px",
+                              textDecoration: "none",
+                              fontWeight: 600,
+                            }}
+                          >
+                            View Post <UpRightArrowIcon size={12} />
                           </a>
                         ) : null}
                       </div>

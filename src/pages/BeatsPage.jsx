@@ -1,4 +1,4 @@
-import { DownCaretIcon, PlayIcon, PauseIcon, RightArrowIcon , UpRightArrowIcon} from '../components/Icons';
+import { DownCaretIcon, PlayIcon, PauseIcon, RightArrowIcon, UpRightArrowIcon, ShuffleIcon, RepeatIcon, RepeatOneIcon, PreviousTrackIcon, NextTrackIcon, SkipBackIcon, SkipForwardIcon, GridIcon, ReelIcon, CameraIcon } from '../components/Icons';
 // src/pages/BeatsPage.jsx
 
 import {
@@ -206,6 +206,9 @@ function BeatReelPlayer({
   progress,
   onPlay,
   onExitReel,
+  onSkip,
+  repeatMode,
+  onCycleRepeat,
 }) {
   const currentBeat = beats[currentIndex];
   const videoRef = useRef(null);
@@ -513,7 +516,7 @@ function BeatReelPlayer({
                 transition: "all 0.2s ease",
               }}
             >
-              🔀
+              <ShuffleIcon size={15} />
             </button>
 
             {/* Previous Beat */}
@@ -530,7 +533,7 @@ function BeatReelPlayer({
                 padding: "6px 10px",
               }}
             >
-              ⏮
+              <PreviousTrackIcon size={18} />
             </button>
 
             {/* Play / Pause Toggle */}
@@ -569,24 +572,72 @@ function BeatReelPlayer({
                 padding: "6px 10px",
               }}
             >
-              ⏭
+              <NextTrackIcon size={18} />
             </button>
 
-            {/* Replay 60s Preview */}
+            {/* Skip Back 5s */}
             <button
               type="button"
-              onClick={onReplay}
-              title="Replay 60s Preview"
+              onClick={() => onSkip && onSkip(-5)}
+              title="Skip back 5 seconds"
               style={{
                 background: "transparent",
                 border: "none",
                 color: "rgba(255,255,255,0.7)",
-                fontSize: "16px",
+                fontSize: "14px",
                 cursor: "pointer",
-                padding: "6px 10px",
+                padding: "6px 8px",
+                display: "flex",
+                alignItems: "center",
+                gap: "2px",
               }}
             >
-              🔄
+              <SkipBackIcon size={14} />
+              <span style={{ fontSize: "9px", fontWeight: 600 }}>5</span>
+            </button>
+
+            {/* Repeat Mode Toggle */}
+            <button
+              type="button"
+              onClick={onCycleRepeat}
+              title={
+                repeatMode === 'one' ? 'Repeat: One' :
+                repeatMode === 'all' ? 'Repeat: All' : 'Repeat: Off'
+              }
+              style={{
+                background: repeatMode !== 'none' ? "rgba(223, 194, 125, 0.2)" : "transparent",
+                border: repeatMode !== 'none' ? "1px solid var(--gold)" : "1px solid transparent",
+                color: repeatMode !== 'none' ? "var(--gold)" : "rgba(255,255,255,0.5)",
+                borderRadius: "6px",
+                fontSize: "14px",
+                cursor: "pointer",
+                padding: "4px 8px",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              {repeatMode === 'one' ? <RepeatOneIcon size={15} /> : <RepeatIcon size={15} />}
+            </button>
+
+            {/* Skip Forward 5s */}
+            <button
+              type="button"
+              onClick={() => onSkip && onSkip(5)}
+              title="Skip forward 5 seconds"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "rgba(255,255,255,0.7)",
+                fontSize: "14px",
+                cursor: "pointer",
+                padding: "6px 8px",
+                display: "flex",
+                alignItems: "center",
+                gap: "2px",
+              }}
+            >
+              <span style={{ fontSize: "9px", fontWeight: 600 }}>5</span>
+              <SkipForwardIcon size={14} />
             </button>
           </div>
         </div>
@@ -609,6 +660,8 @@ export default function BeatsPage() {
   const audioGenerationRef = useRef(0);
   const animationFrameRef = useRef(null);
   const updateProgressRef = useRef(null);
+  const repeatModeRef = useRef('all');
+  const handleNextReelRef = useRef(null);
 
   const [activeBeat, setActiveBeat] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -621,6 +674,7 @@ export default function BeatsPage() {
   const [isReelMode, setIsReelMode] = useState(false);
   const [reelIndex, setReelIndex] = useState(0);
   const [isShuffle, setIsShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState('all'); // 'none' | 'all' | 'one'
 
   useEffect(() => {
     activeBeatRef.current = activeBeat;
@@ -629,6 +683,10 @@ export default function BeatsPage() {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    repeatModeRef.current = repeatMode;
+  }, [repeatMode]);
 
   const filters = useMemo(
     () => [
@@ -715,6 +773,29 @@ export default function BeatsPage() {
       isPlayingRef.current = false;
       setIsPlaying(false);
       cancelProgressAnimation();
+
+      // Repeat mode logic
+      const mode = repeatModeRef.current;
+      if (mode === 'one') {
+        // Replay the same beat from preview start
+        setTimeout(() => {
+          if (audioRef.current === audio && activeBeatRef.current) {
+            audio.currentTime = previewStartRef.current;
+            setProgress(0);
+            audio.play().then(() => {
+              isPlayingRef.current = true;
+              setIsPlaying(true);
+            }).catch(() => {});
+          }
+        }, 150);
+      } else if (mode === 'all' && handleNextReelRef.current) {
+        // Auto-advance to next beat
+        setTimeout(() => {
+          if (handleNextReelRef.current) {
+            handleNextReelRef.current();
+          }
+        }, 300);
+      }
       return;
     }
 
@@ -992,6 +1073,37 @@ export default function BeatsPage() {
     }
   }, [replayCurrentBeat]);
 
+  // Sync ref for auto-advance from updateProgress
+  useEffect(() => {
+    handleNextReelRef.current = handleNextReel;
+  }, [handleNextReel]);
+
+  // Skip ±5 seconds within the current preview window
+  const handleSkip = useCallback((seconds) => {
+    const audio = audioRef.current;
+    if (!audio || !activeBeatRef.current) return;
+    const previewStart = previewStartRef.current;
+    const previewDuration = previewDurationRef.current;
+    const previewEnd = previewStart + previewDuration;
+    const newTime = Math.max(previewStart, Math.min(audio.currentTime + seconds, previewEnd - 0.1));
+    try {
+      audio.currentTime = newTime;
+      const elapsed = newTime - previewStart;
+      setProgress(Math.max(0, Math.min(elapsed / previewDuration, 1)));
+    } catch {
+      // ignore seek errors
+    }
+  }, []);
+
+  // Cycle repeat mode: all → one → none → all
+  const handleCycleRepeat = useCallback(() => {
+    setRepeatMode((prev) => {
+      if (prev === 'all') return 'one';
+      if (prev === 'one') return 'none';
+      return 'all';
+    });
+  }, []);
+
   useEffect(() => {
     if (!isReelMode) return undefined;
     const handleKeyDown = (e) => {
@@ -1048,7 +1160,7 @@ export default function BeatsPage() {
             rel="noopener noreferrer"
             className="beats-studio-ig-badge"
           >
-            📸 @chomkamusicstudio on Instagram <UpRightArrowIcon size={14} />
+            <CameraIcon size={14} /> @chomkamusicstudio on Instagram <UpRightArrowIcon size={14} />
           </a>
         </div>
       </section>
@@ -1098,7 +1210,7 @@ export default function BeatsPage() {
             }}
             aria-pressed={isReelMode}
           >
-            {isReelMode ? "⏹ Grid View" : "🎬 Reels Mode"}
+            {isReelMode ? <><GridIcon size={14} /> Grid View</> : <><ReelIcon size={14} /> Reels Mode</>}
           </button>
         </div>
 
@@ -1168,6 +1280,9 @@ export default function BeatsPage() {
           progress={progress}
           onPlay={handlePlay}
           onExitReel={() => setIsReelMode(false)}
+          onSkip={handleSkip}
+          repeatMode={repeatMode}
+          onCycleRepeat={handleCycleRepeat}
         />
       ) : (
         <section className="beats-grid" aria-label="Beat catalog">

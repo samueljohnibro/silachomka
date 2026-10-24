@@ -27,6 +27,7 @@ const AdminVideosPage = () => {
 
   const [currentVideo, setCurrentVideo] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -182,6 +183,8 @@ const AdminVideosPage = () => {
       await fetchData();
       setView("LIST");
       setCurrentVideo(null);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
       setError(err.message || "Failed to save music video.");
     } finally {
@@ -550,7 +553,28 @@ const AdminVideosPage = () => {
             <AdminViewToggle viewMode={viewMode} onChange={setViewMode} />
           </div>
         </div>
-        <button className="primary-button" onClick={handleCreateClick}>+ Create Video</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {saveSuccess && (
+            <div style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(34, 197, 94, 0.15)",
+              border: "1px solid rgba(34, 197, 94, 0.4)",
+              color: "#86efac",
+              padding: "6px 14px",
+              borderRadius: "4px",
+              fontSize: "12px",
+              fontWeight: 500
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Saved successfully
+            </div>
+          )}
+          <button className="primary-button" onClick={handleCreateClick}>+ Create Video</button>
+        </div>
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}

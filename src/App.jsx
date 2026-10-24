@@ -34,6 +34,9 @@ import AdminMediaPage from "./pages/admin/AdminMediaPage";
 import AdminLinksPage from "./pages/admin/AdminLinksPage";
 import AdminMerchandisePage from "./pages/admin/AdminMerchandisePage";
 import AdminVideosPage from "./pages/admin/AdminVideosPage";
+import AdminRecycleBinPage from "./pages/admin/AdminRecycleBinPage";
+import AdminSubscribersPage from "./pages/admin/AdminSubscribersPage";
+import SubscriberNewsletterBox from "./components/SubscriberNewsletterBox";
 
 import MediaSlideshow from "./components/MediaSlideshow";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
@@ -379,6 +382,7 @@ function SiteFooter() {
 
   return (
     <footer id="label" className="site-footer">
+      <SubscriberNewsletterBox />
       <div className="footer-meta">
         <strong className="footer-brand" onClick={handleSecretClick} title="Chomka Nation">
           silachomka
@@ -1762,6 +1766,8 @@ function App() {
             <Route path="media" element={<AdminMediaPage />} />
             <Route path="links" element={<AdminLinksPage />} />
             <Route path="merchandise" element={<AdminMerchandisePage />} />
+            <Route path="subscribers" element={<AdminSubscribersPage />} />
+            <Route path="recycle-bin" element={<AdminRecycleBinPage />} />
             <Route path="settings" element={<AdminSettingsPlaceholder />} />
           </Route>
   

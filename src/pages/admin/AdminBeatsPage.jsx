@@ -24,6 +24,7 @@ const AdminBeatsPage = () => {
   
   const [currentBeat, setCurrentBeat] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -51,9 +52,17 @@ const AdminBeatsPage = () => {
   }, []);
 
   const handleEditClick = (beat) => {
-    setCurrentBeat({ ...beat });
+    const rawGenre = (beat.short_genre || beat.genre || '').replace(/\s+type\s+beat$/i, '').trim();
+    setCurrentBeat({ 
+      ...beat,
+      genre: rawGenre,
+      price_basic: beat.price_basic !== undefined && beat.price_basic !== null ? Number(beat.price_basic) : 15000,
+      price_premium: beat.price_premium !== undefined && beat.price_premium !== null ? Number(beat.price_premium) : 30000,
+      price_exclusive: beat.price_exclusive !== undefined && beat.price_exclusive !== null ? Number(beat.price_exclusive) : 60000
+    });
     setView('EDIT');
     setError(null);
+    setSaveSuccess(false);
   };
 
   const handleCreateClick = () => {
@@ -72,12 +81,16 @@ const AdminBeatsPage = () => {
       selar_basic_url: '',
       selar_premium_url: '',
       selar_ultimate_url: '',
+      price_basic: 15000,
+      price_premium: 30000,
+      price_exclusive: 60000,
       status: 'PUBLISHED',
       created_at: new Date().toISOString().split('T')[0],
       categories: []
     });
     setView('CREATE');
     setError(null);
+    setSaveSuccess(false);
   };
 
   const handleCancelForm = () => {
@@ -106,6 +119,15 @@ const AdminBeatsPage = () => {
       setError('Title is required.');
       return;
     }
+
+    // Validate license prices
+    const pBasic = Number(currentBeat.price_basic);
+    const pPremium = Number(currentBeat.price_premium);
+    const pExclusive = Number(currentBeat.price_exclusive);
+    if (isNaN(pBasic) || pBasic < 0 || isNaN(pPremium) || pPremium < 0 || isNaN(pExclusive) || pExclusive < 0) {
+      setError('License prices must be valid non-negative numbers.');
+      return;
+    }
     
     // Auto-generate slug on create, or preserve on edit
     let slug = currentBeat.slug ? currentBeat.slug.trim() : slugify(currentBeat.title);
@@ -113,16 +135,26 @@ const AdminBeatsPage = () => {
       slug = 'beat-' + Date.now();
     }
 
+    // Genre normalization: admin inputs e.g. "Afrobeat" -> stored as "Afrobeat Type Beat", short_genre = "Afrobeat"
+    const baseGenre = (currentBeat.genre || '').replace(/\s+type\s+beat$/i, '').trim();
+    const finalGenre = baseGenre ? `${baseGenre} Type Beat` : null;
+    const finalShortGenre = baseGenre || null;
+
     try {
       setIsSaving(true);
       const payload = {
         ...currentBeat,
-        slug
+        slug,
+        genre: finalGenre,
+        short_genre: finalShortGenre,
+        price_basic: pBasic,
+        price_premium: pPremium,
+        price_exclusive: pExclusive
       };
 
       // Sanitize nullable fields
       const nullableFields = [
-        'genre', 'short_genre', 'bpm', 'beat_key', 'description', 
+        'bpm', 'beat_key', 'description', 
         'mood', 'selar_basic_url', 'selar_premium_url', 'selar_ultimate_url',
         'audio_asset_id', 'image_asset_id', 'video_asset_id'
       ];
@@ -139,6 +171,8 @@ const AdminBeatsPage = () => {
       await fetchBeats();
       setView('LIST');
       setCurrentBeat(null);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
       setError(err.message || 'Failed to save beat.');
     } finally {
@@ -199,11 +233,18 @@ const AdminBeatsPage = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <div className="studio-field" style={{ textAlign: 'left' }}>
               <label>Genre</label>
-              <input type="text" name="genre" className="studio-input" value={currentBeat.genre || ''} onChange={handleChange} disabled={isSaving} placeholder="e.g. Afro × Alternative" />
-            </div>
-            <div className="studio-field" style={{ textAlign: 'left' }}>
-              <label>Short Genre</label>
-              <input type="text" name="short_genre" className="studio-input" value={currentBeat.short_genre || ''} onChange={handleChange} disabled={isSaving} placeholder="e.g. Afro" />
+              <input 
+                type="text" 
+                name="genre" 
+                className="studio-input" 
+                value={currentBeat.genre || ''} 
+                onChange={handleChange} 
+                disabled={isSaving} 
+                placeholder="e.g. Afrobeat or Afro Trap" 
+              />
+              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
+                Type: <strong style={{ color: 'var(--gold)' }}>{currentBeat.genre?.trim() ? `${currentBeat.genre.trim()} Type Beat` : '—'}</strong>
+              </span>
             </div>
             <div className="studio-field" style={{ textAlign: 'left' }}>
               <label>BPM</label>
@@ -212,6 +253,61 @@ const AdminBeatsPage = () => {
             <div className="studio-field" style={{ textAlign: 'left' }}>
               <label>Key</label>
               <input type="text" name="beat_key" className="studio-input" value={currentBeat.beat_key || ''} onChange={handleChange} disabled={isSaving} placeholder="e.g. C# minor" />
+            </div>
+          </div>
+
+          <h3 style={{ fontSize: 14, color: 'var(--gold)', marginTop: '8px', marginBottom: '4px' }}>License Pricing</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+            <div className="studio-field" style={{ textAlign: 'left' }}>
+              <label>Basic License Price (₦ NGN)</label>
+              <input 
+                type="number" 
+                name="price_basic" 
+                className="studio-input" 
+                value={currentBeat.price_basic !== undefined ? currentBeat.price_basic : ''} 
+                onChange={handleChange} 
+                disabled={isSaving} 
+                placeholder="15000" 
+                min="0"
+                step="500"
+              />
+              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
+                Standard lease (HQ MP3)
+              </span>
+            </div>
+            <div className="studio-field" style={{ textAlign: 'left' }}>
+              <label>Premium License Price (₦ NGN)</label>
+              <input 
+                type="number" 
+                name="price_premium" 
+                className="studio-input" 
+                value={currentBeat.price_premium !== undefined ? currentBeat.price_premium : ''} 
+                onChange={handleChange} 
+                disabled={isSaving} 
+                placeholder="30000" 
+                min="0"
+                step="500"
+              />
+              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
+                WAV Master + MP3
+              </span>
+            </div>
+            <div className="studio-field" style={{ textAlign: 'left' }}>
+              <label>Exclusive License Price (₦ NGN)</label>
+              <input 
+                type="number" 
+                name="price_exclusive" 
+                className="studio-input" 
+                value={currentBeat.price_exclusive !== undefined ? currentBeat.price_exclusive : ''} 
+                onChange={handleChange} 
+                disabled={isSaving} 
+                placeholder="60000" 
+                min="0"
+                step="500"
+              />
+              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
+                Trackout stems & exclusive buyout
+              </span>
             </div>
           </div>
 
@@ -236,7 +332,50 @@ const AdminBeatsPage = () => {
               <select name="status" className="studio-input" value={currentBeat.status || 'DRAFT'} onChange={handleChange} disabled={isSaving} style={{ height: '48px' }}>
                 <option value="DRAFT">Draft</option>
                 <option value="PUBLISHED">Published</option>
+                <option value="SCHEDULED">Scheduled</option>
               </select>
+            </div>
+            <div className="studio-field" style={{ textAlign: 'left' }}>
+              <label>Schedule Publication (Optional)</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input 
+                  type="datetime-local" 
+                  name="scheduled_at" 
+                  className="studio-input" 
+                  value={currentBeat.scheduled_at ? currentBeat.scheduled_at.slice(0, 16) : ''} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCurrentBeat(prev => ({
+                      ...prev,
+                      scheduled_at: val ? new Date(val).toISOString() : null,
+                      status: val ? 'SCHEDULED' : (prev.status === 'SCHEDULED' ? 'PUBLISHED' : prev.status)
+                    }));
+                  }} 
+                  disabled={isSaving} 
+                />
+                {currentBeat.scheduled_at && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentBeat(prev => ({
+                        ...prev,
+                        scheduled_at: null,
+                        status: prev.status === 'SCHEDULED' ? 'PUBLISHED' : prev.status
+                      }));
+                    }}
+                    className="studio-pill-btn"
+                    style={{ fontSize: 11, whiteSpace: 'nowrap' }}
+                    title="Publish immediately / clear schedule"
+                  >
+                    Clear (Publish Now)
+                  </button>
+                )}
+              </div>
+              {currentBeat.scheduled_at && (
+                <span style={{ fontSize: 11, color: 'var(--gold)', marginTop: 4, display: 'block' }}>
+                  ⏰ Scheduled for {new Date(currentBeat.scheduled_at).toLocaleString()}
+                </span>
+              )}
             </div>
           </div>
 
@@ -251,7 +390,12 @@ const AdminBeatsPage = () => {
               label="Cover Art (Image)"
               assetType="IMAGE"
               value={currentBeat.image_asset_id}
-              onChange={(id) => setCurrentBeat(prev => ({ ...prev, image_asset_id: id }))}
+              onChange={(id, assetRecord) => {
+                setCurrentBeat(prev => ({ ...prev, image_asset_id: id }));
+                if (assetRecord) {
+                  setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
+                }
+              }}
               disabled={isSaving}
               hint="Select or upload beat artwork"
             />
@@ -259,7 +403,12 @@ const AdminBeatsPage = () => {
               label="Preview Audio (MP3)"
               assetType="AUDIO"
               value={currentBeat.audio_asset_id}
-              onChange={(id) => setCurrentBeat(prev => ({ ...prev, audio_asset_id: id }))}
+              onChange={(id, assetRecord) => {
+                setCurrentBeat(prev => ({ ...prev, audio_asset_id: id }));
+                if (assetRecord) {
+                  setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
+                }
+              }}
               disabled={isSaving}
               hint="Select or upload preview audio"
             />
@@ -267,7 +416,12 @@ const AdminBeatsPage = () => {
               label="Visualizer (GIF/Video)"
               assetType="VIDEO"
               value={currentBeat.video_asset_id}
-              onChange={(id) => setCurrentBeat(prev => ({ ...prev, video_asset_id: id }))}
+              onChange={(id, assetRecord) => {
+                setCurrentBeat(prev => ({ ...prev, video_asset_id: id }));
+                if (assetRecord) {
+                  setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
+                }
+              }}
               disabled={isSaving}
               hint="Select or upload visualizer GIF/video"
             />
@@ -311,7 +465,28 @@ const AdminBeatsPage = () => {
             <AdminViewToggle viewMode={viewMode} onChange={setViewMode} />
           </div>
         </div>
-        <button className="primary-button" onClick={handleCreateClick}>+ Create Beat</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {saveSuccess && (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(34, 197, 94, 0.15)',
+              border: '1px solid rgba(34, 197, 94, 0.4)',
+              color: '#86efac',
+              padding: '6px 14px',
+              borderRadius: '4px',
+              fontSize: '12px',
+              fontWeight: 500
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Saved successfully
+            </div>
+          )}
+          <button className="primary-button" onClick={handleCreateClick}>+ Create Beat</button>
+        </div>
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
@@ -354,7 +529,7 @@ const AdminBeatsPage = () => {
                       fontSize: 10, 
                       fontWeight: 700, 
                       textTransform: 'uppercase',
-                      background: beat.status === 'PUBLISHED' ? 'rgba(16, 185, 129, 0.9)' : 'rgba(245, 158, 11, 0.9)',
+                      background: beat.status === 'PUBLISHED' ? 'rgba(16, 185, 129, 0.9)' : beat.status === 'SCHEDULED' ? 'rgba(56, 189, 248, 0.9)' : 'rgba(245, 158, 11, 0.9)',
                       color: '#000'
                     }}>
                       {beat.status || 'DRAFT'}
@@ -453,8 +628,8 @@ const AdminBeatsPage = () => {
                       fontSize: 10, 
                       fontWeight: 700, 
                       textTransform: 'uppercase',
-                      background: beat.status === 'PUBLISHED' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                      color: beat.status === 'PUBLISHED' ? '#34d399' : '#fbbf24'
+                      background: beat.status === 'PUBLISHED' ? 'rgba(16, 185, 129, 0.1)' : beat.status === 'SCHEDULED' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                      color: beat.status === 'PUBLISHED' ? '#34d399' : beat.status === 'SCHEDULED' ? '#38bdf8' : '#fbbf24'
                     }}>
                       {beat.status || 'DRAFT'}
                     </span>

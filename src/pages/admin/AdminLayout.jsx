@@ -13,6 +13,8 @@ const AdminSidebar = ({ mobileOpen, setMobileOpen }) => {
     { name: 'Videos', path: '/admin/videos' },
     { name: 'Links', path: '/admin/links' },
     { name: 'Merchandise', path: '/admin/merchandise' },
+    { name: 'Subscribers', path: '/admin/subscribers' },
+    { name: 'Recycle Bin', path: '/admin/recycle-bin' },
     { name: 'Settings', path: '/admin/settings' },
   ];
 
@@ -62,6 +64,8 @@ const AdminHeader = ({ user, logout, toggleMobile }) => {
     if (path.includes('/media')) return 'Media Assets';
     if (path.includes('/links')) return 'Social Links';
     if (path.includes('/merchandise')) return 'Merchandise';
+    if (path.includes('/subscribers')) return 'Subscribers';
+    if (path.includes('/recycle-bin')) return 'Recycle Bin';
     if (path.includes('/settings')) return 'Settings';
     return 'Admin';
   };

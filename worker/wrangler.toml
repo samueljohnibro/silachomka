@@ -6,6 +6,9 @@ compatibility_date = "2026-09-12"
 [observability]
 enabled = true
 
+[triggers]
+crons = ["*/5 * * * *"]
+
 # Future Neon DB configuration placeholder
 # [vars]
 # DATABASE_URL = ""

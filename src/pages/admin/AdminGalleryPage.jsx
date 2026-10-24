@@ -8,6 +8,8 @@ const AdminGalleryPage = () => {
   const [posts, setPosts] = useState([]);
   const [slides, setSlides] = useState([]);
   const [mediaAssets, setMediaAssets] = useState([]);
+  const [releases, setReleases] = useState([]);
+  const [tracks, setTracks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [view, setView] = useState("LIST");
@@ -22,6 +24,7 @@ const AdminGalleryPage = () => {
 
   const [currentPost, setCurrentPost] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -36,14 +39,18 @@ const AdminGalleryPage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [postsData, slidesData, mediaData] = await Promise.all([
+      const [postsData, slidesData, mediaData, releasesData, tracksData] = await Promise.all([
         adminApi.getGallery().catch(() => []),
         adminApi.getGallerySlides().catch(() => []),
         adminApi.getMediaAssets().catch(() => []),
+        adminApi.getReleases().catch(() => []),
+        adminApi.getTracks().catch(() => []),
       ]);
       setPosts(postsData);
       setSlides(slidesData);
       setMediaAssets(mediaData);
+      setReleases(releasesData);
+      setTracks(tracksData);
     } catch (err) {
       setError(err.message || "Failed to load gallery posts.");
     } finally {
@@ -108,13 +115,21 @@ const AdminGalleryPage = () => {
     e.preventDefault();
     setError(null);
 
-    if (!currentPost.slug || !currentPost.title || !currentPost.post_type || !currentPost.post_date) {
-      setError("Slug, Title, Post Type, and Post Date are required.");
+    const slugify = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    let slug = currentPost.slug ? currentPost.slug.trim() : slugify(currentPost.title);
+    if (!slug) slug = "gallery-" + Date.now();
+
+    if (!currentPost.title || !currentPost.post_date) {
+      setError("Title and Post Date are required.");
       return;
     }
 
     try {
-      const payload = { ...currentPost };
+      const payload = { 
+        ...currentPost,
+        slug,
+        post_type: currentPost.post_type || "image"
+      };
       const nullableFields = [
         "caption", "category", "primary_asset_id", "related_release_id",
         "related_track_id", "related_beat_id", "legacy_link", "display_date",
@@ -144,8 +159,11 @@ const AdminGalleryPage = () => {
         savedPost = await adminApi.updateGalleryPost(payload.id, payload);
       }
 
+      await fetchData();
       setView("LIST");
       setCurrentPost(null);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
       setError(err.message || "Failed to save gallery post.");
     } finally {
@@ -240,44 +258,57 @@ const AdminGalleryPage = () => {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Title *</label>
-              <input type="text" name="title" className="studio-input" value={currentPost.title || ""} onChange={handleChange} required disabled={isSaving} />
+              <input type="text" name="title" className="studio-input" value={currentPost.title || ""} onChange={handleChange} required disabled={isSaving} placeholder="Post title or visual name" />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Slug *</label>
-              <input type="text" name="slug" className="studio-input" value={currentPost.slug || ""} onChange={handleChange} required disabled={isSaving} />
+              <label>Slug (Auto-generated if blank)</label>
+              <input type="text" name="slug" className="studio-input" value={currentPost.slug || ""} onChange={handleChange} disabled={isSaving} placeholder="Leave blank to auto-generate" />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Post Type *</label>
-              <input type="text" name="post_type" className="studio-input" value={currentPost.post_type || ""} onChange={handleChange} required disabled={isSaving} placeholder="e.g. image, carousel, video" />
+              <label>Format / Type *</label>
+              <select name="post_type" className="studio-input" value={currentPost.post_type || "image"} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
+                <option value="image">Single Image</option>
+                <option value="carousel">Carousel (Multi-slide)</option>
+                <option value="video">Video</option>
+                <option value="reel">Reel / Vertical Short</option>
+              </select>
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Category</label>
-              <input type="text" name="category" className="studio-input" value={currentPost.category || ""} onChange={handleChange} disabled={isSaving} placeholder="e.g. portraits, live" />
+              <input type="text" name="category" className="studio-input" value={currentPost.category || ""} onChange={handleChange} disabled={isSaving} placeholder="e.g. portraits, live, studio" />
             </div>
           </div>
 
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Dates</h3>
+          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Date & Display</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Post Date * (YYYY-MM-DD)</label>
-              <input type="text" name="post_date" className="studio-input" value={currentPost.post_date || ""} onChange={handleChange} required disabled={isSaving} />
+              <label>Post Date *</label>
+              <input 
+                type="date" 
+                name="post_date" 
+                className="studio-input" 
+                value={currentPost.post_date ? currentPost.post_date.split("T")[0] : ""} 
+                onChange={handleChange} 
+                required 
+                disabled={isSaving} 
+              />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Display Date</label>
-              <input type="text" name="display_date" className="studio-input" value={currentPost.display_date || ""} onChange={handleChange} disabled={isSaving} />
+              <label>Display Date (Formatted text override)</label>
+              <input type="text" name="display_date" className="studio-input" value={currentPost.display_date || ""} onChange={handleChange} disabled={isSaving} placeholder="e.g. March 2025" />
             </div>
           </div>
 
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Details & Assets</h3>
+          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Details & Media Asset</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "16px" }}>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Caption</label>
-              <textarea name="caption" className="studio-input" style={{ minHeight: "80px", resize: "vertical" }} value={currentPost.caption || ""} onChange={handleChange} disabled={isSaving} />
+              <label>Caption / Note</label>
+              <textarea name="caption" className="studio-input" style={{ minHeight: "80px", resize: "vertical" }} value={currentPost.caption || ""} onChange={handleChange} disabled={isSaving} placeholder="Caption or context for this visual..." />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Primary Asset</label>
-              <select name="primary_asset_id" className="studio-input" value={currentPost.primary_asset_id || ""} onChange={handleChange} disabled={isSaving}>
-                <option value="">-- None --</option>
+              <label>Primary Media Asset</label>
+              <select name="primary_asset_id" className="studio-input" value={currentPost.primary_asset_id || ""} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
+                <option value="">-- Select from Uploaded Media Assets --</option>
                 {mediaAssets.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.original_filename || a.r2_key} ({a.asset_type})
@@ -287,23 +318,33 @@ const AdminGalleryPage = () => {
             </div>
           </div>
 
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Relations & Metadata</h3>
+          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Project & Track Associations</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Related Release ID</label>
-              <input type="text" name="related_release_id" className="studio-input" value={currentPost.related_release_id || ""} onChange={handleChange} disabled={isSaving} />
+              <label>Associated Release / Project</label>
+              <select name="related_release_id" className="studio-input" value={currentPost.related_release_id || ""} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
+                <option value="">-- None (Independent Gallery Post) --</option>
+                {releases.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.title} ({r.type || "Release"})
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Related Track ID</label>
-              <input type="text" name="related_track_id" className="studio-input" value={currentPost.related_track_id || ""} onChange={handleChange} disabled={isSaving} />
+              <label>Associated Track</label>
+              <select name="related_track_id" className="studio-input" value={currentPost.related_track_id || ""} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
+                <option value="">-- None --</option>
+                {tracks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Related Beat ID</label>
-              <input type="text" name="related_beat_id" className="studio-input" value={currentPost.related_beat_id || ""} onChange={handleChange} disabled={isSaving} />
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Legacy Link</label>
-              <input type="text" name="legacy_link" className="studio-input" value={currentPost.legacy_link || ""} onChange={handleChange} disabled={isSaving} />
+              <label>External Post / Instagram Link</label>
+              <input type="text" name="legacy_link" className="studio-input" value={currentPost.legacy_link || ""} onChange={handleChange} disabled={isSaving} placeholder="https://instagram.com/p/..." />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Tags (JSON Array)</label>
@@ -314,9 +355,52 @@ const AdminGalleryPage = () => {
               <select name="status" className="studio-input" value={currentPost.status || "DRAFT"} onChange={handleChange} disabled={isSaving}>
                 <option value="DRAFT">Draft</option>
                 <option value="PUBLISHED">Published</option>
+                <option value="SCHEDULED">Scheduled</option>
                 <option value="ARCHIVED">Archived</option>
                 <option value="UNAVAILABLE">Unavailable</option>
               </select>
+            </div>
+            <div className="studio-field" style={{ textAlign: "left" }}>
+              <label>Schedule Publication (Optional)</label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input 
+                  type="datetime-local" 
+                  name="scheduled_at" 
+                  className="studio-input" 
+                  value={currentPost.scheduled_at ? currentPost.scheduled_at.slice(0, 16) : ""} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCurrentPost(prev => ({
+                      ...prev,
+                      scheduled_at: val ? new Date(val).toISOString() : null,
+                      status: val ? "SCHEDULED" : (prev.status === "SCHEDULED" ? "PUBLISHED" : prev.status)
+                    }));
+                  }} 
+                  disabled={isSaving} 
+                />
+                {currentPost.scheduled_at && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPost(prev => ({
+                        ...prev,
+                        scheduled_at: null,
+                        status: prev.status === "SCHEDULED" ? "PUBLISHED" : prev.status
+                      }));
+                    }}
+                    className="studio-pill-btn"
+                    style={{ fontSize: 11, whiteSpace: "nowrap" }}
+                    title="Publish immediately / clear schedule"
+                  >
+                    Clear (Publish Now)
+                  </button>
+                )}
+              </div>
+              {currentPost.scheduled_at && (
+                <span style={{ fontSize: 11, color: "var(--gold)", marginTop: 4, display: "block" }}>
+                  ⏰ Scheduled for {new Date(currentPost.scheduled_at).toLocaleString()}
+                </span>
+              )}
             </div>
           </div>
 
@@ -457,7 +541,28 @@ const AdminGalleryPage = () => {
             <AdminViewToggle viewMode={viewMode} onChange={setViewMode} />
           </div>
         </div>
-        <button className="primary-button" onClick={handleCreateClick}>+ Create Post</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {saveSuccess && (
+            <div style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(34, 197, 94, 0.15)",
+              border: "1px solid rgba(34, 197, 94, 0.4)",
+              color: "#86efac",
+              padding: "6px 14px",
+              borderRadius: "4px",
+              fontSize: "12px",
+              fontWeight: 500
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Saved successfully
+            </div>
+          )}
+          <button className="primary-button" onClick={handleCreateClick}>+ Create Post</button>
+        </div>
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
@@ -500,7 +605,7 @@ const AdminGalleryPage = () => {
                       fontSize: 10, 
                       fontWeight: 700, 
                       textTransform: "uppercase",
-                      background: post.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.9)" : "rgba(245, 158, 11, 0.9)",
+                      background: post.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.9)" : post.status === "SCHEDULED" ? "rgba(56, 189, 248, 0.9)" : "rgba(245, 158, 11, 0.9)",
                       color: "#000"
                     }}>
                       {post.status || "DRAFT"}
@@ -599,8 +704,8 @@ const AdminGalleryPage = () => {
                         fontSize: 10,
                         fontWeight: 700,
                         textTransform: "uppercase",
-                        background: post.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
-                        color: post.status === "PUBLISHED" ? "#34d399" : "#fbbf24",
+                        background: post.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.1)" : post.status === "SCHEDULED" ? "rgba(56, 189, 248, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                        color: post.status === "PUBLISHED" ? "#34d399" : post.status === "SCHEDULED" ? "#38bdf8" : "#fbbf24",
                       }}>
                         {post.status || "DRAFT"}
                       </span>

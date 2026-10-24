@@ -58,17 +58,171 @@ app.get('/api/health', (c) => {
   })
 })
 
+// ------------------------------------------
+// Media Serving (BYTEA / R2 fallback)
+// ------------------------------------------
+app.get('/api/media/asset/:id', async (c) => {
+  const sql = c.get('sql')
+  const id = c.req.param('id')
+
+  const rows = await sql`
+    SELECT id, r2_key, mime_type, encode(file_data, 'hex') as file_hex
+    FROM media_assets
+    WHERE id = ${id} AND deleted_at IS NULL
+  `
+  if (rows.length === 0) return c.json({ error: 'Asset not found' }, 404)
+  const asset = rows[0]
+
+  if (asset.file_hex) {
+    let bytes
+    if (typeof Buffer !== 'undefined') {
+      bytes = Buffer.from(asset.file_hex, 'hex')
+    } else {
+      const hex = asset.file_hex
+      bytes = new Uint8Array(hex.length / 2)
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16)
+      }
+    }
+    return new Response(bytes, {
+      headers: {
+        'Content-Type': asset.mime_type || 'image/jpeg',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin': '*'
+      }
+    })
+  }
+
+  // Fallback: If bound to R2 bucket, stream from R2
+  if (c.env?.MEDIA_BUCKET && asset.r2_key) {
+    try {
+      const object = await c.env.MEDIA_BUCKET.get(asset.r2_key)
+      if (object) {
+        return new Response(object.body, {
+          headers: {
+            'Content-Type': object.httpMetadata?.contentType || asset.mime_type || 'application/octet-stream',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Access-Control-Allow-Origin': '*'
+          }
+        })
+      }
+    } catch (e) {
+      console.warn('R2 read failed:', e.message)
+    }
+  }
+
+  // Fallback: If asset has an r2_key matching static media, redirect to local static path
+  if (asset.r2_key) {
+    return c.redirect('/' + asset.r2_key, 302)
+  }
+
+  return c.json({ error: 'Asset binary not found' }, 404)
+})
+
+app.get('/api/media/:folder/:file', async (c) => {
+  const sql = c.get('sql')
+  const storageKey = `${c.req.param('folder')}/${c.req.param('file')}`
+
+  const rows = await sql`
+    SELECT id, r2_key, mime_type, encode(file_data, 'hex') as file_hex
+    FROM media_assets
+    WHERE r2_key = ${storageKey} AND deleted_at IS NULL
+  `
+  if (rows.length === 0) return c.json({ error: 'Asset not found' }, 404)
+  const asset = rows[0]
+
+  if (asset.file_hex) {
+    const hex = asset.file_hex
+    const bytes = new Uint8Array(hex.length / 2)
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(hex.substr(i * 2, 2), 16)
+    }
+    return new Response(bytes, {
+      headers: {
+        'Content-Type': asset.mime_type || 'application/octet-stream',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin': '*'
+      }
+    })
+  }
+
+  return c.json({ error: 'Asset binary not found' }, 404)
+})
+
+// ------------------------------------------
+// Public Subscriptions
+// ------------------------------------------
+app.post('/api/subscribe', async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json().catch(() => ({}))
+
+  // Anti-bot honeypot check: website_hp must be empty
+  if (body.website_hp) {
+    // Silently succeed to fool bots without adding data
+    return c.json({ success: true, message: 'Subscribed successfully.' })
+  }
+
+  const email = (body.email || '').trim().toLowerCase()
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return c.json({ error: 'Please provide a valid email address.' }, 400)
+  }
+
+  const token = crypto.randomUUID().replace(/-/g, '')
+  const source = (body.source || 'website').slice(0, 50)
+
+  try {
+    await sql`
+      INSERT INTO subscribers (email, status, token, consent_given, source)
+      VALUES (${email}, 'ACTIVE', ${token}, true, ${source})
+      ON CONFLICT (email) DO UPDATE SET
+        status = 'ACTIVE',
+        consent_given = true,
+        unsubscribed_at = NULL
+    `
+    return c.json({ success: true, message: 'You have subscribed to Silachomka updates!' })
+  } catch (err) {
+    return c.json({ error: 'Unable to complete subscription. Please try again.' }, 500)
+  }
+})
+
+app.get('/api/unsubscribe', async (c) => {
+  const sql = c.get('sql')
+  const token = c.req.query('token')
+
+  if (!token) {
+    return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;max-width:400px;padding:24px;border:1px solid #333;border-radius:8px;"><h2>Invalid Unsubscribe Link</h2><p style="color:#aaa;">Missing unsubscribe token.</p></div></body></html>', 400)
+  }
+
+  try {
+    const result = await sql`
+      UPDATE subscribers
+      SET status = 'UNSUBSCRIBED', unsubscribed_at = NOW()
+      WHERE token = ${token}
+      RETURNING id, email
+    `
+
+    if (result.length === 0) {
+      return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;max-width:400px;padding:24px;border:1px solid #333;border-radius:8px;"><h2>Subscription Not Found</h2><p style="color:#aaa;">The requested subscription link was not found or has already expired.</p></div></body></html>', 404)
+    }
+
+    return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;max-width:400px;padding:24px;border:1px solid #dfc27d;border-radius:8px;"><h2 style="color:#dfc27d;">Unsubscribed Successfully</h2><p style="color:#ddd;">You have been unsubscribed from Silachomka updates.</p><p style="color:#777;font-size:12px;">Email: ' + result[0].email + '</p><a href="https://silachomka.vercel.app" style="color:#dfc27d;text-decoration:none;font-weight:bold;">← Return to Silachomka</a></div></body></html>')
+  } catch (err) {
+    return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;padding:40px;"><h2>Internal Server Error</h2></body></html>', 500)
+  }
+})
+
+// ------------------------------------------
+// Releases
+// ------------------------------------------
 app.get('/api/releases', async (c) => {
   const sql = c.get('sql')
   
-  // R2 is unavailable. We output media paths exactly as they are in the database (which match public/ paths)
-  // We prepend '/' to the r2_key to make it a valid local path for the frontend.
   const releases = await sql`
     SELECT 
       r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.display_date as "displayDate", r.type, 
       r.primary_artist as artist, r.feats_silachomka as "featssilachomka", r.produced_by_silachomka as "producedBysilachomka", 
       r.description, r.sources, r.platforms,
-      '/' || m.r2_key as cover,
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as cover,
       COALESCE(
         (
           SELECT json_agg(json_build_object(
@@ -84,7 +238,8 @@ app.get('/api/releases', async (c) => {
               FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'PRODUCER'
             )
           ) ORDER BY t.track_number)
-          FROM tracks t WHERE t.release_id = r.id
+          FROM tracks t 
+          WHERE t.release_id = r.id AND t.deleted_at IS NULL
         ),
         '[]'::json
       ) as tracks,
@@ -100,13 +255,17 @@ app.get('/api/releases', async (c) => {
             'aspectRatio', mv.aspect_ratio,
             'links', mv.platforms
           ))
-          FROM music_videos mv WHERE mv.related_release_id = r.id AND mv.status = 'PUBLISHED'
+          FROM music_videos mv 
+          WHERE mv.related_release_id = r.id 
+            AND mv.deleted_at IS NULL 
+            AND (mv.status = 'PUBLISHED' OR (mv.status = 'SCHEDULED' AND mv.scheduled_at <= NOW()))
         ),
         '[]'::json
       ) as videos
     FROM releases r
     LEFT JOIN media_assets m ON r.cover_asset_id = m.id
-    WHERE r.status = 'PUBLISHED'
+    WHERE r.deleted_at IS NULL 
+      AND (r.status = 'PUBLISHED' OR (r.status = 'SCHEDULED' AND r.scheduled_at <= NOW()))
     ORDER BY r.release_date DESC
   `
   return c.json(releases)
@@ -121,7 +280,7 @@ app.get('/api/releases/:slug', async (c) => {
       r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.display_date as "displayDate", r.type, 
       r.primary_artist as artist, r.feats_silachomka as "featssilachomka", r.produced_by_silachomka as "producedBysilachomka", 
       r.description, r.sources, r.platforms,
-      '/' || m.r2_key as cover,
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as cover,
       COALESCE(
         (
           SELECT json_agg(json_build_object(
@@ -137,7 +296,8 @@ app.get('/api/releases/:slug', async (c) => {
               FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'PRODUCER'
             )
           ) ORDER BY t.track_number)
-          FROM tracks t WHERE t.release_id = r.id
+          FROM tracks t 
+          WHERE t.release_id = r.id AND t.deleted_at IS NULL
         ),
         '[]'::json
       ) as tracks,
@@ -153,13 +313,50 @@ app.get('/api/releases/:slug', async (c) => {
             'aspectRatio', mv.aspect_ratio,
             'links', mv.platforms
           ))
-          FROM music_videos mv WHERE mv.related_release_id = r.id AND mv.status = 'PUBLISHED'
+          FROM music_videos mv 
+          WHERE mv.related_release_id = r.id 
+            AND mv.deleted_at IS NULL 
+            AND (mv.status = 'PUBLISHED' OR (mv.status = 'SCHEDULED' AND mv.scheduled_at <= NOW()))
         ),
         '[]'::json
-      ) as videos
+      ) as videos,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object(
+            'id', gp.slug,
+            'title', gp.title,
+            'caption', gp.caption,
+            'category', gp.category,
+            'type', gp.post_type,
+            'date', gp.post_date,
+            'displayDate', gp.display_date,
+            'asset', CASE WHEN gpm.file_data IS NOT NULL THEN '/api/media/asset/' || gpm.id ELSE '/' || gpm.r2_key END,
+            'link', gp.legacy_link,
+            'slides', (
+              SELECT COALESCE(json_agg(json_build_object(
+                'id', gs.id,
+                'sortOrder', gs.sort_order,
+                'slideType', gs.slide_type,
+                'asset', CASE WHEN gsm.file_data IS NOT NULL THEN '/api/media/asset/' || gsm.id ELSE '/' || gsm.r2_key END
+              ) ORDER BY gs.sort_order ASC), '[]'::json)
+              FROM gallery_slides gs
+              LEFT JOIN media_assets gsm ON gs.asset_id = gsm.id
+              WHERE gs.post_id = gp.id
+            )
+          ))
+          FROM gallery_posts gp
+          LEFT JOIN media_assets gpm ON gp.primary_asset_id = gpm.id
+          WHERE gp.related_release_id = r.id 
+            AND gp.deleted_at IS NULL 
+            AND (gp.status = 'PUBLISHED' OR (gp.status = 'SCHEDULED' AND gp.scheduled_at <= NOW()))
+        ),
+        '[]'::json
+      ) as "associatedGallery"
     FROM releases r
     LEFT JOIN media_assets m ON r.cover_asset_id = m.id
-    WHERE r.slug = ${slug} AND r.status = 'PUBLISHED'
+    WHERE r.slug = ${slug} 
+      AND r.deleted_at IS NULL 
+      AND (r.status = 'PUBLISHED' OR (r.status = 'SCHEDULED' AND r.scheduled_at <= NOW()))
   `
   
   if (releases.length === 0) return c.json({ error: 'Not found' }, 404)
@@ -181,21 +378,25 @@ app.get('/api/tracks/:id', async (c) => {
         FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'PRODUCER'
       ) as producers
     FROM tracks t
-    WHERE t.id = ${id}
+    WHERE t.id = ${id} AND t.deleted_at IS NULL
   `
   if (tracks.length === 0) return c.json({ error: 'Not found' }, 404)
   return c.json(tracks[0])
 })
 
+// ------------------------------------------
+// Beats
+// ------------------------------------------
 app.get('/api/beats', async (c) => {
   const sql = c.get('sql')
   const beats = await sql`
     SELECT 
       b.id as db_id, b.slug as id, b.title, b.genre, b.short_genre as "shortGenre", b.categories,
       b.bpm, b.beat_key as key, b.producer,
-      '/' || img.r2_key as image,
-      '/' || vid.r2_key as video,
-      '/' || aud.r2_key as audio,
+      b.price_basic as "priceBasic", b.price_premium as "pricePremium", b.price_exclusive as "priceExclusive",
+      CASE WHEN img.file_data IS NOT NULL THEN '/api/media/asset/' || img.id ELSE '/' || img.r2_key END as image,
+      CASE WHEN vid.file_data IS NOT NULL THEN '/api/media/asset/' || vid.id ELSE '/' || vid.r2_key END as video,
+      CASE WHEN aud.file_data IS NOT NULL THEN '/api/media/asset/' || aud.id ELSE '/' || aud.r2_key END as audio,
       json_build_object(
         'basic', b.selar_basic_url,
         'premium', b.selar_premium_url,
@@ -205,7 +406,8 @@ app.get('/api/beats', async (c) => {
     LEFT JOIN media_assets img ON b.image_asset_id = img.id
     LEFT JOIN media_assets vid ON b.video_asset_id = vid.id
     LEFT JOIN media_assets aud ON b.audio_asset_id = aud.id
-    WHERE b.status = 'PUBLISHED'
+    WHERE b.deleted_at IS NULL 
+      AND (b.status = 'PUBLISHED' OR (b.status = 'SCHEDULED' AND b.scheduled_at <= NOW()))
     ORDER BY b.created_at DESC
   `
   return c.json(beats)
@@ -218,9 +420,10 @@ app.get('/api/beats/:slug', async (c) => {
     SELECT 
       b.id as db_id, b.slug as id, b.title, b.genre, b.short_genre as "shortGenre", b.categories,
       b.bpm, b.beat_key as key, b.producer,
-      '/' || img.r2_key as image,
-      '/' || vid.r2_key as video,
-      '/' || aud.r2_key as audio,
+      b.price_basic as "priceBasic", b.price_premium as "pricePremium", b.price_exclusive as "priceExclusive",
+      CASE WHEN img.file_data IS NOT NULL THEN '/api/media/asset/' || img.id ELSE '/' || img.r2_key END as image,
+      CASE WHEN vid.file_data IS NOT NULL THEN '/api/media/asset/' || vid.id ELSE '/' || vid.r2_key END as video,
+      CASE WHEN aud.file_data IS NOT NULL THEN '/api/media/asset/' || aud.id ELSE '/' || aud.r2_key END as audio,
       json_build_object(
         'basic', b.selar_basic_url,
         'premium', b.selar_premium_url,
@@ -230,12 +433,17 @@ app.get('/api/beats/:slug', async (c) => {
     LEFT JOIN media_assets img ON b.image_asset_id = img.id
     LEFT JOIN media_assets vid ON b.video_asset_id = vid.id
     LEFT JOIN media_assets aud ON b.audio_asset_id = aud.id
-    WHERE b.slug = ${slug} AND b.status = 'PUBLISHED'
+    WHERE b.slug = ${slug} 
+      AND b.deleted_at IS NULL 
+      AND (b.status = 'PUBLISHED' OR (b.status = 'SCHEDULED' AND b.scheduled_at <= NOW()))
   `
   if (beats.length === 0) return c.json({ error: 'Not found' }, 404)
   return c.json(beats[0])
 })
 
+// ------------------------------------------
+// Music Videos
+// ------------------------------------------
 app.get('/api/music-videos', async (c) => {
   const sql = c.get('sql')
   const videos = await sql`
@@ -249,7 +457,8 @@ app.get('/api/music-videos', async (c) => {
         '[]'::json
       ) as featuring
     FROM music_videos v
-    WHERE v.status = 'PUBLISHED'
+    WHERE v.deleted_at IS NULL 
+      AND (v.status = 'PUBLISHED' OR (v.status = 'SCHEDULED' AND v.scheduled_at <= NOW()))
     ORDER BY v.created_at DESC
   `
   return c.json(videos)
@@ -267,18 +476,23 @@ app.get('/api/music-videos/:slug', async (c) => {
         '[]'::json
       ) as featuring
     FROM music_videos v
-    WHERE v.slug = ${slug} AND v.status = 'PUBLISHED'
+    WHERE v.slug = ${slug} 
+      AND v.deleted_at IS NULL 
+      AND (v.status = 'PUBLISHED' OR (v.status = 'SCHEDULED' AND v.scheduled_at <= NOW()))
   `
   if (videos.length === 0) return c.json({ error: 'Not found' }, 404)
   return c.json(videos[0])
 })
 
+// ------------------------------------------
+// Social Links
+// ------------------------------------------
 app.get('/api/social-links', async (c) => {
   const sql = c.get('sql')
   const links = await sql`
     SELECT name, handle, url, platform, category, role, link_type
     FROM social_links
-    WHERE is_active = true
+    WHERE is_active = true AND deleted_at IS NULL
     ORDER BY sort_order ASC
   `
   return c.json({
@@ -287,17 +501,35 @@ app.get('/api/social-links', async (c) => {
   })
 })
 
+// ------------------------------------------
+// Gallery
+// ------------------------------------------
 app.get('/api/gallery', async (c) => {
   const sql = c.get('sql')
   const posts = await sql`
     SELECT 
       g.slug as id, g.title, g.caption, g.category, g.post_type as type,
       g.post_date as date, g.display_date as "displayDate",
-      '/' || m.r2_key as asset,
-      g.legacy_link as link
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as asset,
+      g.legacy_link as link,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object(
+            'id', gs.id,
+            'sortOrder', gs.sort_order,
+            'slideType', gs.slide_type,
+            'asset', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END
+          ) ORDER BY gs.sort_order ASC)
+          FROM gallery_slides gs
+          LEFT JOIN media_assets sm ON gs.asset_id = sm.id
+          WHERE gs.post_id = g.id
+        ),
+        '[]'::json
+      ) as slides
     FROM gallery_posts g
     LEFT JOIN media_assets m ON g.primary_asset_id = m.id
-    WHERE g.status = 'PUBLISHED'
+    WHERE g.deleted_at IS NULL 
+      AND (g.status = 'PUBLISHED' OR (g.status = 'SCHEDULED' AND g.scheduled_at <= NOW()))
     ORDER BY g.post_date DESC
   `
   return c.json(posts)
@@ -310,11 +542,27 @@ app.get('/api/gallery/:slug', async (c) => {
     SELECT 
       g.slug as id, g.title, g.caption, g.category, g.post_type as type,
       g.post_date as date, g.display_date as "displayDate",
-      '/' || m.r2_key as asset,
-      g.legacy_link as link
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as asset,
+      g.legacy_link as link,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object(
+            'id', gs.id,
+            'sortOrder', gs.sort_order,
+            'slideType', gs.slide_type,
+            'asset', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END
+          ) ORDER BY gs.sort_order ASC)
+          FROM gallery_slides gs
+          LEFT JOIN media_assets sm ON gs.asset_id = sm.id
+          WHERE gs.post_id = g.id
+        ),
+        '[]'::json
+      ) as slides
     FROM gallery_posts g
     LEFT JOIN media_assets m ON g.primary_asset_id = m.id
-    WHERE g.slug = ${slug} AND g.status = 'PUBLISHED'
+    WHERE g.slug = ${slug} 
+      AND g.deleted_at IS NULL 
+      AND (g.status = 'PUBLISHED' OR (g.status = 'SCHEDULED' AND g.scheduled_at <= NOW()))
   `
   if (posts.length === 0) return c.json({ error: 'Not found' }, 404)
   return c.json(posts[0])
@@ -412,10 +660,77 @@ app.get('/api/admin/me', adminAuth, (c) => {
 // Admin CRUD Routes
 // ==========================================
 
-import { adminApp } from './admin/crud.js'
+import { adminApp, queueSubscriberNotifications } from './admin/crud.js'
 
 // Mount the admin router under /api/admin
 // The adminApp router internally protects all its routes with adminAuth
 app.route('/api/admin', adminApp)
 
-export default app
+// ==========================================
+// Scheduled Cron Handler (Publishing & 60-day Retention Purge)
+// ==========================================
+
+async function handleScheduledPublishing(env) {
+  if (!env.DATABASE_URL) return
+  const sql = neon(env.DATABASE_URL)
+
+  try {
+    // 1. Automatically promote scheduled releases whose release time has arrived
+    const publishedReleases = await sql`
+      UPDATE releases
+      SET status = 'PUBLISHED', updated_at = NOW()
+      WHERE status = 'SCHEDULED' AND scheduled_at <= NOW() AND deleted_at IS NULL
+      RETURNING id, title
+    `
+    for (const r of publishedReleases) {
+      await queueSubscriberNotifications(sql, 'release', r.id, r.title)
+    }
+
+    // 2. Automatically promote scheduled beats
+    await sql`
+      UPDATE beats
+      SET status = 'PUBLISHED', updated_at = NOW()
+      WHERE status = 'SCHEDULED' AND scheduled_at <= NOW() AND deleted_at IS NULL
+    `
+
+    // 3. Automatically promote scheduled music videos
+    await sql`
+      UPDATE music_videos
+      SET status = 'PUBLISHED', updated_at = NOW()
+      WHERE status = 'SCHEDULED' AND scheduled_at <= NOW() AND deleted_at IS NULL
+    `
+
+    // 4. Automatically promote scheduled gallery posts
+    await sql`
+      UPDATE gallery_posts
+      SET status = 'PUBLISHED', updated_at = NOW()
+      WHERE status = 'SCHEDULED' AND scheduled_at <= NOW() AND deleted_at IS NULL
+    `
+
+    // 5. Automated 60-day Recycle Bin purge
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
+    await Promise.all([
+      sql`DELETE FROM releases WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+      sql`DELETE FROM tracks WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+      sql`DELETE FROM beats WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+      sql`DELETE FROM music_videos WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+      sql`DELETE FROM gallery_posts WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+      sql`DELETE FROM media_assets WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+      sql`DELETE FROM social_links WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+      sql`DELETE FROM merchandise WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+    ])
+  } catch (err) {
+    console.error('Scheduled cron execution error:', err.message)
+  }
+}
+
+export default {
+  fetch: app.fetch,
+  async scheduled(event, env, ctx) {
+    if (ctx && ctx.waitUntil) {
+      ctx.waitUntil(handleScheduledPublishing(env))
+    } else {
+      await handleScheduledPublishing(env)
+    }
+  }
+}

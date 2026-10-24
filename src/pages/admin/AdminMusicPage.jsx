@@ -8,6 +8,39 @@ import "./admin.css";
 
 const slugify = (text) => (text || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
+const formatReleaseDisplayDate = (isoString) => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const dayName = days[d.getUTCDay()];
+  const dayNum = d.getUTCDate();
+  const monthName = months[d.getUTCMonth()];
+  const year = d.getUTCFullYear();
+  
+  const suffix = (n) => {
+    if (n > 3 && n < 21) return 'th';
+    switch (n % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
+  };
+  
+  return `${dayName}, ${dayNum}${suffix(dayNum)} ${monthName}, ${year}`;
+};
+
+const generateReleaseDescription = ({ title, primary_artist, sources }) => {
+  const cleanTitle = (title || '').trim();
+  const artist = (primary_artist || 'silachomka').trim();
+  const srcList = Array.isArray(sources) && sources.length > 0 ? sources : ['chomkaMUSIC™'];
+  const cleanSources = srcList.join(' & ');
+  if (!cleanTitle) return '';
+  return `${cleanTitle} is an official studio release by ${artist} published under ${cleanSources}.`;
+};
+
 const AdminMusicPage = () => {
   const [releases, setReleases] = useState([]);
   const [mediaAssets, setMediaAssets] = useState([]);
@@ -26,7 +59,11 @@ const AdminMusicPage = () => {
   });
 
   const [currentRelease, setCurrentRelease] = useState(null);
+  const [releaseDatePart, setReleaseDatePart] = useState("");
+  const [releaseTimePart, setReleaseTimePart] = useState("00:00");
+  const [isCustomDescription, setIsCustomDescription] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -68,36 +105,70 @@ const AdminMusicPage = () => {
   }, []);
 
   const handleCreateClick = () => {
+    const today = new Date().toISOString().split("T")[0];
+    const initialReleaseDate = `${today}T12:00:00.000Z`;
+    const defaultSources = ["chomkaMUSIC™"];
+    const defaultDesc = generateReleaseDescription({
+      title: "",
+      primary_artist: "silachomka",
+      sources: defaultSources
+    });
     setCurrentRelease({
       title: "",
       slug: "",
       type: "single",
-      release_date: new Date().toISOString().split("T")[0],
-      display_date: "",
+      release_date: initialReleaseDate,
+      display_date: formatReleaseDisplayDate(initialReleaseDate),
       primary_artist: "silachomka",
-      description: "",
+      description: defaultDesc,
       cover_asset_id: null,
       platforms: {},
-      sources: ["chomkaMUSIC™"],
+      sources: defaultSources,
       edition: 1,
       feats_silachomka: false,
       produced_by_silachomka: true,
       status: "PUBLISHED"
     });
+    setReleaseDatePart(today);
+    setReleaseTimePart("12:00");
+    setIsCustomDescription(false);
     setNewSourceInput("");
     setView("CREATE");
     setError(null);
+    setSaveSuccess(false);
   };
 
   const handleEditClick = (release) => {
+    let datePart = "";
+    let timePart = "00:00";
+    if (release.release_date) {
+      const d = new Date(release.release_date);
+      if (!isNaN(d.getTime())) {
+        datePart = d.toISOString().split("T")[0];
+        timePart = d.toISOString().split("T")[1]?.slice(0, 5) || "00:00";
+      }
+    }
+    const currentSources = Array.isArray(release.sources) ? release.sources : (release.sources ? [release.sources] : ["chomkaMUSIC™"]);
+    const canonicalDesc = generateReleaseDescription({
+      title: release.title,
+      primary_artist: release.primary_artist,
+      sources: currentSources
+    });
+    const isCustom = release.description ? release.description.trim() !== canonicalDesc.trim() : false;
+
     setCurrentRelease({
       ...release,
-      sources: Array.isArray(release.sources) ? release.sources : (release.sources ? [release.sources] : ["chomkaMUSIC™"]),
-      platforms: release.platforms && typeof release.platforms === "object" ? release.platforms : {}
+      sources: currentSources,
+      platforms: release.platforms && typeof release.platforms === "object" ? release.platforms : {},
+      display_date: release.display_date || formatReleaseDisplayDate(release.release_date)
     });
+    setReleaseDatePart(datePart);
+    setReleaseTimePart(timePart);
+    setIsCustomDescription(isCustom);
     setNewSourceInput("");
     setView("EDIT");
     setError(null);
+    setSaveSuccess(false);
   };
 
   const handleCancelForm = (e) => {
@@ -115,6 +186,46 @@ const AdminMusicPage = () => {
     }));
   };
 
+  const handleDateTimeChange = (newDatePart, newTimePart) => {
+    setReleaseDatePart(newDatePart);
+    setReleaseTimePart(newTimePart);
+    if (newDatePart) {
+      const timeStr = newTimePart ? `${newTimePart}:00` : "00:00:00";
+      const combinedIso = new Date(`${newDatePart}T${timeStr}Z`).toISOString();
+      const derivedDisplay = formatReleaseDisplayDate(combinedIso);
+      setCurrentRelease(prev => ({
+        ...prev,
+        release_date: combinedIso,
+        display_date: derivedDisplay
+      }));
+    }
+  };
+
+  const handleTitleOrArtistOrSourcesChange = (updatedFields) => {
+    setCurrentRelease(prev => {
+      const next = { ...prev, ...updatedFields };
+      if (!isCustomDescription) {
+        next.description = generateReleaseDescription({
+          title: next.title,
+          primary_artist: next.primary_artist,
+          sources: next.sources
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleRegenerateDescription = () => {
+    if (!currentRelease) return;
+    const desc = generateReleaseDescription({
+      title: currentRelease.title,
+      primary_artist: currentRelease.primary_artist,
+      sources: currentRelease.sources
+    });
+    setCurrentRelease(prev => ({ ...prev, description: desc }));
+    setIsCustomDescription(false);
+  };
+
   // Sources Management
   const handleAddSource = (e) => {
     e.preventDefault();
@@ -123,7 +234,16 @@ const AdminMusicPage = () => {
     setCurrentRelease(prev => {
       const currentSources = Array.isArray(prev.sources) ? prev.sources : [];
       if (currentSources.includes(trimmed)) return prev;
-      return { ...prev, sources: [...currentSources, trimmed] };
+      const newSources = [...currentSources, trimmed];
+      const updated = { ...prev, sources: newSources };
+      if (!isCustomDescription) {
+        updated.description = generateReleaseDescription({
+          title: updated.title,
+          primary_artist: updated.primary_artist,
+          sources: newSources
+        });
+      }
+      return updated;
     });
     setNewSourceInput("");
   };
@@ -131,7 +251,16 @@ const AdminMusicPage = () => {
   const handleRemoveSource = (sourceToRemove) => {
     setCurrentRelease(prev => {
       const currentSources = Array.isArray(prev.sources) ? prev.sources : [];
-      return { ...prev, sources: currentSources.filter(s => s !== sourceToRemove) };
+      const newSources = currentSources.filter(s => s !== sourceToRemove);
+      const updated = { ...prev, sources: newSources };
+      if (!isCustomDescription) {
+        updated.description = generateReleaseDescription({
+          title: updated.title,
+          primary_artist: updated.primary_artist,
+          sources: newSources
+        });
+      }
+      return updated;
     });
   };
 
@@ -149,15 +278,20 @@ const AdminMusicPage = () => {
       return;
     }
 
+    // Auto-generate slug on create, or preserve on edit
     let slug = currentRelease.slug ? currentRelease.slug.trim() : slugify(currentRelease.title);
     if (!slug) {
-      slug = "release-" + Date.now();
+      slug = slugify(currentRelease.title) || ("release-" + Date.now());
     }
+
+    // Canonical display date derived from release timestamp
+    const canonicalDisplayDate = formatReleaseDisplayDate(currentRelease.release_date);
 
     try {
       const payload = {
         ...currentRelease,
-        slug
+        slug,
+        display_date: canonicalDisplayDate
       };
 
       const nullableFields = ["number", "display_date", "description", "cover_asset_id"];
@@ -188,6 +322,8 @@ const AdminMusicPage = () => {
         await fetchData();
         setCurrentRelease(updated);
       }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
       setError(null);
     } catch (err) {
       setError(err.message || "Failed to save release.");
@@ -331,7 +467,8 @@ const AdminMusicPage = () => {
   const getCoverUrl = (coverAssetId) => {
     if (!coverAssetId) return null;
     const asset = mediaAssets.find(m => m.id === coverAssetId);
-    return asset ? '/' + asset.r2_key : null;
+    if (!asset) return null;
+    return asset.has_file_data ? `/api/media/asset/${asset.id}` : '/' + asset.r2_key;
   };
 
   if (isLoading && view === "LIST") {
@@ -366,11 +503,33 @@ const AdminMusicPage = () => {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Project Title *</label>
-              <input type="text" name="title" className="studio-input" value={currentRelease.title || ""} onChange={handleChange} required disabled={isSaving} placeholder="e.g. HORUS" />
+              <input 
+                type="text" 
+                name="title" 
+                className="studio-input" 
+                value={currentRelease.title || ""} 
+                onChange={(e) => {
+                  handleChange(e);
+                  handleTitleOrArtistOrSourcesChange({ title: e.target.value });
+                }} 
+                required 
+                disabled={isSaving} 
+                placeholder="e.g. HORUS" 
+              />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Slug (URL identifier)</label>
-              <input type="text" name="slug" className="studio-input" value={currentRelease.slug || ""} onChange={handleChange} disabled={isSaving} placeholder="Auto-generated from title if blank" />
+              <label>Primary Artist</label>
+              <input 
+                type="text" 
+                name="primary_artist" 
+                className="studio-input" 
+                value={currentRelease.primary_artist || "silachomka"} 
+                onChange={(e) => {
+                  handleChange(e);
+                  handleTitleOrArtistOrSourcesChange({ primary_artist: e.target.value });
+                }} 
+                disabled={isSaving} 
+              />
             </div>
           </div>
 
@@ -384,30 +543,110 @@ const AdminMusicPage = () => {
               </select>
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Release Date * (Editable)</label>
-              <input type="date" name="release_date" className="studio-input" value={currentRelease.release_date ? currentRelease.release_date.split("T")[0] : ""} onChange={handleChange} required disabled={isSaving} />
+              <label>Release Date *</label>
+              <input 
+                type="date" 
+                name="release_date_part" 
+                className="studio-input" 
+                value={releaseDatePart} 
+                onChange={(e) => handleDateTimeChange(e.target.value, releaseTimePart)} 
+                required 
+                disabled={isSaving} 
+              />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Display Date (Formatted)</label>
-              <input type="text" name="display_date" className="studio-input" value={currentRelease.display_date || ""} onChange={handleChange} disabled={isSaving} placeholder="e.g. Saturday, 15th March, 2025" />
+              <label>Release Time</label>
+              <input 
+                type="time" 
+                name="release_time_part" 
+                className="studio-input" 
+                value={releaseTimePart} 
+                onChange={(e) => handleDateTimeChange(releaseDatePart, e.target.value)} 
+                disabled={isSaving} 
+              />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Status</label>
               <select name="status" className="studio-input" value={currentRelease.status || "DRAFT"} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
                 <option value="DRAFT">Draft</option>
                 <option value="PUBLISHED">Published</option>
+                <option value="SCHEDULED">Scheduled</option>
               </select>
             </div>
+            <div className="studio-field" style={{ textAlign: "left" }}>
+              <label>Schedule Publication (Optional)</label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input 
+                  type="datetime-local" 
+                  name="scheduled_at" 
+                  className="studio-input" 
+                  value={currentRelease.scheduled_at ? currentRelease.scheduled_at.slice(0, 16) : ""} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCurrentRelease(prev => ({
+                      ...prev,
+                      scheduled_at: val ? new Date(val).toISOString() : null,
+                      status: val ? "SCHEDULED" : (prev.status === "SCHEDULED" ? "PUBLISHED" : prev.status)
+                    }));
+                  }} 
+                  disabled={isSaving} 
+                />
+                {currentRelease.scheduled_at && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentRelease(prev => ({
+                        ...prev,
+                        scheduled_at: null,
+                        status: prev.status === "SCHEDULED" ? "PUBLISHED" : prev.status
+                      }));
+                    }}
+                    className="studio-pill-btn"
+                    style={{ fontSize: 11, whiteSpace: "nowrap" }}
+                    title="Publish immediately / clear schedule"
+                  >
+                    Clear (Publish Now)
+                  </button>
+                )}
+              </div>
+              {currentRelease.scheduled_at && (
+                <span style={{ fontSize: 11, color: "var(--gold)", marginTop: 4, display: "block" }}>
+                  ⏰ Scheduled for {new Date(currentRelease.scheduled_at).toLocaleString()}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, color: "var(--muted)", margin: "-8px 0 4px" }}>
+            Canonical Display Date: <strong style={{ color: "var(--gold)" }}>{formatReleaseDisplayDate(currentRelease.release_date) || "—"}</strong>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "16px" }}>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Primary Artist</label>
-              <input type="text" name="primary_artist" className="studio-input" value={currentRelease.primary_artist || "silachomka"} onChange={handleChange} disabled={isSaving} />
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Description / Liner Notes</label>
-              <textarea name="description" className="studio-input" style={{ minHeight: "80px", resize: "vertical" }} value={currentRelease.description || ""} onChange={handleChange} disabled={isSaving} placeholder="Project description, inspiration, and liner notes..." />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <label style={{ margin: 0 }}>Description / Liner Notes</label>
+                <button
+                  type="button"
+                  onClick={handleRegenerateDescription}
+                  className="studio-pill-btn"
+                  style={{ fontSize: 11 }}
+                  title="Reset description to official canonical format"
+                >
+                  Regenerate Default Description
+                </button>
+              </div>
+              <textarea 
+                name="description" 
+                className="studio-input" 
+                style={{ minHeight: "80px", resize: "vertical" }} 
+                value={currentRelease.description || ""} 
+                onChange={(e) => {
+                  setIsCustomDescription(true);
+                  handleChange(e);
+                }} 
+                disabled={isSaving} 
+                placeholder="Project description, inspiration, and liner notes..." 
+              />
             </div>
           </div>
 
@@ -474,7 +713,12 @@ const AdminMusicPage = () => {
               label="Release Cover Art"
               assetType="IMAGE"
               value={currentRelease.cover_asset_id}
-              onChange={(id) => setCurrentRelease(prev => ({ ...prev, cover_asset_id: id }))}
+              onChange={(id, assetRecord) => {
+                setCurrentRelease(prev => ({ ...prev, cover_asset_id: id }));
+                if (assetRecord) {
+                  setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
+                }
+              }}
               disabled={isSaving}
               hint="Select or upload high-resolution cover artwork for this project."
             />
@@ -783,7 +1027,28 @@ const AdminMusicPage = () => {
             <AdminViewToggle viewMode={viewMode} onChange={setViewMode} />
           </div>
         </div>
-        <button className="primary-button" onClick={handleCreateClick}>+ Create Release Project</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {saveSuccess && (
+            <div style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(34, 197, 94, 0.15)",
+              border: "1px solid rgba(34, 197, 94, 0.4)",
+              color: "#86efac",
+              padding: "6px 14px",
+              borderRadius: "4px",
+              fontSize: "12px",
+              fontWeight: 500
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Saved successfully
+            </div>
+          )}
+          <button className="primary-button" onClick={handleCreateClick}>+ Create Release Project</button>
+        </div>
       </div>
 
       {error && <div className="admin-login-error" style={{ marginBottom: 16 }}>{error}</div>}
@@ -826,7 +1091,7 @@ const AdminMusicPage = () => {
                       fontSize: 10, 
                       fontWeight: 700, 
                       textTransform: "uppercase",
-                      background: release.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.9)" : "rgba(245, 158, 11, 0.9)",
+                      background: release.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.9)" : release.status === "SCHEDULED" ? "rgba(56, 189, 248, 0.9)" : "rgba(245, 158, 11, 0.9)",
                       color: "#000"
                     }}>
                       {release.status || "DRAFT"}
@@ -932,8 +1197,8 @@ const AdminMusicPage = () => {
                         fontSize: 10, 
                         fontWeight: 700, 
                         textTransform: "uppercase",
-                        background: release.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
-                        color: release.status === "PUBLISHED" ? "#34d399" : "#fbbf24"
+                        background: release.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.1)" : release.status === "SCHEDULED" ? "rgba(56, 189, 248, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                        color: release.status === "PUBLISHED" ? "#34d399" : release.status === "SCHEDULED" ? "#38bdf8" : "#fbbf24"
                       }}>
                         {release.status || "DRAFT"}
                       </span>
