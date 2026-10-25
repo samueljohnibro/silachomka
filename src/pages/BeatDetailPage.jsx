@@ -4,6 +4,7 @@ import { PlayIcon, PauseIcon, LeftArrowIcon, RightArrowIcon , UpRightArrowIcon, 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
+import { useSelarPricing } from "../data/useSelarPricing";
 import SeoHead from "../components/SeoHead";
 import ShareLinkBox from "../components/ShareLinkBox";
 import {
@@ -17,6 +18,7 @@ export default function BeatDetailPage() {
   const [searchParams] = useSearchParams();
   const licenseParam = searchParams.get("license");
   const { beats } = useChomkaStore();
+  const { currency, setCurrency, supportedCurrencies, getBeatPrice } = useSelarPricing();
 
   /* Locate the authoritative beat */
   const beat = useMemo(() => {
@@ -151,12 +153,20 @@ export default function BeatDetailPage() {
     audioRef.current.currentTime = Math.min(duration, ct + 5);
   };
 
-  /* Studio Licensing Framework Matrix with Naira prices */
+  /* Authoritative Selar Licensing Framework Matrix */
+  const selarBasic = getBeatPrice(beat, "basic");
+  const selarPremium = getBeatPrice(beat, "premium");
+  const selarUltimate = getBeatPrice(beat, "ultimate");
+
+  const basicPriceFormatted = selarBasic?.formatted || (currency === "NGN" ? "₦15,000" : "From Selar");
+  const premiumPriceFormatted = selarPremium?.formatted || (currency === "NGN" ? "₦30,000" : "From Selar");
+  const ultimatePriceFormatted = selarUltimate?.formatted || (currency === "NGN" ? "₦60,000" : "From Selar");
+
   const LICENSES = {
     basic: {
       name: "Standard Lease",
       short: "Basic",
-      price: "₦15,000",
+      price: basicPriceFormatted,
       priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
       perks: [
         "✓ High-Quality MP3 Audio File",
@@ -164,12 +174,13 @@ export default function BeatDetailPage() {
         "✓ Credit: (Prod. silachomka)",
         "✓ Instant Delivery via Selar",
       ],
-      btnText: "Purchase Standard Lease (₦15,000) on Selar",
+      btnText: `Purchase Standard Lease (${basicPriceFormatted}) on Selar`,
+      url: selarBasic?.url || beat?.selar?.basic || beat?.selar_basic_url,
     },
     premium: {
       name: "Premium WAV",
       short: "Premium",
-      price: "₦30,000",
+      price: premiumPriceFormatted,
       priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
       perks: [
         "✓ 24-bit Studio Master WAV + MP3",
@@ -177,12 +188,13 @@ export default function BeatDetailPage() {
         "✓ High-Definition Mix Delivery",
         "✓ Instant Delivery via Selar",
       ],
-      btnText: "Purchase Premium WAV (₦30,000) on Selar",
+      btnText: `Purchase Premium WAV (${premiumPriceFormatted}) on Selar`,
+      url: selarPremium?.url || beat?.selar?.premium || beat?.selar_premium_url,
     },
     ultimate: {
       name: "Trackout Stems",
       short: "Ultimate",
-      price: "₦60,000",
+      price: ultimatePriceFormatted,
       priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
       perks: [
         "✓ Full Multi-Track Audio Stems (WAV)",
@@ -190,7 +202,8 @@ export default function BeatDetailPage() {
         "✓ Music Video & Sync Clearance",
         "✓ Instant Delivery via Selar",
       ],
-      btnText: "Purchase Trackout Stems (₦60,000) on Selar",
+      btnText: `Purchase Trackout Stems (${ultimatePriceFormatted}) on Selar`,
+      url: selarUltimate?.url || beat?.selar?.ultimate || beat?.selar_ultimate_url,
     },
     exclusive: {
       name: "Exclusive Buyout",
@@ -204,6 +217,7 @@ export default function BeatDetailPage() {
         "✓ Direct Studio Consultation with silachomka",
       ],
       btnText: "Submit Exclusive Acquisition Offer",
+      url: "#offer-form",
     },
   };
 
@@ -422,7 +436,34 @@ export default function BeatDetailPage() {
               DYNAMIC LICENSING SELECTOR ENGINE
               =============================================== */}
           <div className="licensing-selector-container">
-            <div className="platform-section-title">Licensing Options</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
+              <div className="platform-section-title" style={{ margin: 0 }}>Licensing Options</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Currency:</span>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    color: "var(--gold)",
+                    padding: "4px 8px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    outline: "none"
+                  }}
+                  aria-label="Select license currency"
+                >
+                  {supportedCurrencies.map((c) => (
+                    <option key={c.code} value={c.code} style={{ background: "#111", color: "#fff" }}>
+                      {c.code} ({c.symbol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             
             {/* Tabs */}
             <div className="license-tabs" role="tablist">
@@ -455,9 +496,9 @@ export default function BeatDetailPage() {
                 ))}
               </ul>
 
-              {beat.selar?.[selectedLicense] ? (
+              {activeLicenseData.url && activeLicenseData.url.startsWith("http") ? (
                 <a 
-                  href={beat.selar[selectedLicense]} 
+                  href={activeLicenseData.url} 
                   target="_blank"
                   rel="noopener noreferrer"
                   className="license-buy-btn"

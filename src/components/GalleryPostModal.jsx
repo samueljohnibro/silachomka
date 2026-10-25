@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import ShareLinkBox from "./ShareLinkBox";
 import { absoluteUrl, DEFAULT_SOURCE } from "../data/credits";
+import { formatGalleryDate } from "../utils/dateFormatter";
 
 function isVideoSrc(src) {
   if (!src || typeof src !== "string") return false;
@@ -207,7 +208,7 @@ export default function GalleryPostModal({
                   </span>
                 </div>
               </div>
-              <span className="gallery-modal-date">{post.displayDate || post.date}</span>
+              <span className="gallery-modal-date">{formatGalleryDate(post.displayDate || post.date)}</span>
             </div>
 
             {/* Scrollable Caption Body */}

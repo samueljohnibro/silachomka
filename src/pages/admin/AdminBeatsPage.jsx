@@ -10,6 +10,7 @@ const slugify = (text) => (text || '').toLowerCase().trim().replace(/[^a-z0-9]+/
 const AdminBeatsPage = () => {
   const [beats, setBeats] = useState([]);
   const [mediaAssets, setMediaAssets] = useState([]);
+  const [selarPricing, setSelarPricing] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [view, setView] = useState('LIST'); // LIST, CREATE, EDIT
@@ -29,17 +30,19 @@ const AdminBeatsPage = () => {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Fetch list
+  // Fetch list and Selar authoritative pricing
   const fetchBeats = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [beatsData, mediaData] = await Promise.all([
+      const [beatsData, mediaData, pricingData] = await Promise.all([
         adminApi.getBeats(),
-        adminApi.getMediaAssets().catch(() => [])
+        adminApi.getMediaAssets().catch(() => []),
+        fetch('/api/beats/pricing?currency=NGN').then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
       setBeats(beatsData);
       setMediaAssets(mediaData);
+      if (pricingData?.success) setSelarPricing(pricingData);
     } catch (err) {
       setError(err.message || 'Failed to load beats.');
     } finally {
@@ -51,14 +54,27 @@ const AdminBeatsPage = () => {
     fetchBeats();
   }, []);
 
+  const getSelarBeatPrice = (beat, tier) => {
+    if (!beat || !selarPricing?.products) return null;
+    const urlField = tier === 'basic' ? beat.selar_basic_url : (tier === 'premium' ? beat.selar_premium_url : beat.selar_ultimate_url);
+    if (urlField) {
+      const slug = urlField.split('/').pop()?.split('?')[0];
+      if (slug && selarPricing.products[slug]) {
+        return selarPricing.products[slug].formatted;
+      }
+    }
+    const normalized = (beat.slug || '').replace(/[^a-z0-9]/g, '');
+    if (selarPricing.byBeat?.[normalized]?.[tier]) {
+      return selarPricing.byBeat[normalized][tier].formatted;
+    }
+    return null;
+  };
+
   const handleEditClick = (beat) => {
     const rawGenre = (beat.short_genre || beat.genre || '').replace(/\s+type\s+beat$/i, '').trim();
     setCurrentBeat({ 
       ...beat,
       genre: rawGenre,
-      price_basic: beat.price_basic !== undefined && beat.price_basic !== null ? Number(beat.price_basic) : 15000,
-      price_premium: beat.price_premium !== undefined && beat.price_premium !== null ? Number(beat.price_premium) : 30000,
-      price_exclusive: beat.price_exclusive !== undefined && beat.price_exclusive !== null ? Number(beat.price_exclusive) : 60000
     });
     setView('EDIT');
     setError(null);
@@ -81,9 +97,6 @@ const AdminBeatsPage = () => {
       selar_basic_url: '',
       selar_premium_url: '',
       selar_ultimate_url: '',
-      price_basic: 15000,
-      price_premium: 30000,
-      price_exclusive: 60000,
       status: 'PUBLISHED',
       created_at: new Date().toISOString().split('T')[0],
       categories: []
@@ -120,15 +133,6 @@ const AdminBeatsPage = () => {
       return;
     }
 
-    // Validate license prices
-    const pBasic = Number(currentBeat.price_basic);
-    const pPremium = Number(currentBeat.price_premium);
-    const pExclusive = Number(currentBeat.price_exclusive);
-    if (isNaN(pBasic) || pBasic < 0 || isNaN(pPremium) || pPremium < 0 || isNaN(pExclusive) || pExclusive < 0) {
-      setError('License prices must be valid non-negative numbers.');
-      return;
-    }
-    
     // Auto-generate slug on create, or preserve on edit
     let slug = currentBeat.slug ? currentBeat.slug.trim() : slugify(currentBeat.title);
     if (!slug) {
@@ -147,9 +151,6 @@ const AdminBeatsPage = () => {
         slug,
         genre: finalGenre,
         short_genre: finalShortGenre,
-        price_basic: pBasic,
-        price_premium: pPremium,
-        price_exclusive: pExclusive
       };
 
       // Sanitize nullable fields
@@ -260,58 +261,58 @@ const AdminBeatsPage = () => {
             </div>
           </div>
 
-          <h3 style={{ fontSize: 14, color: 'var(--gold)', marginTop: '8px', marginBottom: '4px' }}>License Pricing</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-            <div className="studio-field" style={{ textAlign: 'left' }}>
-              <label>Basic License Price (₦ NGN)</label>
-              <input 
-                type="number" 
-                name="price_basic" 
-                className="studio-input" 
-                value={currentBeat.price_basic !== undefined ? currentBeat.price_basic : ''} 
-                onChange={handleChange} 
-                disabled={isSaving} 
-                placeholder="15000" 
-                min="0"
-                step="500"
-              />
-              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
-                Standard lease (HQ MP3)
+          {/* Authoritative Selar License Pricing Card */}
+          <div style={{
+            padding: '16px 20px',
+            background: 'rgba(223, 194, 125, 0.04)',
+            border: '1px solid rgba(223, 194, 125, 0.25)',
+            borderRadius: '8px',
+            marginTop: '8px',
+            marginBottom: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+              <h3 style={{ fontSize: 14, color: 'var(--gold)', margin: 0, fontWeight: 600 }}>
+                👑 Authoritative Selar License Pricing
+              </h3>
+              <span style={{
+                fontSize: 11,
+                padding: '2px 8px',
+                borderRadius: '3px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                color: '#34d399',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4
+              }}>
+                ● Selar Store Connected
               </span>
             </div>
-            <div className="studio-field" style={{ textAlign: 'left' }}>
-              <label>Premium License Price (₦ NGN)</label>
-              <input 
-                type="number" 
-                name="price_premium" 
-                className="studio-input" 
-                value={currentBeat.price_premium !== undefined ? currentBeat.price_premium : ''} 
-                onChange={handleChange} 
-                disabled={isSaving} 
-                placeholder="30000" 
-                min="0"
-                step="500"
-              />
-              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
-                WAV Master + MP3
-              </span>
-            </div>
-            <div className="studio-field" style={{ textAlign: 'left' }}>
-              <label>Exclusive License Price (₦ NGN)</label>
-              <input 
-                type="number" 
-                name="price_exclusive" 
-                className="studio-input" 
-                value={currentBeat.price_exclusive !== undefined ? currentBeat.price_exclusive : ''} 
-                onChange={handleChange} 
-                disabled={isSaving} 
-                placeholder="60000" 
-                min="0"
-                step="500"
-              />
-              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
-                Trackout stems & exclusive buyout
-              </span>
+            <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 14px 0', lineHeight: 1.5 }}>
+              Selar is the commercial source of truth. License pricing, multi-currency conversion, and global checkout delivery are managed authoritatively on Selar. Manual pricing entry is not required.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+              <div style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>Basic License</div>
+                <div style={{ fontSize: 18, color: 'var(--text-h)', fontWeight: 700, marginTop: 4 }}>
+                  {getSelarBeatPrice(currentBeat, 'basic') || 'From Selar'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--gold)', marginTop: 2 }}>Standard Lease · MP3</div>
+              </div>
+              <div style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>Premium License</div>
+                <div style={{ fontSize: 18, color: 'var(--text-h)', fontWeight: 700, marginTop: 4 }}>
+                  {getSelarBeatPrice(currentBeat, 'premium') || 'From Selar'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--gold)', marginTop: 2 }}>Master Lease · WAV + MP3</div>
+              </div>
+              <div style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>Exclusive / Ultimate</div>
+                <div style={{ fontSize: 18, color: 'var(--text-h)', fontWeight: 700, marginTop: 4 }}>
+                  {getSelarBeatPrice(currentBeat, 'ultimate') || 'From Selar'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--gold)', marginTop: 2 }}>Trackout Stems · Full Buyout</div>
+              </div>
             </div>
           </div>
 

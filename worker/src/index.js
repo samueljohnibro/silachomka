@@ -418,8 +418,116 @@ app.get('/api/tracks/:id', async (c) => {
 })
 
 // ------------------------------------------
-// Beats
+// Beats & Selar Pricing
 // ------------------------------------------
+const selarPricingCache = new Map()
+const SELAR_CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes cache
+
+app.get('/api/beats/pricing', async (c) => {
+  const reqCurrency = (c.req.query('currency') || 'NGN').toUpperCase().trim()
+  const cacheKey = reqCurrency
+  const now = Date.now()
+
+  const cached = selarPricingCache.get(cacheKey)
+  if (cached && (now - cached.timestamp < SELAR_CACHE_TTL_MS)) {
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
+    return c.json(cached.data)
+  }
+
+  try {
+    let page = 1
+    let allProducts = []
+    let hasMore = true
+
+    while (hasMore && page <= 5) {
+      const selarRes = await fetch(`https://selar.com/api/v1/store/merchants/chomkamusicstudio/products?currency=${encodeURIComponent(reqCurrency)}&page=${page}`, {
+        headers: { 'Accept': 'application/json' },
+        cf: { cacheTtl: 300, cacheEverything: true }
+      })
+      if (!selarRes.ok) {
+        throw new Error(`Selar API responded with status ${selarRes.status}`)
+      }
+      const json = await selarRes.json()
+      const products = json?.data?.products || []
+      allProducts.push(...products)
+      hasMore = Boolean(json?.data?.has_more && products.length > 0)
+      page++
+    }
+
+    if (allProducts.length === 0) {
+      throw new Error('No products returned from Selar Store API')
+    }
+
+    const activeCurrency = allProducts[0].currency || reqCurrency
+    const activeSymbol = allProducts[0].currency_code || '$'
+
+    const productsBySlug = {}
+    const byBeat = {}
+
+    for (const p of allProducts) {
+      const slug = p.url_slug
+      const numericAmount = Number(p.amount)
+      const formatted = `${p.currency_code}${numericAmount.toLocaleString('en-US', {
+        minimumFractionDigits: numericAmount % 1 === 0 ? 0 : 2,
+        maximumFractionDigits: 2
+      })}`
+
+      productsBySlug[slug] = {
+        code: p.code,
+        name: p.name,
+        amount: numericAmount,
+        currency: p.currency,
+        currencySymbol: p.currency_code,
+        formatted,
+        url: p.url
+      }
+
+      // Pattern: chomkamusicstudio-{beatSlug}-{tier}
+      const match = slug.match(/^chomkamusicstudio-(.+)-(basic|premium|ultimate)$/)
+      if (match) {
+        const beatSlug = match[1]
+        const tier = match[2]
+        if (!byBeat[beatSlug]) byBeat[beatSlug] = {}
+        byBeat[beatSlug][tier] = {
+          code: p.code,
+          name: p.name,
+          amount: numericAmount,
+          currency: p.currency,
+          currencySymbol: p.currency_code,
+          formatted,
+          url: p.url
+        }
+      }
+    }
+
+    const payload = {
+      success: true,
+      currency: activeCurrency,
+      currencySymbol: activeSymbol,
+      supportedCurrencies: [
+        "NGN", "USD", "GBP", "GHS", "KES", "ZAR", "TZS", "UGX", "XAF", "XOF", "RWF", "ZMW", "SLE"
+      ],
+      products: productsBySlug,
+      byBeat,
+      cachedAt: new Date().toISOString()
+    }
+
+    selarPricingCache.set(cacheKey, { data: payload, timestamp: now })
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
+    return c.json(payload)
+  } catch (err) {
+    console.error('Failed to fetch Selar pricing:', err.message)
+    if (cached) {
+      return c.json({ ...cached.data, stale: true })
+    }
+    return c.json({
+      success: false,
+      error: 'Unable to retrieve authoritative Selar pricing',
+      message: err.message
+    }, 502)
+  }
+})
+
 app.get('/api/beats', async (c) => {
   const sql = c.get('sql')
   const beats = await sql`
@@ -537,12 +645,19 @@ app.get('/api/social-links', async (c) => {
 // ------------------------------------------
 // Gallery
 // ------------------------------------------
+app.get('/api/gallery/categories', async (c) => {
+  const sql = c.get('sql')
+  const rows = await sql`SELECT slug, label FROM gallery_categories ORDER BY label ASC`
+  return c.json(rows)
+})
+
 app.get('/api/gallery', async (c) => {
   const sql = c.get('sql')
   const posts = await sql`
     SELECT 
       g.slug as id, g.title, g.caption, g.category, g.post_type as type,
-      g.post_date as date, g.display_date as "displayDate",
+      g.post_date as date, 
+      COALESCE(to_char(g.post_date, 'FMDay, FMMonth FMDD, YYYY'), g.display_date) as "displayDate",
       CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as asset,
       g.legacy_link as link,
       COALESCE(
@@ -574,7 +689,8 @@ app.get('/api/gallery/:slug', async (c) => {
   const posts = await sql`
     SELECT 
       g.slug as id, g.title, g.caption, g.category, g.post_type as type,
-      g.post_date as date, g.display_date as "displayDate",
+      g.post_date as date, 
+      COALESCE(to_char(g.post_date, 'FMDay, FMMonth FMDD, YYYY'), g.display_date) as "displayDate",
       CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as asset,
       g.legacy_link as link,
       COALESCE(

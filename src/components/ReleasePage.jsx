@@ -6,6 +6,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
 import { useChomkaStore } from "../data/store";
+import { formatGalleryDate } from "../utils/dateFormatter";
 import {
   absoluteUrl,
   getReleaseSourceString,
@@ -691,7 +692,7 @@ export default function ReleasePage({ release }) {
                             {item.category || "Gallery"}
                           </span>
                           <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                            {item.displayDate || item.date ? (item.displayDate || new Date(item.date).toLocaleDateString()) : ""}
+                            {formatGalleryDate(item.displayDate || item.date)}
                           </span>
                         </div>
                         <h4

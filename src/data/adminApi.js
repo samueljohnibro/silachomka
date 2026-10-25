@@ -92,6 +92,11 @@ export const adminApi = {
   deleteGalleryPost: async (id) => fetchAdmin(`/gallery-posts/${id}`, {
     method: 'DELETE'
   }),
+  getGalleryCategories: async () => fetchAdmin('/gallery-categories'),
+  createGalleryCategory: async (data) => fetchAdmin('/gallery-categories', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
   // Tracks CRUD
   getTracks: async () => fetchAdmin('/tracks'),
   createTrack: async (data) => fetchAdmin('/tracks', {

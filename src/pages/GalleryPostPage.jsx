@@ -61,7 +61,7 @@ export default function GalleryPostPage() {
   return (
     <main className="gallery-post-page">
       <SeoHead
-        title={`${post.title} | Silachomka Visual Archive`}
+        title={`${post.title || post.caption || "Visual Archive Post"} | Silachomka Visual Archive`}
         description={
           (post.caption || `${post.title} — a visual archive post by silachomka.`)
             .replace(/\s+/g, " ")
@@ -70,7 +70,7 @@ export default function GalleryPostPage() {
         }
         path={`/gallery/${post.id}`}
         image={rasterImage(post)}
-        imageAlt={`${post.title} — silachomka visual archive`}
+        imageAlt={`${post.title || post.caption || "Visual Archive"} — silachomka visual archive`}
       />
       <Link className="release-breadcrumb" to="/#gallery">
         ← All Gallery

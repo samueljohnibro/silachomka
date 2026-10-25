@@ -513,8 +513,44 @@ adminApp.delete('/music-video-features/:video_id/:artist_name', requireSuperadmi
 })
 
 // ---------------------------------------------------------
-// 7. GALLERY POSTS
+// 7. GALLERY POSTS & CATEGORIES
 // ---------------------------------------------------------
+function formatCanonicalDate(rawDate) {
+  if (!rawDate) return null
+  try {
+    const str = String(rawDate).split('T')[0]
+    const parts = str.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (parts) {
+      const d = new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])))
+      return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })
+    }
+  } catch {}
+  return null
+}
+
+adminApp.get('/gallery-categories', async (c) => {
+  const sql = c.get('sql')
+  const rows = await sql`SELECT slug, label FROM gallery_categories ORDER BY label ASC`
+  return c.json(rows)
+})
+
+adminApp.post('/gallery-categories', async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json()
+  const rawLabel = (body.label || body.name || '').trim()
+  if (!rawLabel) return c.json({ error: 'Category label is required' }, 400)
+  const slug = (body.slug || rawLabel).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+  if (!slug) return c.json({ error: 'Invalid category slug' }, 400)
+  const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1)
+  const rows = await sql`
+    INSERT INTO gallery_categories (slug, label)
+    VALUES (${slug}, ${label})
+    ON CONFLICT (slug) DO UPDATE SET label = EXCLUDED.label
+    RETURNING slug, label
+  `
+  return c.json(rows[0], 201)
+})
+
 adminApp.get('/gallery-posts', async (c) => {
   const sql = c.get('sql')
   const rows = await sql`SELECT * FROM gallery_posts WHERE deleted_at IS NULL ORDER BY post_date DESC`
@@ -524,8 +560,22 @@ adminApp.get('/gallery-posts', async (c) => {
 adminApp.post('/gallery-posts', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
-  if (!body.slug || !body.post_type || !body.post_date) return c.json({ error: 'Missing required fields' }, 400)
-  if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
+
+  let slug = (body.slug || '').trim()
+  if (!slug) {
+    if (body.title && body.title.trim()) {
+      slug = body.title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+    }
+    if (!slug) {
+      const datePart = body.post_date ? String(body.post_date).split('T')[0] : new Date().toISOString().slice(0, 10)
+      const typePart = (body.post_type || 'image').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      const randPart = Math.random().toString(36).substring(2, 7)
+      slug = `post-${datePart}-${typePart}-${randPart}`
+    }
+  }
+
+  if (!body.post_type || !body.post_date) return c.json({ error: 'Missing required fields (post_type, post_date)' }, 400)
+  if (!isValidSlug(slug)) return c.json({ error: 'Invalid slug' }, 400)
 
   let status = body.status || 'DRAFT'
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
@@ -533,12 +583,49 @@ adminApp.post('/gallery-posts', async (c) => {
     status = 'SCHEDULED'
   }
 
+  // Derive canonical display date automatically
+  const canonicalDisplayDate = formatCanonicalDate(body.post_date) || body.display_date || null
+
+  // Ensure category is persisted to gallery_categories
+  const rawCat = (body.category || 'portraits').trim()
+  const catSlug = rawCat.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+  const catLabel = rawCat.charAt(0).toUpperCase() + rawCat.slice(1)
+  if (catSlug) {
+    try {
+      await sql`
+        INSERT INTO gallery_categories (slug, label)
+        VALUES (${catSlug}, ${catLabel})
+        ON CONFLICT (slug) DO NOTHING
+      `
+    } catch {}
+  }
+
+  // Determine primary asset: use body.primary_asset_id or first slide's asset_id
+  let primaryAssetId = body.primary_asset_id || null
+  if (!primaryAssetId && Array.isArray(body.slides) && body.slides.length > 0) {
+    primaryAssetId = body.slides[0].asset_id || null
+  }
+
   try {
     const rows = await sql`
       INSERT INTO gallery_posts (slug, title, caption, category, post_type, primary_asset_id, related_release_id, related_track_id, related_beat_id, legacy_link, tags, post_date, display_date, status, scheduled_at)
-      VALUES (${body.slug}, ${body.title || null}, ${body.caption || null}, ${body.category || 'portraits'}, ${body.post_type}, ${body.primary_asset_id || null}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${body.display_date || null}, ${status}, ${scheduledAt})
+      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${catSlug || 'portraits'}, ${body.post_type}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
       RETURNING *
     `
+
+    // If carousel slides provided, insert them
+    if (Array.isArray(body.slides) && body.slides.length > 0) {
+      for (let i = 0; i < body.slides.length; i++) {
+        const s = body.slides[i]
+        if (s.asset_id) {
+          await sql`
+            INSERT INTO gallery_slides (post_id, asset_id, sort_order, slide_type)
+            VALUES (${rows[0].id}, ${s.asset_id}, ${s.sort_order ?? i}, ${s.slide_type || 'image'})
+          `
+        }
+      }
+    }
+
     await logAudit(sql, c.get('user').sub, 'CREATE', 'gallery_posts', rows[0].id, null, rows[0])
     if (rows[0].status === 'PUBLISHED') {
       await queueSubscriberNotifications(sql, 'gallery', rows[0].id, rows[0].title || rows[0].slug)
@@ -568,28 +655,66 @@ adminApp.put('/gallery-posts/:id', async (c) => {
     status = 'SCHEDULED'
   }
 
+  // Derive canonical display date automatically from post_date
+  const canonicalDisplayDate = formatCanonicalDate(up.post_date) || up.display_date || null
+
+  // Ensure category is persisted to gallery_categories
+  const rawCat = (up.category || 'portraits').trim()
+  const catSlug = rawCat.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+  const catLabel = rawCat.charAt(0).toUpperCase() + rawCat.slice(1)
+  if (catSlug) {
+    try {
+      await sql`
+        INSERT INTO gallery_categories (slug, label)
+        VALUES (${catSlug}, ${catLabel})
+        ON CONFLICT (slug) DO NOTHING
+      `
+    } catch {}
+  }
+
+  // Primary asset fallback to first slide if carousel
+  let primaryAssetId = up.primary_asset_id || null
+  if (!primaryAssetId && Array.isArray(body.slides) && body.slides.length > 0) {
+    primaryAssetId = body.slides[0].asset_id || null
+  }
+
   try {
     const rows = await sql`
       UPDATE gallery_posts SET
         slug = ${up.slug},
-        title = ${up.title},
-        caption = ${up.caption},
-        category = ${up.category},
+        title = ${up.title || null},
+        caption = ${up.caption || null},
+        category = ${catSlug || 'portraits'},
         post_type = ${up.post_type},
-        primary_asset_id = ${up.primary_asset_id},
-        related_release_id = ${up.related_release_id},
-        related_track_id = ${up.related_track_id},
-        related_beat_id = ${up.related_beat_id},
-        legacy_link = ${up.legacy_link},
+        primary_asset_id = ${primaryAssetId},
+        related_release_id = ${up.related_release_id || null},
+        related_track_id = ${up.related_track_id || null},
+        related_beat_id = ${up.related_beat_id || null},
+        legacy_link = ${up.legacy_link || null},
         tags = ${up.tags ? JSON.stringify(body.tags) : null},
         post_date = ${up.post_date},
-        display_date = ${up.display_date},
+        display_date = ${canonicalDisplayDate},
         status = ${status},
         scheduled_at = ${scheduledAt},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
+
+    // Update slides if provided
+    if (Array.isArray(body.slides)) {
+      await sql`DELETE FROM gallery_slides WHERE post_id = ${id}`
+      for (let i = 0; i < body.slides.length; i++) {
+        const s = body.slides[i]
+        if (s.asset_id) {
+          await sql`
+            INSERT INTO gallery_slides (post_id, asset_id, sort_order, slide_type)
+            VALUES (${id}, ${s.asset_id}, ${s.sort_order ?? i}, ${s.slide_type || 'image'})
+          `
+        }
+      }
+    }
+
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'gallery_posts', id, existing[0], rows[0])
     if (rows[0].status === 'PUBLISHED' && e.status !== 'PUBLISHED') {
       await queueSubscriberNotifications(sql, 'gallery', rows[0].id, rows[0].title || rows[0].slug)

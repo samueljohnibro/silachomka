@@ -1114,18 +1114,49 @@ function GallerySection() {
   const { gallery } = useChomkaStore();
   const [activeCategory, setActiveCategory] = useState("all");
   const [activePost, setActivePost] = useState(null);
+  const [dbCategories, setDbCategories] = useState([]);
 
-  const categories = useMemo(
-    () => [
+  useEffect(() => {
+    fetch('/api/gallery/categories')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setDbCategories(data.map((c) => ({ id: c.slug, label: c.label })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const categories = useMemo(() => {
+    const base = [
       { id: "all", label: "All Posts" },
       { id: "releases", label: "Releases" },
       { id: "freestyles", label: "Freestyles & Covers" },
       { id: "portraits", label: "Portraits & Style" },
       { id: "videos", label: "Videos" },
       { id: "bts", label: "Studio & BTS" },
-    ],
-    []
-  );
+    ];
+    const existingIds = new Set(base.map((c) => c.id));
+    const merged = [...base];
+    for (const c of dbCategories) {
+      if (!existingIds.has(c.id)) {
+        existingIds.add(c.id);
+        merged.push(c);
+      }
+    }
+    if (Array.isArray(gallery)) {
+      for (const item of gallery) {
+        if (item.category && !existingIds.has(item.category)) {
+          existingIds.add(item.category);
+          merged.push({
+            id: item.category,
+            label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
+          });
+        }
+      }
+    }
+    return merged;
+  }, [dbCategories, gallery]);
 
   const filteredPosts = useMemo(() => {
     const list = Array.isArray(gallery) ? gallery : [];
@@ -1235,7 +1266,7 @@ function GallerySection() {
                 {/* Hover Caption Overlay */}
                 <div className="gallery-card-overlay">
                   <span className="gallery-overlay-cat">{post.category}</span>
-                  <p className="gallery-overlay-title">{post.title}</p>
+                  <p className="gallery-overlay-title">{post.title || post.caption || "Archive Visual"}</p>
                 </div>
               </div>
             </article>

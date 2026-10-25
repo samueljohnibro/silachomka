@@ -11,6 +11,7 @@ import {
 import { Link } from "react-router-dom";
 
 import { useChomkaStore } from "../data/store";
+import { useSelarPricing } from "../data/useSelarPricing";
 import BeatHeroSlideshow from "../components/BeatHeroSlideshow";
 import ExclusiveBeatModal from "../components/ExclusiveBeatModal";
 import SeoHead from "../components/SeoHead";
@@ -53,7 +54,7 @@ function ProgressRing({ progress, isPlaying }) {
    BEAT CARD
    ========================================================= */
 
-function BeatCard({ beat, isPlaying, isLoading, progress, onPlay }) {
+function BeatCard({ beat, isPlaying, isLoading, progress, onPlay, startingPrice }) {
   const videoRef = useRef(null);
 
   /* Visual Video Autoplay */
@@ -172,7 +173,7 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay }) {
         </div>
 
         <p className="beat-price">
-          From ₦15,000
+          {startingPrice ? `From ${startingPrice}` : "From ₦15,000"}
         </p>
       </div>
 
@@ -652,6 +653,7 @@ function BeatReelPlayer({
 
 export default function BeatsPage() {
   const { beats } = useChomkaStore();
+  const { currency, setCurrency, supportedCurrencies, getBeatStartingPrice } = useSelarPricing();
   const audioRef = useRef(null);
   const activeBeatRef = useRef(null);
   const isPlayingRef = useRef(false);
@@ -1260,6 +1262,34 @@ export default function BeatsPage() {
               );
             })}
           </div>
+
+          {/* Authoritative Selar Currency Switcher */}
+          <div style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <label htmlFor="beats-currency-select" style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+              Currency:
+            </label>
+            <select
+              id="beats-currency-select"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              aria-label="Select currency for beat licensing"
+              style={{
+                padding: "4px 8px",
+                fontSize: "12px",
+                background: "rgba(0,0,0,0.6)",
+                border: "1px solid var(--border)",
+                borderRadius: "4px",
+                color: "var(--gold)",
+                cursor: "pointer",
+              }}
+            >
+              {supportedCurrencies.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </section>
 
@@ -1294,6 +1324,7 @@ export default function BeatsPage() {
               isLoading={loadingBeatId === beat.id}
               progress={activeBeat?.id === beat.id ? progress : 0}
               onPlay={handlePlay}
+              startingPrice={getBeatStartingPrice(beat)}
             />
           ))}
         </section>

@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { adminApi } from "../../data/adminApi";
 import AdminSortControl from "../../components/admin/AdminSortControl";
 import AdminViewToggle from "../../components/admin/AdminViewToggle";
+import { formatGalleryDate } from "../../utils/dateFormatter";
 import "./admin.css";
 
 const AdminGalleryPage = () => {
@@ -10,6 +11,7 @@ const AdminGalleryPage = () => {
   const [mediaAssets, setMediaAssets] = useState([]);
   const [releases, setReleases] = useState([]);
   const [tracks, setTracks] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [view, setView] = useState("LIST");
@@ -29,28 +31,40 @@ const AdminGalleryPage = () => {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Slide management state
-  const [newSlideAssetId, setNewSlideAssetId] = useState("");
-  const [newSlideType, setNewSlideType] = useState("image");
-  const [isAddingSlide, setIsAddingSlide] = useState(false);
-  const [slideError, setSlideError] = useState(null);
+  // Media Library Modal state
+  const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [libraryTarget, setLibraryTarget] = useState("primary"); // 'primary' or 'carousel'
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+
+  // File input refs
+  const primaryFileInputRef = useRef(null);
+  const carouselFileInputRef = useRef(null);
 
   const fetchData = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [postsData, slidesData, mediaData, releasesData, tracksData] = await Promise.all([
+      const [postsData, slidesData, mediaData, releasesData, tracksData, categoriesData] = await Promise.all([
         adminApi.getGallery().catch(() => []),
         adminApi.getGallerySlides().catch(() => []),
         adminApi.getMediaAssets().catch(() => []),
         adminApi.getReleases().catch(() => []),
         adminApi.getTracks().catch(() => []),
+        adminApi.getGalleryCategories().catch(() => [
+          { slug: "portraits", label: "Portraits & Style" },
+          { slug: "bts", label: "Studio & BTS" },
+          { slug: "releases", label: "Releases" },
+          { slug: "freestyles", label: "Freestyles & Covers" },
+          { slug: "videos", label: "Videos" },
+        ]),
       ]);
       setPosts(postsData);
       setSlides(slidesData);
       setMediaAssets(mediaData);
       setReleases(releasesData);
       setTracks(tracksData);
+      setCategories(categoriesData);
     } catch (err) {
       setError(err.message || "Failed to load gallery posts.");
     } finally {
@@ -62,37 +76,53 @@ const AdminGalleryPage = () => {
     fetchData();
   }, []);
 
+  const getMediaUrl = (assetId) => {
+    if (!assetId) return null;
+    const asset = mediaAssets.find((a) => a.id === assetId);
+    if (asset?.has_file_data) return `/api/media/asset/${asset.id}`;
+    if (asset?.r2_key) return `/${asset.r2_key.replace(/^\//, "")}`;
+    return `/api/media/asset/${assetId}`;
+  };
+
   const handleCreateClick = () => {
+    const today = new Date().toISOString().split("T")[0];
     setCurrentPost({
-      slug: "",
       title: "",
       caption: "",
-      category: "portraits",
+      category: categories[0]?.label || "Portraits & Style",
       post_type: "image",
       primary_asset_id: "",
       related_release_id: "",
       related_track_id: "",
-      related_beat_id: "",
       legacy_link: "",
-      tags: "",
-      post_date: "",
-      display_date: "",
+      post_date: today,
       status: "DRAFT",
+      carouselSlides: [],
     });
     setView("CREATE");
     setError(null);
-    setSlideError(null);
   };
 
   const handleEditClick = (post) => {
+    const postSlides = slides
+      .filter((s) => s.post_id === post.id)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((s) => ({
+        asset_id: s.asset_id,
+        slide_type: s.slide_type || "image",
+        sort_order: s.sort_order,
+      }));
+
     setCurrentPost({
       ...post,
-      tags: post.tags ? JSON.stringify(post.tags) : "",
+      title: post.title || "",
+      caption: post.caption || "",
+      category: post.category || "Portraits & Style",
+      post_date: post.post_date ? post.post_date.split("T")[0] : "",
+      carouselSlides: postSlides,
     });
     setView("EDIT");
     setError(null);
-    setSlideError(null);
-    setNewSlideAssetId("");
   };
 
   const handleCancelForm = (e) => {
@@ -100,7 +130,6 @@ const AdminGalleryPage = () => {
     setView("LIST");
     setCurrentPost(null);
     setError(null);
-    setSlideError(null);
   };
 
   const handleChange = (e) => {
@@ -111,52 +140,162 @@ const AdminGalleryPage = () => {
     }));
   };
 
+  // Direct file upload handler
+  const handleFileUpload = async (e, target = "primary") => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingMedia(true);
+    setError(null);
+
+    try {
+      if (target === "primary") {
+        const file = files[0];
+        const res = await adminApi.uploadMediaAsset(file);
+        const newAsset = res.asset;
+
+        // Add to mediaAssets state immediately
+        setMediaAssets((prev) => [newAsset, ...prev]);
+
+        // Auto-detect post type based on file MIME
+        const isVid = file.type.startsWith("video/") || newAsset.asset_type === "VIDEO";
+        setCurrentPost((prev) => ({
+          ...prev,
+          primary_asset_id: newAsset.id,
+          post_type: prev.post_type === "carousel" ? "carousel" : (isVid ? "video" : "image"),
+        }));
+      } else {
+        // Carousel multi-upload
+        const newSlides = [];
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const res = await adminApi.uploadMediaAsset(file);
+          const newAsset = res.asset;
+          setMediaAssets((prev) => [newAsset, ...prev]);
+
+          const isVid = file.type.startsWith("video/") || newAsset.asset_type === "VIDEO";
+          newSlides.push({
+            asset_id: newAsset.id,
+            slide_type: isVid ? "video" : "image",
+            sort_order: (currentPost.carouselSlides?.length || 0) + i,
+          });
+        }
+
+        setCurrentPost((prev) => ({
+          ...prev,
+          post_type: "carousel",
+          carouselSlides: [...(prev.carouselSlides || []), ...newSlides],
+          primary_asset_id: prev.primary_asset_id || newSlides[0]?.asset_id || "",
+        }));
+      }
+    } catch (err) {
+      setError(err.message || "Failed to upload file.");
+    } finally {
+      setIsUploadingMedia(false);
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  // Library modal select handler
+  const handleSelectFromLibrary = (asset) => {
+    if (libraryTarget === "primary") {
+      const isVid = asset.asset_type === "VIDEO" || asset.mime_type?.startsWith("video/");
+      setCurrentPost((prev) => ({
+        ...prev,
+        primary_asset_id: asset.id,
+        post_type: prev.post_type === "carousel" ? "carousel" : (isVid ? "video" : "image"),
+      }));
+    } else {
+      const isVid = asset.asset_type === "VIDEO" || asset.mime_type?.startsWith("video/");
+      const nextSort = currentPost.carouselSlides?.length || 0;
+      setCurrentPost((prev) => ({
+        ...prev,
+        post_type: "carousel",
+        carouselSlides: [
+          ...(prev.carouselSlides || []),
+          { asset_id: asset.id, slide_type: isVid ? "video" : "image", sort_order: nextSort },
+        ],
+        primary_asset_id: prev.primary_asset_id || asset.id,
+      }));
+    }
+    setShowLibraryModal(false);
+  };
+
+  // Carousel slide manipulation
+  const moveCarouselSlide = (index, direction) => {
+    const list = [...(currentPost.carouselSlides || [])];
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= list.length) return;
+    const temp = list[index];
+    list[index] = list[targetIdx];
+    list[targetIdx] = temp;
+    list.forEach((s, idx) => {
+      s.sort_order = idx;
+    });
+    setCurrentPost((prev) => ({
+      ...prev,
+      carouselSlides: list,
+      primary_asset_id: list[0]?.asset_id || prev.primary_asset_id,
+    }));
+  };
+
+  const removeCarouselSlide = (index) => {
+    const list = [...(currentPost.carouselSlides || [])];
+    list.splice(index, 1);
+    list.forEach((s, idx) => {
+      s.sort_order = idx;
+    });
+    setCurrentPost((prev) => ({
+      ...prev,
+      carouselSlides: list,
+      primary_asset_id: list[0]?.asset_id || "",
+      post_type: list.length <= 1 ? "image" : "carousel",
+    }));
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setError(null);
 
-    const slugify = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-    let slug = currentPost.slug ? currentPost.slug.trim() : slugify(currentPost.title);
-    if (!slug) slug = "gallery-" + Date.now();
-
-    if (!currentPost.title || !currentPost.post_date) {
-      setError("Title and Post Date are required.");
+    if (!currentPost.post_date) {
+      setError("Post Date is required.");
       return;
     }
 
+    // Auto-generate stable slug if not existing
+    const slugify = (text) => (text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+    let slug = currentPost.slug ? currentPost.slug.trim() : slugify(currentPost.title);
+    if (!slug) {
+      const datePart = currentPost.post_date ? currentPost.post_date.split("T")[0] : new Date().toISOString().slice(0, 10);
+      const typePart = (currentPost.post_type || "image").toLowerCase();
+      const randPart = Math.random().toString(36).substring(2, 7);
+      slug = `post-${datePart}-${typePart}-${randPart}`;
+    }
+
     try {
-      const payload = { 
+      setIsSaving(true);
+
+      const payload = {
         ...currentPost,
         slug,
-        post_type: currentPost.post_type || "image"
+        title: currentPost.title && currentPost.title.trim() ? currentPost.title.trim() : null,
+        caption: currentPost.caption && currentPost.caption.trim() ? currentPost.caption.trim() : null,
+        category: currentPost.category && currentPost.category.trim() ? currentPost.category.trim() : "Portraits & Style",
+        post_type: currentPost.post_type || "image",
+        primary_asset_id:
+          currentPost.post_type === "carousel"
+            ? (currentPost.carouselSlides?.[0]?.asset_id || currentPost.primary_asset_id || null)
+            : (currentPost.primary_asset_id || null),
+        related_release_id: currentPost.related_release_id || null,
+        related_track_id: currentPost.related_track_id || null,
+        legacy_link: currentPost.legacy_link || null,
+        slides: currentPost.post_type === "carousel" ? (currentPost.carouselSlides || []) : [],
       };
-      const nullableFields = [
-        "caption", "category", "primary_asset_id", "related_release_id",
-        "related_track_id", "related_beat_id", "legacy_link", "display_date",
-      ];
-      nullableFields.forEach((field) => {
-        if (payload[field] === "") {
-          payload[field] = null;
-        }
-      });
 
-      if (payload.tags === "") {
-        payload.tags = null;
-      } else if (payload.tags) {
-        try {
-          payload.tags = JSON.parse(payload.tags);
-        } catch {
-          setError("Invalid JSON in Tags field.");
-          return;
-        }
-      }
-
-      setIsSaving(true);
-      let savedPost;
       if (view === "CREATE") {
-        savedPost = await adminApi.createGalleryPost(payload);
+        await adminApi.createGalleryPost(payload);
       } else {
-        savedPost = await adminApi.updateGalleryPost(payload.id, payload);
+        await adminApi.updateGalleryPost(currentPost.id, payload);
       }
 
       await fetchData();
@@ -184,353 +323,862 @@ const AdminGalleryPage = () => {
     }
   };
 
-  // Gallery Slides Management
-  const currentPostSlides = currentPost?.id
-    ? slides.filter((s) => s.post_id === currentPost.id).sort((a, b) => a.sort_order - b.sort_order)
-    : [];
+  const getAssetObj = (assetId) => mediaAssets.find((a) => a.id === assetId);
 
-  const handleAddSlide = async (e) => {
-    e.preventDefault();
-    if (!newSlideAssetId.trim() || !currentPost?.id) return;
+  // Sorting
+  const sortedPosts = [...posts].sort((a, b) => {
+    const da = a.post_date ? new Date(a.post_date).getTime() : 0;
+    const db = b.post_date ? new Date(b.post_date).getTime() : 0;
+    return sortOrder === "desc" ? db - da : da - db;
+  });
 
-    setIsAddingSlide(true);
-    setSlideError(null);
-    try {
-      const nextSortOrder = currentPostSlides.length > 0
-        ? Math.max(...currentPostSlides.map((s) => s.sort_order)) + 1
-        : 0;
-
-      await adminApi.createGallerySlide({
-        post_id: currentPost.id,
-        asset_id: newSlideAssetId.trim(),
-        sort_order: nextSortOrder,
-        slide_type: newSlideType,
-      });
-      const updatedSlides = await adminApi.getGallerySlides();
-      setSlides(updatedSlides);
-      setNewSlideAssetId("");
-    } catch (err) {
-      setSlideError(err.message || "Failed to add slide.");
-    } finally {
-      setIsAddingSlide(false);
-    }
-  };
-
-  const handleDeleteSlide = async (slideId) => {
-    setSlideError(null);
-    try {
-      await adminApi.deleteGallerySlide(slideId);
-      const updatedSlides = await adminApi.getGallerySlides();
-      setSlides(updatedSlides);
-    } catch (err) {
-      setSlideError(err.message || "Failed to remove slide.");
-    }
-  };
-
-  // Helper to resolve asset filename
-  const getAssetLabel = (assetId) => {
-    const asset = mediaAssets.find((a) => a.id === assetId);
-    if (asset) return asset.original_filename || asset.r2_key;
-    return assetId;
-  };
+  // Filtered media assets for library picker
+  const filteredLibraryAssets = mediaAssets.filter((a) => {
+    if (!librarySearch.trim()) return true;
+    const q = librarySearch.toLowerCase();
+    return (
+      (a.original_filename && a.original_filename.toLowerCase().includes(q)) ||
+      (a.asset_type && a.asset_type.toLowerCase().includes(q)) ||
+      (a.id && a.id.toLowerCase().includes(q))
+    );
+  });
 
   if (isLoading && view === "LIST") {
-    return <div style={{ color: "var(--muted)" }}>Loading gallery posts...</div>;
+    return <div style={{ color: "var(--muted)", padding: 24 }}>Loading gallery visual archive...</div>;
   }
 
+  // ==========================================
+  // CREATE / EDIT FORM VIEW
+  // ==========================================
   if (view === "CREATE" || view === "EDIT") {
+    const primaryAssetObj = getAssetObj(currentPost.primary_asset_id);
+    const primaryAssetUrl = getMediaUrl(currentPost.primary_asset_id);
+    const isPrimaryVideo =
+      primaryAssetObj?.asset_type === "VIDEO" ||
+      primaryAssetObj?.mime_type?.startsWith("video/") ||
+      (typeof primaryAssetUrl === "string" && /\.(mp4|webm|mov)$/i.test(primaryAssetUrl));
+
     return (
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <h2 className="studio-section-heading" style={{ margin: 0 }}>
-            {view === "CREATE" ? "Create Gallery Post" : "Edit Gallery Post"}
-          </h2>
-          <button onClick={handleCancelForm} className="studio-pill-btn" style={{ background: "transparent", color: "var(--text)" }} disabled={isSaving}>
+          <div>
+            <h2 className="studio-section-heading" style={{ margin: 0 }}>
+              {view === "CREATE" ? "Create Gallery Post" : "Edit Gallery Post"}
+            </h2>
+            <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: 13 }}>
+              Fast Instagram-style visual posting. Titles are optional.
+            </p>
+          </div>
+          <button
+            onClick={handleCancelForm}
+            className="studio-pill-btn"
+            style={{ background: "transparent", color: "var(--text)" }}
+            disabled={isSaving}
+          >
             Cancel
           </button>
         </div>
 
-        {error && <div className="admin-login-error">{error}</div>}
+        {error && <div className="admin-login-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-        <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* SECTION 1: GALLERY MEDIA SECTION */}
+          <div
+            style={{
+              padding: "20px",
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h3 style={{ fontSize: 15, color: "var(--gold)", margin: 0, fontWeight: 600 }}>
+                📷 Gallery Media
+              </h3>
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                Format: <strong style={{ color: "var(--text-h)" }}>{currentPost.post_type.toUpperCase()}</strong>
+              </div>
+            </div>
 
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>Basic Information</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Title *</label>
-              <input type="text" name="title" className="studio-input" value={currentPost.title || ""} onChange={handleChange} required disabled={isSaving} placeholder="Post title or visual name" />
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Slug (Auto-generated if blank)</label>
-              <input type="text" name="slug" className="studio-input" value={currentPost.slug || ""} onChange={handleChange} disabled={isSaving} placeholder="Leave blank to auto-generate" />
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Format / Type *</label>
-              <select name="post_type" className="studio-input" value={currentPost.post_type || "image"} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
-                <option value="image">Single Image</option>
-                <option value="carousel">Carousel (Multi-slide)</option>
-                <option value="video">Video</option>
-                <option value="reel">Reel / Vertical Short</option>
-              </select>
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Category</label>
-              <input type="text" name="category" className="studio-input" value={currentPost.category || ""} onChange={handleChange} disabled={isSaving} placeholder="e.g. portraits, live, studio" />
-            </div>
-          </div>
+            {/* Media Type Selector */}
+            <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>Post Format / Type *</label>
+                <select
+                  name="post_type"
+                  className="studio-input"
+                  value={currentPost.post_type || "image"}
+                  onChange={handleChange}
+                  disabled={isSaving}
+                  style={{ height: "44px" }}
+                >
+                  <option value="image">Single Image</option>
+                  <option value="carousel">Carousel (Multi-slide Photos / Videos)</option>
+                  <option value="video">Video</option>
+                  <option value="reel">Reel / Vertical Short</option>
+                </select>
+              </div>
 
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Date & Display</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Post Date *</label>
-              <input 
-                type="date" 
-                name="post_date" 
-                className="studio-input" 
-                value={currentPost.post_date ? currentPost.post_date.split("T")[0] : ""} 
-                onChange={handleChange} 
-                required 
-                disabled={isSaving} 
-              />
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Display Date (Formatted text override)</label>
-              <input type="text" name="display_date" className="studio-input" value={currentPost.display_date || ""} onChange={handleChange} disabled={isSaving} placeholder="e.g. March 2025" />
-            </div>
-          </div>
-
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Details & Media Asset</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "16px" }}>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Caption / Note</label>
-              <textarea name="caption" className="studio-input" style={{ minHeight: "80px", resize: "vertical" }} value={currentPost.caption || ""} onChange={handleChange} disabled={isSaving} placeholder="Caption or context for this visual..." />
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Primary Media Asset</label>
-              <select name="primary_asset_id" className="studio-input" value={currentPost.primary_asset_id || ""} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
-                <option value="">-- Select from Uploaded Media Assets --</option>
-                {mediaAssets.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.original_filename || a.r2_key} ({a.asset_type})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>Project & Track Associations</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Associated Release / Project</label>
-              <select name="related_release_id" className="studio-input" value={currentPost.related_release_id || ""} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
-                <option value="">-- None (Independent Gallery Post) --</option>
-                {releases.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.title} ({r.type || "Release"})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Associated Track</label>
-              <select name="related_track_id" className="studio-input" value={currentPost.related_track_id || ""} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
-                <option value="">-- None --</option>
-                {tracks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>External Post / Instagram Link</label>
-              <input type="text" name="legacy_link" className="studio-input" value={currentPost.legacy_link || ""} onChange={handleChange} disabled={isSaving} placeholder="https://instagram.com/p/..." />
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Tags (JSON Array)</label>
-              <input type="text" name="tags" className="studio-input" value={currentPost.tags || ""} onChange={handleChange} disabled={isSaving} placeholder='["tag1", "tag2"]' />
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Status</label>
-              <select name="status" className="studio-input" value={currentPost.status || "DRAFT"} onChange={handleChange} disabled={isSaving}>
-                <option value="DRAFT">Draft</option>
-                <option value="PUBLISHED">Published</option>
-                <option value="SCHEDULED">Scheduled</option>
-                <option value="ARCHIVED">Archived</option>
-                <option value="UNAVAILABLE">Unavailable</option>
-              </select>
-            </div>
-            <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Schedule Publication (Optional)</label>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input 
-                  type="datetime-local" 
-                  name="scheduled_at" 
-                  className="studio-input" 
-                  value={currentPost.scheduled_at ? currentPost.scheduled_at.slice(0, 16) : ""} 
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCurrentPost(prev => ({
-                      ...prev,
-                      scheduled_at: val ? new Date(val).toISOString() : null,
-                      status: val ? "SCHEDULED" : (prev.status === "SCHEDULED" ? "PUBLISHED" : prev.status)
-                    }));
-                  }} 
-                  disabled={isSaving} 
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>Post Date * (Canonical)</label>
+                <input
+                  type="date"
+                  name="post_date"
+                  className="studio-input"
+                  value={currentPost.post_date || ""}
+                  onChange={handleChange}
+                  required
+                  disabled={isSaving}
                 />
-                {currentPost.scheduled_at && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCurrentPost(prev => ({
-                        ...prev,
-                        scheduled_at: null,
-                        status: prev.status === "SCHEDULED" ? "PUBLISHED" : prev.status
-                      }));
-                    }}
-                    className="studio-pill-btn"
-                    style={{ fontSize: 11, whiteSpace: "nowrap" }}
-                    title="Publish immediately / clear schedule"
-                  >
-                    Clear (Publish Now)
-                  </button>
+                {currentPost.post_date && (
+                  <span style={{ fontSize: 11, color: "var(--gold)", marginTop: 4, display: "block" }}>
+                    Public date: {formatGalleryDate(currentPost.post_date)}
+                  </span>
                 )}
               </div>
-              {currentPost.scheduled_at && (
-                <span style={{ fontSize: 11, color: "var(--gold)", marginTop: 4, display: "block" }}>
-                  ⏰ Scheduled for {new Date(currentPost.scheduled_at).toLocaleString()}
-                </span>
-              )}
             </div>
-          </div>
 
-          <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end" }}>
-            <button type="submit" className="primary-button" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Post"}
-            </button>
-          </div>
+            {/* Hidden native file inputs */}
+            <input
+              type="file"
+              ref={primaryFileInputRef}
+              accept="image/*,video/*"
+              style={{ display: "none" }}
+              onChange={(e) => handleFileUpload(e, "primary")}
+            />
+            <input
+              type="file"
+              ref={carouselFileInputRef}
+              accept="image/*,video/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => handleFileUpload(e, "carousel")}
+            />
 
-        </form>
-
-        {/* GALLERY SLIDES (EDIT MODE for carousel posts) */}
-        {view === "EDIT" && currentPost?.id && (
-          <div style={{ marginTop: 40, borderTop: "1px solid var(--border)", paddingTop: 24 }}>
-            <h3 style={{ fontSize: 16, color: "var(--text-h)", marginBottom: 8 }}>
-              Carousel Slides
-              {currentPost.post_type !== "carousel" && (
-                <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 400, marginLeft: 8 }}>
-                  (set Post Type to "carousel" to use multi-slide)
-                </span>
-              )}
-            </h3>
-            <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16 }}>
-              Manage the ordered media slides for this post. Each slide references a media asset. Changes are saved immediately.
-            </p>
-
-            {slideError && <div className="admin-login-error" style={{ marginBottom: 16 }}>{slideError}</div>}
-
-            <div style={{ marginBottom: 20 }}>
-              {currentPostSlides.length === 0 ? (
-                <div style={{ color: "var(--muted)", fontSize: 13, padding: "12px 0" }}>
-                  No slides added yet.
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {currentPostSlides.map((s, idx) => (
+            {/* A. SINGLE MEDIA WORKFLOW (Image, Video, Reel) */}
+            {currentPost.post_type !== "carousel" && (
+              <div>
+                {primaryAssetUrl ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 20,
+                      padding: 16,
+                      background: "rgba(0,0,0,0.3)",
+                      borderRadius: 6,
+                      border: "1px solid var(--border)",
+                    }}
+                  >
                     <div
-                      key={s.id}
                       style={{
+                        width: 140,
+                        height: 140,
+                        borderRadius: 4,
+                        overflow: "hidden",
+                        background: "#000",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "8px 12px",
-                        background: "rgba(255, 255, 255, 0.03)",
+                        justifyContent: "center",
+                        flexShrink: 0,
                         border: "1px solid var(--border)",
-                        borderRadius: 4,
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <span style={{ color: "var(--gold)", fontWeight: 700, fontSize: 16, minWidth: 24, textAlign: "center" }}>
-                          {idx + 1}
-                        </span>
-                        <span style={{
-                          padding: "2px 8px", borderRadius: 3, fontSize: 11, fontWeight: 600,
-                          background: s.slide_type === "video" ? "rgba(147, 51, 234, 0.15)" : "rgba(34, 197, 94, 0.15)",
-                          color: s.slide_type === "video" ? "#c084fc" : "#4ade80",
-                        }}>
-                          {s.slide_type || "image"}
-                        </span>
-                        <span style={{ color: "var(--text-h)", fontSize: 13 }}>
-                          {getAssetLabel(s.asset_id)}
-                        </span>
+                      {isPrimaryVideo ? (
+                        <video
+                          src={primaryAssetUrl}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          controls
+                        />
+                      ) : (
+                        <img
+                          src={primaryAssetUrl}
+                          alt="Post media preview"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          onError={(e) => {
+                            e.currentTarget.src = "/og-image.png";
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ color: "var(--text-h)", fontWeight: 600, fontSize: 14 }}>
+                        {primaryAssetObj?.original_filename || "Selected Media Asset"}
                       </div>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                        Type: {isPrimaryVideo ? "Video" : "Image"} • ID: {currentPost.primary_asset_id}
+                      </div>
+                      <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => primaryFileInputRef.current?.click()}
+                          className="studio-pill-btn"
+                          disabled={isUploadingMedia || isSaving}
+                          style={{ fontSize: 12 }}
+                        >
+                          {isUploadingMedia ? "Uploading..." : "Replace File"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLibraryTarget("primary");
+                            setShowLibraryModal(true);
+                          }}
+                          className="studio-pill-btn"
+                          style={{ background: "transparent", fontSize: 12 }}
+                          disabled={isUploadingMedia || isSaving}
+                        >
+                          Choose from Library
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPost((prev) => ({ ...prev, primary_asset_id: "" }))}
+                          className="studio-pill-btn"
+                          style={{
+                            background: "transparent",
+                            color: "#fca5a5",
+                            borderColor: "rgba(252, 165, 165, 0.3)",
+                            fontSize: 12,
+                          }}
+                          disabled={isSaving}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      border: "2px dashed var(--border)",
+                      borderRadius: 8,
+                      padding: "32px 20px",
+                      textAlign: "center",
+                      background: "rgba(0, 0, 0, 0.2)",
+                    }}
+                  >
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>📷 / 🎬</div>
+                    <div style={{ color: "var(--text-h)", fontWeight: 600, marginBottom: 4 }}>
+                      Select or Upload Post Media
+                    </div>
+                    <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 auto 16px auto", maxWidth: 400 }}>
+                      Upload high-resolution photography, artwork, video clip, or vertical reel.
+                    </p>
+                    <div style={{ display: "inline-flex", gap: 12 }}>
                       <button
                         type="button"
-                        onClick={() => handleDeleteSlide(s.id)}
-                        className="studio-pill-btn"
-                        style={{ background: "transparent", color: "#fca5a5", borderColor: "rgba(252, 165, 165, 0.3)", padding: "4px 8px", fontSize: 12 }}
+                        onClick={() => primaryFileInputRef.current?.click()}
+                        className="primary-button"
+                        disabled={isUploadingMedia || isSaving}
+                        style={{ padding: "10px 20px" }}
                       >
-                        Remove
+                        {isUploadingMedia ? "Uploading..." : "↑ Upload New Media"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLibraryTarget("primary");
+                          setShowLibraryModal(true);
+                        }}
+                        className="studio-pill-btn"
+                        disabled={isUploadingMedia || isSaving}
+                        style={{ padding: "10px 18px", fontSize: 13 }}
+                      >
+                        Browse Media Library
                       </button>
                     </div>
-                  ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* B. CAROUSEL MULTI-SLIDE WORKFLOW */}
+            {currentPost.post_type === "carousel" && (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                    Carousel Slides ({currentPost.carouselSlides?.length || 0} items)
+                  </span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => carouselFileInputRef.current?.click()}
+                      className="studio-pill-btn"
+                      disabled={isUploadingMedia || isSaving}
+                      style={{ background: "rgba(223, 194, 125, 0.15)", color: "var(--gold)", fontSize: 12 }}
+                    >
+                      {isUploadingMedia ? "Uploading..." : "+ Upload Slide(s)"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLibraryTarget("carousel");
+                        setShowLibraryModal(true);
+                      }}
+                      className="studio-pill-btn"
+                      disabled={isUploadingMedia || isSaving}
+                      style={{ fontSize: 12 }}
+                    >
+                      + Add from Library
+                    </button>
+                  </div>
                 </div>
-              )}
+
+                {(!currentPost.carouselSlides || currentPost.carouselSlides.length === 0) ? (
+                  <div
+                    style={{
+                      border: "2px dashed var(--border)",
+                      borderRadius: 8,
+                      padding: "28px 16px",
+                      textAlign: "center",
+                      background: "rgba(0, 0, 0, 0.2)",
+                    }}
+                  >
+                    <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
+                      No carousel slides added yet. Add multiple images or videos to build a swipeable carousel.
+                    </div>
+                    <div style={{ display: "inline-flex", gap: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => carouselFileInputRef.current?.click()}
+                        className="primary-button"
+                        disabled={isUploadingMedia || isSaving}
+                        style={{ fontSize: 13 }}
+                      >
+                        {isUploadingMedia ? "Uploading..." : "↑ Upload First Slide(s)"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLibraryTarget("carousel");
+                          setShowLibraryModal(true);
+                        }}
+                        className="studio-pill-btn"
+                        style={{ fontSize: 13 }}
+                      >
+                        Select from Media Library
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {currentPost.carouselSlides.map((slide, idx) => {
+                      const slideAssetObj = getAssetObj(slide.asset_id);
+                      const slideUrl = getMediaUrl(slide.asset_id);
+                      const isVid = slide.slide_type === "video";
+
+                      return (
+                        <div
+                          key={`${slide.asset_id}-${idx}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "8px 12px",
+                            background: "rgba(0, 0, 0, 0.4)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <span
+                              style={{
+                                color: "var(--gold)",
+                                fontWeight: 700,
+                                fontSize: 15,
+                                minWidth: 24,
+                                textAlign: "center",
+                              }}
+                            >
+                              #{idx + 1}
+                            </span>
+                            <div
+                              style={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: 4,
+                                overflow: "hidden",
+                                background: "#000",
+                                flexShrink: 0,
+                                border: "1px solid var(--border)",
+                              }}
+                            >
+                              {isVid ? (
+                                <video
+                                  src={slideUrl}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                />
+                              ) : (
+                                <img
+                                  src={slideUrl}
+                                  alt="Slide preview"
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  onError={(e) => {
+                                    e.currentTarget.src = "/og-image.png";
+                                  }}
+                                />
+                              )}
+                            </div>
+                            <div>
+                              <div style={{ color: "var(--text-h)", fontSize: 13, fontWeight: 500 }}>
+                                {slideAssetObj?.original_filename || `Asset ${slide.asset_id.slice(0, 8)}...`}
+                              </div>
+                              <span
+                                style={{
+                                  padding: "1px 6px",
+                                  borderRadius: 3,
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  textTransform: "uppercase",
+                                  background: isVid ? "rgba(147, 51, 234, 0.2)" : "rgba(34, 197, 94, 0.2)",
+                                  color: isVid ? "#c084fc" : "#4ade80",
+                                }}
+                              >
+                                {slide.slide_type}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <button
+                              type="button"
+                              onClick={() => moveCarouselSlide(idx, -1)}
+                              disabled={idx === 0 || isSaving}
+                              className="studio-pill-btn"
+                              style={{ padding: "4px 8px", fontSize: 11 }}
+                              title="Move slide earlier"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveCarouselSlide(idx, 1)}
+                              disabled={idx === currentPost.carouselSlides.length - 1 || isSaving}
+                              className="studio-pill-btn"
+                              style={{ padding: "4px 8px", fontSize: 11 }}
+                              title="Move slide later"
+                            >
+                              ▼
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeCarouselSlide(idx)}
+                              disabled={isSaving}
+                              className="studio-pill-btn"
+                              style={{
+                                background: "transparent",
+                                color: "#fca5a5",
+                                borderColor: "rgba(252, 165, 165, 0.3)",
+                                padding: "4px 8px",
+                                fontSize: 11,
+                              }}
+                              title="Remove slide"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 2: DETAILS & HYBRID CATEGORY COMBOBOX */}
+          <div
+            style={{
+              padding: "20px",
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+            }}
+          >
+            <h3 style={{ fontSize: 15, color: "var(--gold)", margin: "0 0 16px 0", fontWeight: 600 }}>
+              📝 Post Details
+            </h3>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>Title (Optional)</label>
+                <input
+                  type="text"
+                  name="title"
+                  className="studio-input"
+                  value={currentPost.title || ""}
+                  onChange={handleChange}
+                  disabled={isSaving}
+                  placeholder="Post title or headline (optional)"
+                />
+              </div>
+
+              {/* Hybrid Combobox for Category */}
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>Category (Select existing or type new)</label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    name="category"
+                    list="gallery-categories-datalist"
+                    className="studio-input"
+                    value={currentPost.category || ""}
+                    onChange={handleChange}
+                    disabled={isSaving}
+                    placeholder="e.g. Portraits & Style, Studio & BTS"
+                  />
+                  <select
+                    className="studio-input"
+                    style={{ width: "130px", height: "44px", flexShrink: 0 }}
+                    value={currentPost.category || ""}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setCurrentPost((prev) => ({ ...prev, category: e.target.value }));
+                      }
+                    }}
+                    disabled={isSaving}
+                  >
+                    <option value="">-- Presets --</option>
+                    {categories.map((c) => (
+                      <option key={c.slug} value={c.label}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <datalist id="gallery-categories-datalist">
+                  {categories.map((c) => (
+                    <option key={c.slug} value={c.label} />
+                  ))}
+                </datalist>
+                <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
+                  💡 New categories typed here are automatically saved permanently.
+                </span>
+              </div>
             </div>
 
-            <form onSubmit={handleAddSlide} style={{ display: "grid", gridTemplateColumns: "1fr 120px auto", gap: 8, maxWidth: 600 }}>
-              <select
+            <div className="studio-field" style={{ textAlign: "left", marginTop: "16px" }}>
+              <label>Caption / Note</label>
+              <textarea
+                name="caption"
                 className="studio-input"
-                value={newSlideAssetId}
-                onChange={(e) => setNewSlideAssetId(e.target.value)}
-                disabled={isAddingSlide}
-                required
-              >
-                <option value="">-- Select Asset --</option>
-                {mediaAssets.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.original_filename || a.r2_key} ({a.asset_type})
-                  </option>
-                ))}
-              </select>
-              <select
-                className="studio-input"
-                value={newSlideType}
-                onChange={(e) => setNewSlideType(e.target.value)}
-                disabled={isAddingSlide}
-              >
-                <option value="image">image</option>
-                <option value="video">video</option>
-              </select>
-              <button
-                type="submit"
-                className="studio-pill-btn"
-                style={{ background: "rgba(223, 194, 125, 0.15)", color: "var(--gold)", whiteSpace: "nowrap" }}
-                disabled={isAddingSlide || !newSlideAssetId}
-              >
-                {isAddingSlide ? "Adding..." : "+ Add Slide"}
-              </button>
-            </form>
+                style={{ minHeight: "80px", resize: "vertical" }}
+                value={currentPost.caption || ""}
+                onChange={handleChange}
+                disabled={isSaving}
+                placeholder="Story, caption, or behind-the-scenes context..."
+              />
+            </div>
           </div>
-        )}
 
-        {view === "CREATE" && currentPost?.post_type === "carousel" && (
-          <div style={{ marginTop: 24, padding: 16, background: "rgba(255, 255, 255, 0.02)", border: "1px dashed var(--border)", borderRadius: 4, color: "var(--muted)", fontSize: 13 }}>
-            💡 Tip: Save this carousel post first, then you can add individual slides immediately.
+          {/* SECTION 3: PROJECT & TRACK ASSOCIATIONS & SCHEDULING */}
+          <div
+            style={{
+              padding: "20px",
+              background: "rgba(255, 255, 255, 0.02)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+            }}
+          >
+            <h3 style={{ fontSize: 15, color: "var(--gold)", margin: "0 0 16px 0", fontWeight: 600 }}>
+              🔗 Associations & Publication
+            </h3>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>Associated Music Project / Release (Optional)</label>
+                <select
+                  name="related_release_id"
+                  className="studio-input"
+                  value={currentPost.related_release_id || ""}
+                  onChange={handleChange}
+                  disabled={isSaving}
+                  style={{ height: "44px" }}
+                >
+                  <option value="">-- None (Independent Visual) --</option>
+                  {releases.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.title} ({r.type || "Release"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>Associated Track (Optional)</label>
+                <select
+                  name="related_track_id"
+                  className="studio-input"
+                  value={currentPost.related_track_id || ""}
+                  onChange={handleChange}
+                  disabled={isSaving}
+                  style={{ height: "44px" }}
+                >
+                  <option value="">-- None --</option>
+                  {tracks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>External Post / Instagram Link (Optional)</label>
+                <input
+                  type="text"
+                  name="legacy_link"
+                  className="studio-input"
+                  value={currentPost.legacy_link || ""}
+                  onChange={handleChange}
+                  disabled={isSaving}
+                  placeholder="https://instagram.com/p/..."
+                />
+              </div>
+
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>Status</label>
+                <select
+                  name="status"
+                  className="studio-input"
+                  value={currentPost.status || "DRAFT"}
+                  onChange={handleChange}
+                  disabled={isSaving}
+                  style={{ height: "44px" }}
+                >
+                  <option value="DRAFT">Draft</option>
+                  <option value="PUBLISHED">Published</option>
+                  <option value="SCHEDULED">Scheduled</option>
+                  <option value="ARCHIVED">Archived</option>
+                  <option value="UNAVAILABLE">Unavailable</option>
+                </select>
+              </div>
+
+              <div className="studio-field" style={{ textAlign: "left", gridColumn: "1 / -1" }}>
+                <label>Schedule Publication (Optional)</label>
+                <div style={{ display: "flex", gap: "8px", maxWidth: "450px" }}>
+                  <input
+                    type="datetime-local"
+                    name="scheduled_at"
+                    className="studio-input"
+                    value={currentPost.scheduled_at ? currentPost.scheduled_at.slice(0, 16) : ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCurrentPost((prev) => ({
+                        ...prev,
+                        scheduled_at: val ? new Date(val).toISOString() : null,
+                        status: val ? "SCHEDULED" : prev.status === "SCHEDULED" ? "PUBLISHED" : prev.status,
+                      }));
+                    }}
+                    disabled={isSaving}
+                  />
+                  {currentPost.scheduled_at && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentPost((prev) => ({
+                          ...prev,
+                          scheduled_at: null,
+                          status: prev.status === "SCHEDULED" ? "PUBLISHED" : prev.status,
+                        }));
+                      }}
+                      className="studio-pill-btn"
+                      style={{ fontSize: 11, whiteSpace: "nowrap" }}
+                      title="Publish immediately / clear schedule"
+                    >
+                      Clear (Publish Now)
+                    </button>
+                  )}
+                </div>
+                {currentPost.scheduled_at && (
+                  <span style={{ fontSize: 11, color: "var(--gold)", marginTop: 4, display: "block" }}>
+                    ⏰ Scheduled for {new Date(currentPost.scheduled_at).toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: "8px", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+            <button type="button" onClick={handleCancelForm} className="studio-pill-btn" disabled={isSaving}>
+              Cancel
+            </button>
+            <button type="submit" className="primary-button" disabled={isSaving || isUploadingMedia}>
+              {isSaving ? "Saving Post..." : "Save Gallery Post"}
+            </button>
+          </div>
+        </form>
+
+        {/* MODAL: MEDIA LIBRARY ASSET PICKER */}
+        {showLibraryModal && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.85)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 9999,
+              padding: 20,
+            }}
+            onClick={() => setShowLibraryModal(false)}
+          >
+            <div
+              style={{
+                background: "#161616",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                width: "100%",
+                maxWidth: 800,
+                maxHeight: "85vh",
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                style={{
+                  padding: "16px 20px",
+                  borderBottom: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <h3 style={{ margin: 0, fontSize: 16, color: "var(--text-h)" }}>
+                  Select from Media Library ({libraryTarget === "carousel" ? "Add to Carousel" : "Set Post Media"})
+                </h3>
+                <button
+                  onClick={() => setShowLibraryModal(false)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--muted)",
+                    fontSize: 20,
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)" }}>
+                <input
+                  type="text"
+                  className="studio-input"
+                  placeholder="Search assets by filename or type..."
+                  value={librarySearch}
+                  onChange={(e) => setLibrarySearch(e.target.value)}
+                  style={{ width: "100%" }}
+                />
+              </div>
+
+              <div
+                style={{
+                  padding: 20,
+                  overflowY: "auto",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+                  gap: 12,
+                  flex: 1,
+                }}
+              >
+                {filteredLibraryAssets.map((asset) => {
+                  const url = getMediaUrl(asset.id);
+                  const isVid = asset.asset_type === "VIDEO" || asset.mime_type?.startsWith("video/");
+
+                  return (
+                    <div
+                      key={asset.id}
+                      onClick={() => handleSelectFromLibrary(asset)}
+                      style={{
+                        background: "#0d0d0d",
+                        border: "1px solid var(--border)",
+                        borderRadius: 6,
+                        overflow: "hidden",
+                        cursor: "pointer",
+                        transition: "transform 0.15s, border-color 0.15s",
+                        position: "relative",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = "var(--gold)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = "var(--border)";
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "100%",
+                          paddingBottom: "100%",
+                          position: "relative",
+                          background: "#000",
+                        }}
+                      >
+                        {isVid ? (
+                          <video
+                            src={url}
+                            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                          />
+                        ) : (
+                          <img
+                            src={url}
+                            alt={asset.original_filename}
+                            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                            onError={(e) => {
+                              e.currentTarget.src = "/og-image.png";
+                            }}
+                          />
+                        )}
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: 4,
+                            right: 4,
+                            padding: "1px 4px",
+                            borderRadius: 2,
+                            fontSize: 9,
+                            fontWeight: 700,
+                            background: isVid ? "rgba(147, 51, 234, 0.85)" : "rgba(34, 197, 94, 0.85)",
+                            color: "#fff",
+                          }}
+                        >
+                          {isVid ? "VID" : "IMG"}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          padding: 6,
+                          fontSize: 11,
+                          color: "var(--text-h)",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                        title={asset.original_filename}
+                      >
+                        {asset.original_filename || "Media asset"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>
     );
   }
 
-  // Sort posts by post_date || created_at
-  const sortedPosts = [...posts].sort((a, b) => {
-    const da = a.post_date ? new Date(a.post_date).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
-    const db = b.post_date ? new Date(b.post_date).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
-    return sortOrder === "desc" ? db - da : da - db;
-  });
-
-  // LIST VIEW
+  // ==========================================
+  // LIST VIEW (Cards / Table)
+  // ==========================================
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
@@ -543,18 +1191,20 @@ const AdminGalleryPage = () => {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           {saveSuccess && (
-            <div style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              background: "rgba(34, 197, 94, 0.15)",
-              border: "1px solid rgba(34, 197, 94, 0.4)",
-              color: "#86efac",
-              padding: "6px 14px",
-              borderRadius: "4px",
-              fontSize: "12px",
-              fontWeight: 500
-            }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "rgba(34, 197, 94, 0.15)",
+                border: "1px solid rgba(34, 197, 94, 0.4)",
+                color: "#86efac",
+                padding: "6px 14px",
+                borderRadius: "4px",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
+            >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
@@ -571,69 +1221,100 @@ const AdminGalleryPage = () => {
         <div className="admin-placeholder">
           <h2>No Gallery Posts Found</h2>
           <p>You haven't added any posts to the gallery yet.</p>
-          <button className="primary-button" style={{ marginTop: 16 }} onClick={handleCreateClick}>Create First Post</button>
+          <button className="primary-button" style={{ marginTop: 16 }} onClick={handleCreateClick}>
+            Create First Post
+          </button>
         </div>
       ) : viewMode === "grid" ? (
         /* GRID / CARDS VIEW */
         <div className="admin-listing-grid">
           {sortedPosts.map((post) => {
             const postSlides = slides.filter((s) => s.post_id === post.id);
-            const primaryAsset = mediaAssets.find((m) => m.id === post.primary_asset_id) || (postSlides[0] ? mediaAssets.find((m) => m.id === postSlides[0].asset_id) : null);
-            const assetUrl = primaryAsset
-              ? (primaryAsset.has_file_data ? `/api/media/asset/${primaryAsset.id}` : (primaryAsset.r2_key ? '/' + primaryAsset.r2_key.replace(/^\//, '') : `/api/media/asset/${primaryAsset.id}`))
-              : (post.primary_asset_id ? `/api/media/asset/${post.primary_asset_id}` : null);
+            const primaryAssetId = post.primary_asset_id || (postSlides[0] ? postSlides[0].asset_id : null);
+            const assetUrl = getMediaUrl(primaryAssetId);
+            const displayTitle = post.title || post.caption || "Visual Archive Post";
+
             return (
               <div key={post.id} className="admin-item-card">
                 <div>
-                  <div style={{ position: "relative", width: "100%", paddingBottom: "75%", background: "#000", borderRadius: "4px", overflow: "hidden", marginBottom: "12px", border: "1px solid var(--border)" }}>
+                  <div
+                    style={{
+                      position: "relative",
+                      width: "100%",
+                      paddingBottom: "75%",
+                      background: "#000",
+                      borderRadius: "4px",
+                      overflow: "hidden",
+                      marginBottom: "12px",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
                     {assetUrl ? (
                       <img
                         src={assetUrl}
-                        alt={post.title}
+                        alt={displayTitle}
                         style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
                         onError={(e) => {
-                          if (!e.target.dataset.fallbackTried) {
-                            e.target.dataset.fallbackTried = 'true';
-                            e.target.src = '/og-image.png';
-                          }
+                          e.currentTarget.src = "/og-image.png";
                         }}
                       />
                     ) : (
-                      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "var(--muted)", fontSize: "12px" }}>
-                        No Image
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%)",
+                          color: "var(--muted)",
+                          fontSize: "12px",
+                        }}
+                      >
+                        No Media
                       </div>
                     )}
-                    <span style={{ 
-                      position: "absolute", 
-                      top: 8, 
-                      right: 8, 
-                      padding: "2px 8px", 
-                      borderRadius: "4px", 
-                      fontSize: 10, 
-                      fontWeight: 700, 
-                      textTransform: "uppercase",
-                      background: post.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.9)" : post.status === "SCHEDULED" ? "rgba(56, 189, 248, 0.9)" : "rgba(245, 158, 11, 0.9)",
-                      color: "#000"
-                    }}>
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 8,
+                        right: 8,
+                        padding: "2px 8px",
+                        borderRadius: "4px",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        background:
+                          post.status === "PUBLISHED"
+                            ? "rgba(16, 185, 129, 0.9)"
+                            : post.status === "SCHEDULED"
+                            ? "rgba(56, 189, 248, 0.9)"
+                            : "rgba(245, 158, 11, 0.9)",
+                        color: "#000",
+                      }}
+                    >
                       {post.status || "DRAFT"}
                     </span>
                   </div>
 
-                  <h3 style={{ fontSize: 16, margin: "0 0 4px 0", color: "var(--text-h)" }}>{post.title}</h3>
+                  <h3 style={{ fontSize: 16, margin: "0 0 4px 0", color: "var(--text-h)" }}>{displayTitle}</h3>
                   <div style={{ fontSize: 12, color: "var(--gold)", textTransform: "uppercase", fontWeight: 600 }}>
-                    {post.post_type} • {post.display_date || post.post_date}
+                    {post.post_type} • {formatGalleryDate(post.post_date)}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
-                    {postSlides.length} slide(s) • category: {post.category || "General"}
+                    {postSlides.length > 0 ? `${postSlides.length} slide(s)` : "Single item"} • category: {post.category || "Portraits & Style"}
                   </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-                  <button
-                    onClick={() => handleEditClick(post)}
-                    className="studio-pill-btn"
-                    style={{ fontSize: 12 }}
-                  >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginTop: 16,
+                    borderTop: "1px solid var(--border)",
+                    paddingTop: 12,
+                  }}
+                >
+                  <button onClick={() => handleEditClick(post)} className="studio-pill-btn" style={{ fontSize: 12 }}>
                     Edit
                   </button>
                   {deleteConfirmId === post.id ? (
@@ -642,7 +1323,13 @@ const AdminGalleryPage = () => {
                       <button
                         onClick={() => handleDelete(post.id)}
                         className="studio-pill-btn"
-                        style={{ background: "rgba(220,38,38,0.2)", color: "#fca5a5", borderColor: "#fca5a5", fontSize: 11, padding: "2px 8px" }}
+                        style={{
+                          background: "rgba(220,38,38,0.2)",
+                          color: "#fca5a5",
+                          borderColor: "#fca5a5",
+                          fontSize: 11,
+                          padding: "2px 8px",
+                        }}
                         disabled={isDeleting}
                       >
                         Yes
@@ -675,9 +1362,9 @@ const AdminGalleryPage = () => {
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)", background: "rgba(223, 194, 125, 0.05)" }}>
-                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Title</th>
+                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Visual / Title</th>
                 <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Type / Date</th>
-                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Slides</th>
+                <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Category</th>
                 <th style={{ padding: "16px", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Status</th>
                 <th style={{ padding: "16px", textAlign: "right", color: "var(--muted)", fontWeight: 500, fontSize: 12, textTransform: "uppercase" }}>Actions</th>
               </tr>
@@ -685,35 +1372,89 @@ const AdminGalleryPage = () => {
             <tbody>
               {sortedPosts.map((post) => {
                 const postSlides = slides.filter((s) => s.post_id === post.id);
+                const primaryAssetId = post.primary_asset_id || (postSlides[0] ? postSlides[0].asset_id : null);
+                const assetUrl = getMediaUrl(primaryAssetId);
+                const displayTitle = post.title || post.caption || "Visual Archive Post";
+
                 return (
                   <tr key={post.id} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ padding: "16px", color: "var(--text-h)", fontWeight: 500 }}>
-                      {post.title}
-                      <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 400, marginTop: 4 }}>/{post.slug}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 4,
+                            overflow: "hidden",
+                            background: "#000",
+                            flexShrink: 0,
+                            border: "1px solid var(--border)",
+                          }}
+                        >
+                          {assetUrl ? (
+                            <img
+                              src={assetUrl}
+                              alt={displayTitle}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              onError={(e) => {
+                                e.currentTarget.src = "/og-image.png";
+                              }}
+                            />
+                          ) : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 10 }}>
+                              No Media
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div>{displayTitle}</div>
+                          <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
+                            /{post.slug}
+                          </div>
+                        </div>
+                      </div>
                     </td>
                     <td style={{ padding: "16px" }}>
-                      {post.post_type}
-                      <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 400, marginTop: 4 }}>{post.post_date}</div>
+                      <div style={{ textTransform: "capitalize", fontWeight: 500 }}>{post.post_type}</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
+                        {formatGalleryDate(post.post_date)}
+                      </div>
                     </td>
                     <td style={{ padding: "16px" }}>
-                      {postSlides.length > 0 ? (
-                        <span style={{ padding: "2px 6px", background: "rgba(223, 194, 125, 0.1)", color: "var(--gold)", borderRadius: 3, fontSize: 11 }}>
-                          {postSlides.length} slide{postSlides.length !== 1 ? "s" : ""}
-                        </span>
-                      ) : (
-                        <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>
-                      )}
+                      <span
+                        style={{
+                          padding: "2px 8px",
+                          background: "rgba(223, 194, 125, 0.1)",
+                          color: "var(--gold)",
+                          borderRadius: 3,
+                          fontSize: 12,
+                        }}
+                      >
+                        {post.category || "Portraits & Style"}
+                      </span>
                     </td>
                     <td style={{ padding: "16px" }}>
-                      <span style={{
-                        padding: "4px 8px",
-                        borderRadius: "4px",
-                        fontSize: 10,
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        background: post.status === "PUBLISHED" ? "rgba(16, 185, 129, 0.1)" : post.status === "SCHEDULED" ? "rgba(56, 189, 248, 0.1)" : "rgba(245, 158, 11, 0.1)",
-                        color: post.status === "PUBLISHED" ? "#34d399" : post.status === "SCHEDULED" ? "#38bdf8" : "#fbbf24",
-                      }}>
+                      <span
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          background:
+                            post.status === "PUBLISHED"
+                              ? "rgba(16, 185, 129, 0.1)"
+                              : post.status === "SCHEDULED"
+                              ? "rgba(56, 189, 248, 0.1)"
+                              : "rgba(245, 158, 11, 0.1)",
+                          color:
+                            post.status === "PUBLISHED"
+                              ? "#34d399"
+                              : post.status === "SCHEDULED"
+                              ? "#38bdf8"
+                              : "#fbbf24",
+                        }}
+                      >
                         {post.status || "DRAFT"}
                       </span>
                     </td>
