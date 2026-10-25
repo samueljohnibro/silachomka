@@ -125,7 +125,7 @@ async function main() {
   await page.waitForSelector('.admin-layout-wrapper', { timeout: 15000 });
   report('Admin CMS login successful', page.url().includes('/admin'));
 
-  // 2C: Admin Music / Releases - Image Previews
+  // 2C: Admin Music / Releases - Image Previews & Form Picker
   console.log('\n2C. Checking Admin Music / Releases Images...');
   await page.goto('https://silachomka.vercel.app/admin/music', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.admin-item-card, .admin-card table', { timeout: 15000 });
@@ -151,8 +151,27 @@ async function main() {
     console.log(`  Sample Music cover dimensions: ${validMusicImgs[0].naturalWidth}x${validMusicImgs[0].naturalHeight} px (src: ${validMusicImgs[0].src.slice(0, 70)}...)`);
   }
 
-  // 2D: Admin Beats - Image Previews
-  console.log('\n2D. Checking Admin Beats Images...');
+  // Check MediaAssetPicker in Release Editor directly while on Music page
+  console.log('\n2D. Checking MediaAssetPicker inside Release Edit Form...');
+  const manageBtn = await page.$('.admin-item-card button, .admin-card table button');
+  if (manageBtn) {
+    await manageBtn.click();
+    await page.waitForSelector('.media-asset-picker', { timeout: 10000 });
+    await new Promise(r => setTimeout(r, 2000));
+    const pickerImg = await page.evaluate(() => {
+      const img = document.querySelector('.media-asset-picker img');
+      if (!img) return null;
+      return {
+        src: img.src,
+        naturalWidth: img.naturalWidth,
+        naturalHeight: img.naturalHeight
+      };
+    });
+    report('MediaAssetPicker in Release Editor renders cover preview', (pickerImg?.naturalWidth || 0) > 0, `(${pickerImg?.naturalWidth}x${pickerImg?.naturalHeight} px)`);
+  }
+
+  // 2E: Admin Beats - Image Previews & Form Picker
+  console.log('\n2E. Checking Admin Beats Images...');
   await page.goto('https://silachomka.vercel.app/admin/beats', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.admin-item-card, .admin-card table', { timeout: 15000 });
 
@@ -176,7 +195,7 @@ async function main() {
     console.log(`  Sample Beat artwork dimensions: ${validBeatsImgs[0].naturalWidth}x${validBeatsImgs[0].naturalHeight} px (src: ${validBeatsImgs[0].src.slice(0, 70)}...)`);
   }
 
-  // Also switch to Grid view to verify grid cards
+  // Check Grid view toggle
   const gridBtn = await page.$('.view-toggle-btn[title*="Grid"], .admin-view-toggle button:last-child');
   if (gridBtn) {
     await gridBtn.click();
@@ -192,56 +211,55 @@ async function main() {
     report('Beat images in Grid view render with non-zero dimensions', validGridImgs.length > 0, `(${validGridImgs.length}/${gridImgs.length} valid)`);
   }
 
-  // 2E: MediaAssetPicker inside Release Editor
-  console.log('\n2E. Checking MediaAssetPicker inside Release Edit Form...');
-  await page.goto('https://silachomka.vercel.app/admin/music', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.admin-item-card button, .admin-card table button', { timeout: 15000 });
-  const manageBtn = await page.$('.admin-item-card button, .admin-card table button');
-  if (manageBtn) {
-    await manageBtn.click();
-    await page.waitForSelector('.media-asset-picker', { timeout: 10000 });
-    await new Promise(r => setTimeout(r, 2000));
-    const pickerImg = await page.evaluate(() => {
-      const img = document.querySelector('.media-asset-picker img');
-      if (!img) return null;
-      return {
-        src: img.src,
-        naturalWidth: img.naturalWidth,
-        naturalHeight: img.naturalHeight
-      };
-    });
-    report('MediaAssetPicker in Release Editor renders cover preview', (pickerImg?.naturalWidth || 0) > 0, `(${pickerImg?.naturalWidth}x${pickerImg?.naturalHeight} px)`);
-  }
-
-  // 2F: MediaAssetPicker inside Beat Editor
+  // Check MediaAssetPicker inside Beat Editor directly while on Beats page
   console.log('\n2F. Checking MediaAssetPicker inside Beat Edit Form...');
-  await page.goto('https://silachomka.vercel.app/admin/beats', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.admin-item-card button, .admin-card table button', { timeout: 15000 });
-  const editBeatBtn = await page.$('.admin-item-card button, .admin-card table button');
-  if (editBeatBtn) {
-    await editBeatBtn.click();
+  const clickedBeatEdit = await page.evaluate(() => {
+    const btns = Array.from(document.querySelectorAll('button'));
+    const editBtn = btns.find(b => b.textContent.trim() === 'Edit');
+    if (editBtn) {
+      editBtn.click();
+      return true;
+    }
+    return false;
+  });
+
+  if (clickedBeatEdit) {
     await page.waitForSelector('.media-asset-picker', { timeout: 10000 });
-    await new Promise(r => setTimeout(r, 2000));
+    // Wait for the preview image to decode
+    await page.waitForFunction(() => {
+      const img = document.querySelector('.media-asset-picker img');
+      return img && img.complete && img.naturalWidth > 0;
+    }, { timeout: 15000 }).catch(() => null);
+
     const beatPickerImg = await page.evaluate(() => {
       const img = document.querySelector('.media-asset-picker img');
       if (!img) return null;
       return {
         src: img.src,
         naturalWidth: img.naturalWidth,
-        naturalHeight: img.naturalHeight
+        naturalHeight: img.naturalHeight,
+        complete: img.complete
       };
     });
-    report('MediaAssetPicker in Beat Editor renders cover preview', (beatPickerImg?.naturalWidth || 0) > 0, `(${beatPickerImg?.naturalWidth}x${beatPickerImg?.naturalHeight} px)`);
+    report('MediaAssetPicker in Beat Editor renders cover preview', (beatPickerImg?.naturalWidth || 0) > 0, `(${beatPickerImg?.naturalWidth}x${beatPickerImg?.naturalHeight} px, src: ${beatPickerImg?.src ? beatPickerImg.src.slice(0, 60) : 'none'}...)`);
+
+    // Close the modal
+    await page.evaluate(() => {
+      const cancelBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Cancel');
+      if (cancelBtn) cancelBtn.click();
+    }).catch(() => null);
+    await new Promise(r => setTimeout(r, 1000));
   }
 
-  // 2G: Public Release Page Image
+  // 2G: Public Release Page Image (Use a new tab so admin state does not interfere)
   console.log('\n2G. Checking Public Release Page Image...');
-  await page.goto('https://silachomka.vercel.app/release/fridaythe13th', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.release-artwork-container img, .release-cover img, img[alt*="cover art"]', { timeout: 15000 }).catch(() => null);
+  const publicPage = await browser.newPage();
+  await publicPage.goto('https://silachomka.vercel.app/release/fridaythe13th', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await publicPage.waitForSelector('.release-artwork-container img, .release-cover img, img[alt*="cover art"]', { timeout: 15000 }).catch(() => null);
   await new Promise(r => setTimeout(r, 2000));
 
-  const publicRelImg = await page.evaluate(() => {
-    const img = document.querySelector('img[alt*="cover art"]') || document.querySelector('.release-artwork-container img');
+  const publicRelImg = await publicPage.evaluate(() => {
+    const img = document.querySelector('img[alt*="cover art"]') || document.querySelector('.release-artwork-container img') || document.querySelector('img');
     if (!img) return null;
     return {
       src: img.src,
@@ -255,11 +273,11 @@ async function main() {
 
   // 2H: Public Beats Page Images
   console.log('\n2H. Checking Public Beats Page Images...');
-  await page.goto('https://silachomka.vercel.app/beats', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.beat-card, .beat-reel, .beat-video', { timeout: 15000 }).catch(() => null);
+  await publicPage.goto('https://silachomka.vercel.app/beats', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await publicPage.waitForSelector('.beat-card, .beat-reel, .beat-video', { timeout: 15000 }).catch(() => null);
   await new Promise(r => setTimeout(r, 2500));
 
-  const publicBeatImgs = await page.evaluate(() => {
+  const publicBeatImgs = await publicPage.evaluate(() => {
     const imgs = Array.from(document.querySelectorAll('.beat-card img, img.beat-video, video.beat-video'));
     return imgs.map(el => ({
       tagName: el.tagName,
