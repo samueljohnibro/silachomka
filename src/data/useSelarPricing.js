@@ -52,6 +52,7 @@ export function useSelarPricing(initialCurrency) {
       if (data?.success) {
         pricingCache.set(curr, data);
         setPricingData(data);
+        console.log("SELAR PRICING LOADED:", curr, Object.keys(data.products || {}).length, "products");
       } else {
         throw new Error(data?.error || "Failed to load authoritative Selar pricing");
       }
