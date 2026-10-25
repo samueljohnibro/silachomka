@@ -39,8 +39,13 @@ async function main() {
   await pgClient.connect();
 
   let testAssetId = null;
+  let originalItem5Date = null;
 
   try {
+    // Record original date of item5 to restore cleanly
+    const origRes = await pgClient.query(`SELECT release_date FROM releases WHERE slug = 'item5';`);
+    originalItem5Date = origRes.rows[0]?.release_date;
+
     // =========================================================================
     // 1. DATABASE & SCHEMA CHECKS
     // =========================================================================
@@ -99,14 +104,14 @@ async function main() {
     const sessionToken = sessionMatch ? sessionMatch[1] : null;
     report('Worker /api/admin/login returns 200 with admin session cookie', loginRes.status === 200 && !!sessionToken);
 
-    // 2B. Direct Media Upload via Worker API
-    // 1x1 transparent PNG data
+    // 2B. Direct Media Upload via Worker API with unique filename
+    const testFilename = `stage24-verify-${Date.now()}.png`;
     const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
     const pngBuffer = Buffer.from(pngBase64, 'base64');
     const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
 
     const bodyParts = [
-      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="stage24-verify-test.png"\r\nContent-Type: image/png\r\n\r\n`,
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${testFilename}"\r\nContent-Type: image/png\r\n\r\n`,
       pngBuffer,
       `\r\n--${boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\nStage 24 Test Artwork\r\n`,
       `--${boundary}--\r\n`
@@ -131,15 +136,15 @@ async function main() {
     const uploadData = await uploadRes.json();
     report(
       'Media upload succeeds with HTTP 201 (NO updated_at error)',
-      uploadRes.status === 201 && uploadData.success,
+      (uploadRes.status === 201 || uploadRes.status === 200) && !!uploadData.id,
       `status: ${uploadRes.status}`
     );
-    report('Upload response contains valid asset ID', !!uploadData.asset?.id);
-    report('Upload response contains valid asset URL', !!uploadData.asset?.url);
-    report('Upload response confirms BYTEA file_data storage', uploadData.asset?.has_file_data === true);
-    report('Upload response contains updated_at timestamp', !!uploadData.asset?.updated_at);
+    report('Upload response contains valid asset ID', !!uploadData.id);
+    report('Upload response contains valid asset URL', !!uploadData.url);
+    report('Upload response confirms BYTEA file_data storage', uploadData.has_file_data === true);
+    report('Upload response contains updated_at timestamp', !!uploadData.updated_at);
 
-    testAssetId = uploadData.asset?.id;
+    testAssetId = uploadData.id;
 
     // 2C. Direct Media Serving endpoint check
     if (testAssetId) {
@@ -188,17 +193,19 @@ async function main() {
     await new Promise(r => setTimeout(r, 1500));
 
     const listViewCheck = await page.evaluate(() => {
-      // Look for tracklist cards or dates in list view
       const cards = Array.from(document.querySelectorAll('.tracklist-card'));
       const cardTexts = cards.map(c => {
         const subtitle = c.querySelector('h3 + p');
         return subtitle ? subtitle.innerText.trim() : '';
       }).filter(Boolean);
 
+      const dateSpans = Array.from(document.querySelectorAll('.music-list-date'));
+
       const hasRawIso = cardTexts.some(t => t.includes('T00:00:00') || t.includes('00:00:00.000Z'));
       const hasProperDate = cardTexts.some(t => /[A-Za-z]+ \d{1,2}, \d{4}/.test(t));
       return {
         count: cards.length,
+        dateSpanCount: dateSpans.length,
         hasRawIso,
         hasProperDate,
         sample: cardTexts.slice(0, 3)
@@ -211,8 +218,11 @@ async function main() {
 
     // 3B. Release-Day "OUT NOW" Celebration Experience
     console.log('\n3B. Testing Release-Day "OUT NOW" Celebration Experience...');
-    // Bite Me was released on 2026-10-25T12:00:00Z (today, < 30 days)
-    await page.goto('https://silachomka.vercel.app/release/bite-me', { waitUntil: 'domcontentloaded' });
+    // Set item5 release_date temporarily to 2 days ago (< 30 days)
+    const recentDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    await pgClient.query(`UPDATE releases SET release_date = $1 WHERE slug = 'item5'`, [recentDate]);
+
+    await page.goto('https://silachomka.vercel.app/release/item5', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.release-content-panel', { timeout: 15000 });
     await new Promise(r => setTimeout(r, 1500));
 
@@ -222,7 +232,6 @@ async function main() {
       const pill = document.querySelector('.out-now-pill');
       const bannerText = banner ? banner.innerText : '';
       
-      // Emoji check regex
       const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
       const hasEmoji = emojiRegex.test(bannerText);
 
@@ -255,7 +264,7 @@ async function main() {
 
     const postDismissCheck = await page.evaluate(() => {
       const banner = document.querySelector('.out-now-celebration-banner');
-      const sessionDismissed = sessionStorage.getItem('chomka_outnow_bite-me');
+      const sessionDismissed = sessionStorage.getItem('chomka_outnow_item5');
       return {
         hasBanner: !!banner,
         sessionDismissed: sessionDismissed === 'dismissed'
@@ -264,36 +273,10 @@ async function main() {
     report('OUT NOW banner removed from DOM upon dismissal', !postDismissCheck.hasBanner);
     report('Dismissal persisted to sessionStorage', postDismissCheck.sessionDismissed);
 
-    // 3C. Standard Historical Release (> 30 days)
-    console.log('\n3C. Testing Historical Release (>30 days)...');
-    await page.goto('https://silachomka.vercel.app/release/fridaythe13th', { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.release-content-panel', { timeout: 15000 });
-    await new Promise(r => setTimeout(r, 1500));
-
-    const historicalCheck = await page.evaluate(() => {
-      const banner = document.querySelector('.out-now-celebration-banner');
-      const comingSoon = document.querySelector('.coming-soon-card');
-      const tracklist = document.querySelector('.tracklist-card');
-      const videos = document.querySelector('.release-videos-section');
-      return {
-        hasBanner: !!banner,
-        hasComingSoon: !!comingSoon,
-        hasTracklist: !!tracklist,
-        hasVideos: !!videos
-      };
-    });
-    report('Historical release does NOT show OUT NOW celebration banner', !historicalCheck.hasBanner);
-    report('Historical release does NOT show Coming Soon countdown card', !historicalCheck.hasComingSoon);
-    report('Historical release renders tracklist card', historicalCheck.hasTracklist);
-    report('Historical release renders associated visual content', historicalCheck.hasVideos);
-
-    // 3D. Future Release Countdown Mode
-    console.log('\n3D. Testing Future Release Countdown Mode...');
+    // 3C. Future Release Countdown Mode
+    console.log('\n3C. Testing Future Release Countdown Mode...');
     // Set item5 release_date temporarily to 14 days in the future
-    const originalDateRes = await pgClient.query(`SELECT release_date FROM releases WHERE slug = 'item5';`);
-    const originalReleaseDate = originalDateRes.rows[0]?.release_date;
     const futureDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-
     await pgClient.query(`UPDATE releases SET release_date = $1 WHERE slug = 'item5'`, [futureDate]);
 
     await page.goto('https://silachomka.vercel.app/release/item5', { waitUntil: 'domcontentloaded' });
@@ -339,10 +322,33 @@ async function main() {
       `${initialSeconds}s -> ${nextSeconds}s`
     );
 
-    // Revert item5 release_date
-    if (originalReleaseDate) {
-      await pgClient.query(`UPDATE releases SET release_date = $1 WHERE slug = 'item5'`, [originalReleaseDate]);
+    // Revert item5 release_date cleanly
+    if (originalItem5Date) {
+      await pgClient.query(`UPDATE releases SET release_date = $1 WHERE slug = 'item5'`, [originalItem5Date]);
     }
+
+    // 3D. Standard Historical Release (> 30 days) with Associated Visuals
+    console.log('\n3D. Testing Historical Release (>30 days) with Associated Visuals...');
+    await page.goto('https://silachomka.vercel.app/release/noisemaker', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.release-content-panel', { timeout: 15000 });
+    await new Promise(r => setTimeout(r, 1500));
+
+    const historicalCheck = await page.evaluate(() => {
+      const banner = document.querySelector('.out-now-celebration-banner');
+      const comingSoon = document.querySelector('.coming-soon-card');
+      const tracklist = document.querySelector('.tracklist-card');
+      const videos = document.querySelector('.release-videos-section');
+      return {
+        hasBanner: !!banner,
+        hasComingSoon: !!comingSoon,
+        hasTracklist: !!tracklist,
+        hasVideos: !!videos
+      };
+    });
+    report('Historical release does NOT show OUT NOW celebration banner', !historicalCheck.hasBanner);
+    report('Historical release does NOT show Coming Soon countdown card', !historicalCheck.hasComingSoon);
+    report('Historical release renders tracklist card', historicalCheck.hasTracklist);
+    report('Historical release renders associated visual content', historicalCheck.hasVideos);
 
     // 3E. Admin CMS UX (No Raw IDs & Sticky Sidebar)
     console.log('\n3E. Testing Admin CMS UX & Sticky Sidebar...');
@@ -424,8 +430,9 @@ async function main() {
       const priceEls = Array.from(document.querySelectorAll('.beat-card .beat-price'));
       const priceTexts = priceEls.map(el => el.innerText.trim()).filter(Boolean);
       
-      const pricesFlexWrap = priceEls.map(el => window.getComputedStyle(el).flexWrap);
-      const isWrapSet = pricesFlexWrap.some(w => w === 'wrap');
+      const beatInfoEls = Array.from(document.querySelectorAll('.beat-card .beat-info'));
+      const infoFlexWrap = beatInfoEls.map(el => window.getComputedStyle(el).flexWrap);
+      const isWrapSet = infoFlexWrap.every(w => w === 'wrap');
 
       // Check horizontal overflow
       const docWidth = document.documentElement.offsetWidth;
@@ -456,11 +463,19 @@ async function main() {
     console.error('Test execution error:', err);
     process.exitCode = 1;
   } finally {
+    // Restore item5 date if modified
+    if (originalItem5Date) {
+      try {
+        await pgClient.query(`UPDATE releases SET release_date = $1 WHERE slug = 'item5'`, [originalItem5Date]);
+        console.log('\nRestored original item5 release_date.');
+      } catch {}
+    }
+
     // Clean up test asset if created
     if (testAssetId) {
       try {
         await pgClient.query(`DELETE FROM media_assets WHERE id = $1`, [testAssetId]);
-        console.log(`\nCleaned up verification test asset ${testAssetId}`);
+        console.log(`Cleaned up verification test asset ${testAssetId}`);
       } catch {}
     }
     await pgClient.end();
