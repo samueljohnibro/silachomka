@@ -1075,7 +1075,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
                           {(release.displayDate || release.date || release.release_date) && (
                             <>
                               <span>•</span>
-                              <span style={{ color: "var(--muted)" }}>
+                              <span className="music-list-date" style={{ color: "var(--muted)" }}>
                                 {formatGalleryDate(release.date || release.release_date) || release.displayDate}
                               </span>
                             </>
