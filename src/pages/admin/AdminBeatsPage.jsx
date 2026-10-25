@@ -607,7 +607,7 @@ const AdminBeatsPage = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(223, 194, 125, 0.05)' }}>
-                <th style={{ padding: '16px', color: 'var(--muted)', fontWeight: 500, fontSize: 12, textTransform: 'uppercase' }}>Title</th>
+                <th style={{ padding: '16px', color: 'var(--muted)', fontWeight: 500, fontSize: 12, textTransform: 'uppercase' }}>Cover / Title</th>
                 <th style={{ padding: '16px', color: 'var(--muted)', fontWeight: 500, fontSize: 12, textTransform: 'uppercase' }}>Genre</th>
                 <th style={{ padding: '16px', color: 'var(--muted)', fontWeight: 500, fontSize: 12, textTransform: 'uppercase' }}>BPM / Key</th>
                 <th style={{ padding: '16px', color: 'var(--muted)', fontWeight: 500, fontSize: 12, textTransform: 'uppercase' }}>Date</th>
@@ -616,33 +616,52 @@ const AdminBeatsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedBeats.map(beat => (
-                <tr key={beat.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '16px', color: 'var(--text-h)', fontWeight: 500 }}>
-                    {beat.title}
-                    <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400, marginTop: 4 }}>/{beat.slug}</div>
-                  </td>
-                  <td style={{ padding: '16px' }}>{beat.genre || '—'}</td>
-                  <td style={{ padding: '16px' }}>
-                    {beat.bpm ? `${beat.bpm} BPM` : '—'} 
-                    {beat.beat_key ? <span style={{ marginLeft: 8, color: 'var(--gold)' }}>{beat.beat_key}</span> : ''}
-                  </td>
-                  <td style={{ padding: '16px', fontSize: 13, color: 'var(--muted)' }}>
-                    {beat.created_at ? beat.created_at.split('T')[0] : '—'}
-                  </td>
-                  <td style={{ padding: '16px' }}>
-                    <span style={{ 
-                      padding: '4px 8px', 
-                      borderRadius: '4px', 
-                      fontSize: 10, 
-                      fontWeight: 700, 
-                      textTransform: 'uppercase',
-                      background: beat.status === 'PUBLISHED' ? 'rgba(16, 185, 129, 0.1)' : beat.status === 'SCHEDULED' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                      color: beat.status === 'PUBLISHED' ? '#34d399' : beat.status === 'SCHEDULED' ? '#38bdf8' : '#fbbf24'
-                    }}>
-                      {beat.status || 'DRAFT'}
-                    </span>
-                  </td>
+              {sortedBeats.map(beat => {
+                const imageUrl = getMediaUrl(beat.image_asset_id) || getMediaUrl(beat.video_asset_id);
+                return (
+                  <tr key={beat.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '16px', color: 'var(--text-h)', fontWeight: 500 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {imageUrl && (
+                          <img
+                            src={imageUrl}
+                            alt=""
+                            style={{ width: 36, height: 36, borderRadius: 4, objectFit: 'cover', border: '1px solid var(--border)' }}
+                            onError={(e) => {
+                              if (!e.target.dataset.fallbackTried) {
+                                e.target.dataset.fallbackTried = 'true';
+                                e.target.src = '/og-image.png';
+                              }
+                            }}
+                          />
+                        )}
+                        <div>
+                          <div>{beat.title}</div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400, marginTop: 4 }}>/{beat.slug}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px' }}>{beat.genre || '—'}</td>
+                    <td style={{ padding: '16px' }}>
+                      {beat.bpm ? `${beat.bpm} BPM` : '—'} 
+                      {beat.beat_key ? <span style={{ marginLeft: 8, color: 'var(--gold)' }}>{beat.beat_key}</span> : ''}
+                    </td>
+                    <td style={{ padding: '16px', fontSize: 13, color: 'var(--muted)' }}>
+                      {beat.created_at ? beat.created_at.split('T')[0] : '—'}
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <span style={{ 
+                        padding: '4px 8px', 
+                        borderRadius: '4px', 
+                        fontSize: 10, 
+                        fontWeight: 700, 
+                        textTransform: 'uppercase',
+                        background: beat.status === 'PUBLISHED' ? 'rgba(16, 185, 129, 0.1)' : beat.status === 'SCHEDULED' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                        color: beat.status === 'PUBLISHED' ? '#34d399' : beat.status === 'SCHEDULED' ? '#38bdf8' : '#fbbf24'
+                      }}>
+                        {beat.status || 'DRAFT'}
+                      </span>
+                    </td>
                   <td style={{ padding: '16px', textAlign: 'right' }}>
                     {deleteConfirmId === beat.id ? (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -683,7 +702,8 @@ const AdminBeatsPage = () => {
                     )}
                   </td>
                 </tr>
-              ))}
+              );
+            })}
             </tbody>
           </table>
         </div>
