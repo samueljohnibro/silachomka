@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const SUPPORTED_CURRENCIES = [
   { code: "NGN", symbol: "₦", label: "NGN (₦)" },
@@ -28,14 +28,19 @@ export function useSelarPricing(initialCurrency) {
     return "NGN";
   });
 
+  const activeCurrencyRef = useRef(currency);
+  activeCurrencyRef.current = currency;
+
   const [pricingData, setPricingData] = useState(() => pricingCache.get(currency) || null);
   const [isLoading, setIsLoading] = useState(!pricingCache.has(currency));
   const [error, setError] = useState(null);
 
   const fetchPricing = useCallback(async (curr) => {
     if (pricingCache.has(curr)) {
-      setPricingData(pricingCache.get(curr));
-      setIsLoading(false);
+      if (activeCurrencyRef.current === curr) {
+        setPricingData(pricingCache.get(curr));
+        setIsLoading(false);
+      }
     } else {
       setIsLoading(true);
     }
@@ -51,8 +56,9 @@ export function useSelarPricing(initialCurrency) {
       const data = await res.json();
       if (data?.success) {
         pricingCache.set(curr, data);
-        setPricingData(data);
-        console.log("SELAR PRICING LOADED:", curr, Object.keys(data.products || {}).length, "products");
+        if (activeCurrencyRef.current === curr) {
+          setPricingData(data);
+        }
       } else {
         throw new Error(data?.error || "Failed to load authoritative Selar pricing");
       }
@@ -60,7 +66,9 @@ export function useSelarPricing(initialCurrency) {
       console.warn("Could not fetch Selar pricing:", err.message);
       setError(err.message);
     } finally {
-      setIsLoading(false);
+      if (activeCurrencyRef.current === curr) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -70,9 +78,12 @@ export function useSelarPricing(initialCurrency) {
 
   const setCurrency = (newCurr) => {
     const upper = newCurr.toUpperCase();
+    activeCurrencyRef.current = upper;
     setCurrencyState(upper);
     if (pricingCache.has(upper)) {
       setPricingData(pricingCache.get(upper));
+    } else {
+      setPricingData(null);
     }
     try {
       localStorage.setItem("chomka_preferred_currency", upper);
@@ -129,6 +140,10 @@ export function useSelarPricing(initialCurrency) {
       if (currency === "NGN") {
         const raw = beat?.priceBasic || beat?.price_basic || 15000;
         return `₦${Number(raw).toLocaleString()}`;
+      }
+
+      if (currency === "USD") {
+        return "$11.26";
       }
 
       return null;
