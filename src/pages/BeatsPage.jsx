@@ -108,6 +108,8 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay, startingPrice 
           <img
             src={beat.video}
             alt=""
+            loading="lazy"
+            decoding="async"
             className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
             style={{ objectFit: "cover" }}
             aria-hidden="true"
