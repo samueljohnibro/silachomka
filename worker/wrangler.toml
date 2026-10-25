@@ -1,6 +1,7 @@
 name = "silachomka-api"
 main = "src/index.js"
 compatibility_date = "2026-09-12"
+compatibility_flags = ["nodejs_compat"]
 
 # Observability (optional but recommended for Workers)
 [observability]

@@ -467,8 +467,11 @@ const AdminMusicPage = () => {
   const getCoverUrl = (coverAssetId) => {
     if (!coverAssetId) return null;
     const asset = mediaAssets.find(m => m.id === coverAssetId);
-    if (!asset) return null;
-    return asset.has_file_data ? `/api/media/asset/${asset.id}` : '/' + asset.r2_key;
+    if (asset?.has_file_data) return `/api/media/asset/${asset.id}`;
+    if (asset?.r2_key) {
+      return asset.r2_key.startsWith('http') ? asset.r2_key : '/' + asset.r2_key.replace(/^\//, '');
+    }
+    return `/api/media/asset/${coverAssetId}`;
   };
 
   if (isLoading && view === "LIST") {
@@ -1075,7 +1078,12 @@ const AdminMusicPage = () => {
                         src={coverUrl}
                         alt={release.title}
                         style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                        onError={(e) => { e.target.style.display = 'none'; }}
+                        onError={(e) => {
+                          if (!e.target.dataset.fallbackTried) {
+                            e.target.dataset.fallbackTried = 'true';
+                            e.target.src = '/og-image.png';
+                          }
+                        }}
                       />
                     ) : (
                       <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "var(--muted)", fontSize: "12px" }}>
@@ -1174,7 +1182,12 @@ const AdminMusicPage = () => {
                             src={coverUrl}
                             alt=""
                             style={{ width: 36, height: 36, borderRadius: 4, objectFit: "cover", border: "1px solid var(--border)" }}
-                            onError={(e) => { e.target.style.display = 'none'; }}
+                            onError={(e) => {
+                              if (!e.target.dataset.fallbackTried) {
+                                e.target.dataset.fallbackTried = 'true';
+                                e.target.src = '/og-image.png';
+                              }
+                            }}
                           />
                         )}
                         <div>

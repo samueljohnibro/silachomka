@@ -45,6 +45,20 @@ export const MediaAssetPicker = ({
   // Filter assets by type
   const matchingAssets = assets.filter(a => a.asset_type === assetType);
   const selectedAsset = assets.find(a => a.id === value);
+  const hasAsset = Boolean(selectedAsset || value);
+
+  // Robust preview URL resolver
+  const previewUrl = selectedAsset?.has_file_data
+    ? `/api/media/asset/${selectedAsset.id}`
+    : selectedAsset?.r2_key
+      ? (selectedAsset.r2_key.startsWith('http') ? selectedAsset.r2_key : '/' + selectedAsset.r2_key.replace(/^\//, ''))
+      : selectedAsset?.url
+        ? selectedAsset.url
+        : value
+          ? `/api/media/asset/${value}`
+          : null;
+
+  const displayName = selectedAsset?.original_filename || selectedAsset?.r2_key || (value ? `Asset (${value.slice(0, 8)}...)` : 'Selected Asset');
 
   // Accepted file types based on assetType
   const acceptMap = {
@@ -63,9 +77,14 @@ export const MediaAssetPicker = ({
 
     try {
       const uploadedRecord = await adminApi.uploadMediaAsset(file, assetType);
+      const fullRecord = {
+        ...uploadedRecord,
+        has_file_data: true,
+        url: uploadedRecord.url || `/api/media/asset/${uploadedRecord.id}`
+      };
       // Immediately inject into local state so selectedAsset resolves without waiting for network re-fetch
-      setAssets(prev => [uploadedRecord, ...prev.filter(a => a.id !== uploadedRecord.id)]);
-      onChange(uploadedRecord.id, uploadedRecord);
+      setAssets(prev => [fullRecord, ...prev.filter(a => a.id !== fullRecord.id)]);
+      onChange(fullRecord.id, fullRecord);
       setShowLibrarySelect(false);
       await fetchAssets();
     } catch (err) {
@@ -174,7 +193,7 @@ export const MediaAssetPicker = ({
       )}
 
       {/* ACTIVE ASSET PREVIEW OR UPLOAD TRIGGER */}
-      {selectedAsset ? (
+      {hasAsset ? (
         <div
           className="media-asset-card"
           style={{
@@ -192,14 +211,15 @@ export const MediaAssetPicker = ({
           {assetType === 'IMAGE' && (
             <div style={{ position: 'relative', width: '56px', height: '56px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', background: '#000', border: '1px solid var(--border)' }}>
               <img
-                src={selectedAsset.has_file_data ? `/api/media/asset/${selectedAsset.id}` : '/' + selectedAsset.r2_key}
-                alt={selectedAsset.original_filename || 'Preview'}
+                src={previewUrl}
+                alt={displayName}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={(e) => {
-                  if (!e.target.dataset.fallbackTried && selectedAsset.r2_key) {
+                  if (!e.target.dataset.fallbackTried && selectedAsset?.r2_key) {
                     e.target.dataset.fallbackTried = 'true';
-                    e.target.src = '/' + selectedAsset.r2_key;
-                  } else {
+                    e.target.src = '/' + selectedAsset.r2_key.replace(/^\//, '');
+                  } else if (!e.target.dataset.fallbackTried) {
+                    e.target.dataset.fallbackTried = 'true';
                     e.target.src = '/og-image.png';
                   }
                 }}
@@ -211,7 +231,7 @@ export const MediaAssetPicker = ({
             <div style={{ flexShrink: 0 }}>
               <audio
                 controls
-                src={selectedAsset.has_file_data ? `/api/media/asset/${selectedAsset.id}` : '/' + selectedAsset.r2_key}
+                src={previewUrl}
                 style={{ height: '36px', maxWidth: '280px' }}
               />
             </div>
@@ -220,10 +240,15 @@ export const MediaAssetPicker = ({
           {assetType === 'VIDEO' && (
             <div style={{ position: 'relative', width: '56px', height: '56px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', background: '#000', border: '1px solid var(--border)' }}>
               <img
-                src={selectedAsset.has_file_data ? `/api/media/asset/${selectedAsset.id}` : '/' + selectedAsset.r2_key}
+                src={previewUrl}
                 alt="Visualizer"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
+                onError={(e) => {
+                  if (!e.target.dataset.fallbackTried) {
+                    e.target.dataset.fallbackTried = 'true';
+                    e.target.src = '/og-image.png';
+                  }
+                }}
               />
             </div>
           )}
@@ -231,12 +256,12 @@ export const MediaAssetPicker = ({
           {/* ASSET METADATA */}
           <div style={{ flex: 1, minWidth: '160px' }}>
             <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-h)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-              {selectedAsset.original_filename || selectedAsset.r2_key}
+              {displayName}
             </div>
             <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-              Key: <span style={{ color: 'var(--gold)' }}>{selectedAsset.r2_key}</span>
-              {selectedAsset.size_bytes && <span> • {formatFileSize(selectedAsset.size_bytes)}</span>}
-              {selectedAsset.mime_type && <span> • {selectedAsset.mime_type}</span>}
+              Key: <span style={{ color: 'var(--gold)' }}>{selectedAsset?.r2_key || value}</span>
+              {selectedAsset?.size_bytes && <span> • {formatFileSize(selectedAsset.size_bytes)}</span>}
+              {selectedAsset?.mime_type && <span> • {selectedAsset.mime_type}</span>}
             </div>
           </div>
 

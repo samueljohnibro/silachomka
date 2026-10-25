@@ -602,7 +602,12 @@ const AdminVideosPage = () => {
                         src={thumbUrl}
                         alt={vid.title}
                         style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                        onError={(e) => { e.target.style.display = 'none'; }}
+                        onError={(e) => {
+                          if (!e.target.dataset.fallbackTried) {
+                            e.target.dataset.fallbackTried = 'true';
+                            e.target.src = '/og-image.png';
+                          }
+                        }}
                       />
                     ) : (
                       <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "var(--muted)", fontSize: "12px" }}>

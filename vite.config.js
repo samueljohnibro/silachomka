@@ -11,5 +11,13 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  preview: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_PROXY_TARGET || 'https://silachomka-api.samueljohnibrotech.workers.dev',
+        changeOrigin: true
+      }
+    }
   }
 })

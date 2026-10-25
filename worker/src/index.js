@@ -14,6 +14,7 @@ const app = new Hono()
 const ALLOWED_ORIGINS = new Set([
   'https://silachomka.com',
   'https://www.silachomka.com',
+  'https://silachomka.vercel.app',
   'https://silachomka-api.samueljohnibrotech.workers.dev',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -27,6 +28,7 @@ function isAllowedOrigin(origin) {
   if (!origin) return false
   if (ALLOWED_ORIGINS.has(origin)) return true
   if (/^https:\/\/[a-z0-9-]+\.silachomka\.pages\.dev$/.test(origin)) return true
+  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)) return true
   return false
 }
 
@@ -111,9 +113,11 @@ app.get('/api/media/asset/:id', async (c) => {
     }
   }
 
-  // Fallback: If asset has an r2_key matching static media, redirect to local static path
+  // Fallback: If asset has an r2_key matching static media, redirect to public origin
   if (asset.r2_key) {
-    return c.redirect('/' + asset.r2_key, 302)
+    const siteOrigin = c.env?.PUBLIC_ORIGIN || 'https://silachomka.vercel.app'
+    const cleanKey = asset.r2_key.replace(/^\//, '')
+    return c.redirect(`${siteOrigin}/${cleanKey}`, 302)
   }
 
   return c.json({ error: 'Asset binary not found' }, 404)
@@ -132,10 +136,15 @@ app.get('/api/media/:folder/:file', async (c) => {
   const asset = rows[0]
 
   if (asset.file_hex) {
-    const hex = asset.file_hex
-    const bytes = new Uint8Array(hex.length / 2)
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = parseInt(hex.substr(i * 2, 2), 16)
+    let bytes
+    if (typeof Buffer !== 'undefined') {
+      bytes = Buffer.from(asset.file_hex, 'hex')
+    } else {
+      const hex = asset.file_hex
+      bytes = new Uint8Array(hex.length / 2)
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16)
+      }
     }
     return new Response(bytes, {
       headers: {
@@ -144,6 +153,30 @@ app.get('/api/media/:folder/:file', async (c) => {
         'Access-Control-Allow-Origin': '*'
       }
     })
+  }
+
+  // Fallback: If bound to R2 bucket, stream from R2
+  if (c.env?.MEDIA_BUCKET && asset.r2_key) {
+    try {
+      const object = await c.env.MEDIA_BUCKET.get(asset.r2_key)
+      if (object) {
+        return new Response(object.body, {
+          headers: {
+            'Content-Type': object.httpMetadata?.contentType || asset.mime_type || 'application/octet-stream',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+            'Access-Control-Allow-Origin': '*'
+          }
+        })
+      }
+    } catch (e) {
+      console.warn('R2 read failed:', e.message)
+    }
+  }
+
+  if (asset.r2_key) {
+    const siteOrigin = c.env?.PUBLIC_ORIGIN || 'https://silachomka.vercel.app'
+    const cleanKey = asset.r2_key.replace(/^\//, '')
+    return c.redirect(`${siteOrigin}/${cleanKey}`, 302)
   }
 
   return c.json({ error: 'Asset binary not found' }, 404)

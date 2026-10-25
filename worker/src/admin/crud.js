@@ -781,7 +781,10 @@ adminApp.post('/media-assets/upload', async (c) => {
           CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
       `
       await logAudit(sql, user?.sub, 'UPDATE', 'media_assets', existing[0].id, existing[0], updated[0])
-      return c.json(updated[0])
+      return c.json({
+        ...updated[0],
+        url: `/api/media/asset/${updated[0].id}`
+      })
     }
 
     const inserted = await sql`
@@ -791,7 +794,10 @@ adminApp.post('/media-assets/upload', async (c) => {
         CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
     `
     await logAudit(sql, user?.sub, 'CREATE', 'media_assets', inserted[0].id, null, inserted[0])
-    return c.json(inserted[0], 201)
+    return c.json({
+      ...inserted[0],
+      url: `/api/media/asset/${inserted[0].id}`
+    }, 201)
   } catch (err) {
     return c.json({ error: err.message || 'File upload failed' }, 400)
   }

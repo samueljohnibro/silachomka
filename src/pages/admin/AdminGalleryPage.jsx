@@ -579,7 +579,9 @@ const AdminGalleryPage = () => {
           {sortedPosts.map((post) => {
             const postSlides = slides.filter((s) => s.post_id === post.id);
             const primaryAsset = mediaAssets.find((m) => m.id === post.primary_asset_id) || (postSlides[0] ? mediaAssets.find((m) => m.id === postSlides[0].asset_id) : null);
-            const assetUrl = primaryAsset ? '/' + primaryAsset.r2_key : null;
+            const assetUrl = primaryAsset
+              ? (primaryAsset.has_file_data ? `/api/media/asset/${primaryAsset.id}` : (primaryAsset.r2_key ? '/' + primaryAsset.r2_key.replace(/^\//, '') : `/api/media/asset/${primaryAsset.id}`))
+              : (post.primary_asset_id ? `/api/media/asset/${post.primary_asset_id}` : null);
             return (
               <div key={post.id} className="admin-item-card">
                 <div>
@@ -589,7 +591,12 @@ const AdminGalleryPage = () => {
                         src={assetUrl}
                         alt={post.title}
                         style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                        onError={(e) => { e.target.style.display = 'none'; }}
+                        onError={(e) => {
+                          if (!e.target.dataset.fallbackTried) {
+                            e.target.dataset.fallbackTried = 'true';
+                            e.target.src = '/og-image.png';
+                          }
+                        }}
                       />
                     ) : (
                       <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "var(--muted)", fontSize: "12px" }}>

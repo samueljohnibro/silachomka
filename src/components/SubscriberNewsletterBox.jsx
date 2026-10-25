@@ -116,6 +116,9 @@ export default function SubscriberNewsletterBox({ source = "website" }) {
           >
             <input
               type="email"
+              name="email"
+              autoComplete="email"
+              inputMode="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email address"

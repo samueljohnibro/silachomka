@@ -196,7 +196,11 @@ const AdminBeatsPage = () => {
   const getMediaUrl = (assetId) => {
     if (!assetId) return null;
     const asset = mediaAssets.find(m => m.id === assetId);
-    return asset ? '/' + asset.r2_key : null;
+    if (asset?.has_file_data) return `/api/media/asset/${asset.id}`;
+    if (asset?.r2_key) {
+      return asset.r2_key.startsWith('http') ? asset.r2_key : '/' + asset.r2_key.replace(/^\//, '');
+    }
+    return `/api/media/asset/${assetId}`;
   };
 
   if (isLoading && view === 'LIST') {
@@ -513,7 +517,12 @@ const AdminBeatsPage = () => {
                         src={imageUrl}
                         alt={beat.title}
                         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={(e) => { e.target.style.display = 'none'; }}
+                        onError={(e) => {
+                          if (!e.target.dataset.fallbackTried) {
+                            e.target.dataset.fallbackTried = 'true';
+                            e.target.src = '/og-image.png';
+                          }
+                        }}
                       />
                     ) : (
                       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'var(--muted)', fontSize: '12px' }}>
