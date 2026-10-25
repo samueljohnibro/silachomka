@@ -48,6 +48,7 @@ import BeatDetailPage from "./pages/BeatDetailPage";
 import StudioPublisherPage from "./pages/StudioPublisherPage";
 import GalleryPostPage from "./pages/GalleryPostPage";
 import SeoHead from "./components/SeoHead";
+import { formatGalleryDate } from "./utils/dateFormatter";
 
 import "./App.css";
 
@@ -1067,8 +1068,18 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
                       )}
                       <div>
                         <h3 style={{ margin: 0, fontSize: "14px" }}>{release.title}</h3>
-                        <p style={{ margin: 0, fontSize: "10px", color: "var(--gold)", letterSpacing: "0.05em" }}>
-                          Release {String(dynamicNumber).padStart(2, "0")} • {release.artist && release.artist !== "silachomka" ? release.artist : "silachomka"}
+                        <p style={{ margin: 0, fontSize: "10px", color: "var(--gold)", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <span>Release {String(dynamicNumber).padStart(2, "0")}</span>
+                          <span>•</span>
+                          <span>{release.artist && release.artist !== "silachomka" ? release.artist : "silachomka"}</span>
+                          {(release.displayDate || release.date || release.release_date) && (
+                            <>
+                              <span>•</span>
+                              <span style={{ color: "var(--muted)" }}>
+                                {formatGalleryDate(release.date || release.release_date) || release.displayDate}
+                              </span>
+                            </>
+                          )}
                         </p>
                       </div>
                     </div>

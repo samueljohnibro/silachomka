@@ -61,6 +61,31 @@ app.get('/api/health', (c) => {
 })
 
 // ------------------------------------------
+// Geolocation & Currency Auto-Detection
+// ------------------------------------------
+app.get('/api/geo', (c) => {
+  const country = c.req.header('cf-ipcountry') || c.req.raw?.cf?.country || null
+  const countryCurrencyMap = {
+    NG: 'NGN',
+    GH: 'GHS',
+    KE: 'KES',
+    ZA: 'ZAR',
+    TZ: 'TZS',
+    UG: 'UGX',
+    RW: 'RWF',
+    ZM: 'ZMW',
+    CM: 'XAF', CF: 'XAF', TD: 'XAF', CG: 'XAF', GQ: 'XAF', GA: 'XAF',
+    BJ: 'XOF', BF: 'XOF', CI: 'XOF', GW: 'XOF', ML: 'XOF', NE: 'XOF', SN: 'XOF', TG: 'XOF',
+    GB: 'GBP'
+  }
+  const detectedCurrency = country ? (countryCurrencyMap[country.toUpperCase()] || 'USD') : 'NGN'
+  return c.json({
+    country,
+    currency: detectedCurrency
+  })
+})
+
+// ------------------------------------------
 // Media Serving (BYTEA / R2 fallback)
 // ------------------------------------------
 app.get('/api/media/asset/:id', async (c) => {
@@ -252,7 +277,7 @@ app.get('/api/releases', async (c) => {
   
   const releases = await sql`
     SELECT 
-      r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.display_date as "displayDate", r.type, 
+      r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.release_date as "release_date", r.display_date as "displayDate", r.type, 
       r.primary_artist as artist, r.feats_silachomka as "featssilachomka", r.produced_by_silachomka as "producedBysilachomka", 
       r.description, r.sources, r.platforms,
       CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as cover,
@@ -310,7 +335,7 @@ app.get('/api/releases/:slug', async (c) => {
   
   const releases = await sql`
     SELECT 
-      r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.display_date as "displayDate", r.type, 
+      r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.release_date as "release_date", r.display_date as "displayDate", r.type, 
       r.primary_artist as artist, r.feats_silachomka as "featssilachomka", r.produced_by_silachomka as "producedBysilachomka", 
       r.description, r.sources, r.platforms,
       CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as cover,
@@ -424,7 +449,17 @@ const selarPricingCache = new Map()
 const SELAR_CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes cache
 
 app.get('/api/beats/pricing', async (c) => {
-  const reqCurrency = (c.req.query('currency') || 'NGN').toUpperCase().trim()
+  let reqCurrency = (c.req.query('currency') || 'NGN').toUpperCase().trim()
+  if (reqCurrency === 'AUTO') {
+    const country = c.req.header('cf-ipcountry') || c.req.raw?.cf?.country || null
+    const countryCurrencyMap = {
+      NG: 'NGN', GH: 'GHS', KE: 'KES', ZA: 'ZAR', TZ: 'TZS', UG: 'UGX', RW: 'RWF', ZM: 'ZMW',
+      CM: 'XAF', CF: 'XAF', TD: 'XAF', CG: 'XAF', GQ: 'XAF', GA: 'XAF',
+      BJ: 'XOF', BF: 'XOF', CI: 'XOF', GW: 'XOF', ML: 'XOF', NE: 'XOF', SN: 'XOF', TG: 'XOF',
+      GB: 'GBP'
+    }
+    reqCurrency = country ? (countryCurrencyMap[country.toUpperCase()] || 'USD') : 'NGN'
+  }
   const cacheKey = reqCurrency
   const now = Date.now()
 

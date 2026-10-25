@@ -1,7 +1,7 @@
 import { UpRightArrowIcon, RightArrowIcon } from '../components/Icons';
 // src/components/ReleasePage.jsx
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
@@ -243,6 +243,52 @@ export default function ReleasePage({ release }) {
   const source = getReleaseSourceString(release);
   const spotifyEmbedUrl = getSpotifyEmbedUrl(platforms.spotify);
 
+  // Canonical release date & countdown calculation
+  const rawReleaseDate = release.release_date || release.date;
+  const releaseTimestamp = useMemo(() => {
+    if (!rawReleaseDate) return 0;
+    const t = new Date(rawReleaseDate).getTime();
+    return isNaN(t) ? 0 : t;
+  }, [rawReleaseDate]);
+
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!releaseTimestamp) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [releaseTimestamp]);
+
+  const isFuture = releaseTimestamp > 0 && releaseTimestamp > now;
+  const isRecentRelease = releaseTimestamp > 0 && !isFuture && (now - releaseTimestamp) <= 30 * 24 * 60 * 60 * 1000;
+
+  // Session-based dismissal for the "OUT NOW" celebration
+  const [showOutNowCelebration, setShowOutNowCelebration] = useState(() => {
+    if (!isRecentRelease) return false;
+    try {
+      const key = `chomka_outnow_${release.slug || release.id}`;
+      return sessionStorage.getItem(key) !== "dismissed";
+    } catch {
+      return true;
+    }
+  });
+
+  const handleDismissOutNow = () => {
+    setShowOutNowCelebration(false);
+    try {
+      const key = `chomka_outnow_${release.slug || release.id}`;
+      sessionStorage.setItem(key, "dismissed");
+    } catch {}
+  };
+
+  const timeDiff = Math.max(0, releaseTimestamp - now);
+  const countdownDays = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+  const countdownHours = Math.floor((timeDiff / (1000 * 60 * 60)) % 24);
+  const countdownMinutes = Math.floor((timeDiff / 1000 / 60) % 60);
+  const countdownSeconds = Math.floor((timeDiff / 1000) % 60);
+
   return (
     <main className="release-page-view">
       <SeoHead
@@ -290,7 +336,26 @@ export default function ReleasePage({ release }) {
             RIGHT COLUMN: ALBUM METADATA & STREAMING HUB
             ================================================= */}
         <div className="release-content-panel">
-          <p className="eyebrow">chomkaMUSIC™ Official Release</p>
+          {showOutNowCelebration && isRecentRelease && (
+            <div className="out-now-celebration-banner">
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span className="out-now-badge">OUT NOW</span>
+                <span className="out-now-tagline">Official Release · Available Worldwide</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={handleDismissOutNow} 
+                className="out-now-close-btn"
+                aria-label="Dismiss celebration"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          <p className="eyebrow">
+            {isFuture ? "chomkaMUSIC™ Upcoming Release" : "chomkaMUSIC™ Official Release"}
+          </p>
 
           <h1 className="release-title">{release.title}</h1>
 
@@ -302,53 +367,121 @@ export default function ReleasePage({ release }) {
             <span>
               {trackCount} {trackCount === 1 ? "Track" : "Tracks"}
             </span>
+            {isRecentRelease && (
+              <>
+                <span>•</span>
+                <span className="out-now-pill">OUT NOW</span>
+              </>
+            )}
+            {isFuture && (
+              <>
+                <span>•</span>
+                <span className="coming-soon-pill">COMING SOON</span>
+              </>
+            )}
           </div>
 
           <p className="release-description-text">
             {release.description}
           </p>
-          
-          {/* ===============================================
-              EMBEDDED AUDIO PLAYER
-              =============================================== */}
-          {spotifyEmbedUrl && (
-            <div className="spotify-embed-container">
-              <iframe 
-                src={spotifyEmbedUrl} 
-                width="100%" 
-                height={trackCount > 1 ? "352" : "152"} 
-                style={{
-                  borderRadius: "12px",
-                  border: "none",
-                  display: "block",
-                  minHeight: trackCount > 1 ? "352px" : "152px",
-                  width: "100%",
-                }}
-                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
-                allowFullScreen
-                title={`${release.title} Spotify Player`} 
-              />
-            </div>
-          )}
 
-          {/* Streaming Platforms Grid */}
-          <div>
-            <div className="platform-section-title">Stream / Listen On</div>
-            <div className="platform-grid">
-              {getPlatformEntries(platforms).map((platform) => (
-                <a
-                  key={platform.key}
-                  href={platform.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="platform-btn"
-                  aria-label={`Listen to ${release.title} on ${platform.name}`}
-                >
-                  {platform.name} <RightArrowIcon size={14} />
-                </a>
-              ))}
+          {/* ===============================================
+              FUTURE RELEASE COUNTDOWN OR STREAMING HUB
+              =============================================== */}
+          {isFuture ? (
+            <div className="coming-soon-card">
+              <div className="coming-soon-header">
+                <span className="coming-soon-badge-label">COMING SOON</span>
+                <span className="coming-soon-canonical-date">
+                  Official Launch: {release.displayDate || formatGalleryDate(rawReleaseDate)}
+                </span>
+              </div>
+              
+              <div className="countdown-timer-grid">
+                <div className="countdown-timer-box">
+                  <span className="countdown-timer-num">{String(countdownDays).padStart(2, '0')}</span>
+                  <span className="countdown-timer-unit">Days</span>
+                </div>
+                <div className="countdown-timer-colon">:</div>
+                <div className="countdown-timer-box">
+                  <span className="countdown-timer-num">{String(countdownHours).padStart(2, '0')}</span>
+                  <span className="countdown-timer-unit">Hours</span>
+                </div>
+                <div className="countdown-timer-colon">:</div>
+                <div className="countdown-timer-box">
+                  <span className="countdown-timer-num">{String(countdownMinutes).padStart(2, '0')}</span>
+                  <span className="countdown-timer-unit">Minutes</span>
+                </div>
+                <div className="countdown-timer-colon">:</div>
+                <div className="countdown-timer-box">
+                  <span className="countdown-timer-num">{String(countdownSeconds).padStart(2, '0')}</span>
+                  <span className="countdown-timer-unit">Seconds</span>
+                </div>
+              </div>
+
+              {getPlatformEntries(platforms).length > 0 && (
+                <div style={{ marginTop: "20px" }}>
+                  <div className="platform-section-title">Pre-Save / Pre-Order</div>
+                  <div className="platform-grid">
+                    {getPlatformEntries(platforms).map((platform) => (
+                      <a
+                        key={platform.key}
+                        href={platform.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="platform-btn"
+                        aria-label={`Pre-save ${release.title} on ${platform.name}`}
+                      >
+                        {platform.name} <RightArrowIcon size={14} />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <>
+              {/* EMBEDDED AUDIO PLAYER */}
+              {spotifyEmbedUrl && (
+                <div className="spotify-embed-container">
+                  <iframe 
+                    src={spotifyEmbedUrl} 
+                    width="100%" 
+                    height={trackCount > 1 ? "352" : "152"} 
+                    style={{
+                      borderRadius: "12px",
+                      border: "none",
+                      display: "block",
+                      minHeight: trackCount > 1 ? "352px" : "152px",
+                      width: "100%",
+                    }}
+                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                    allowFullScreen
+                    title={`${release.title} Spotify Player`} 
+                  />
+                </div>
+              )}
+
+              {/* Streaming Platforms Grid */}
+              <div>
+                <div className="platform-section-title">Stream / Listen On</div>
+                <div className="platform-grid">
+                  {getPlatformEntries(platforms).map((platform) => (
+                    <a
+                      key={platform.key}
+                      href={platform.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="platform-btn"
+                      aria-label={`Listen to ${release.title} on ${platform.name}`}
+                    >
+                      {platform.name} <RightArrowIcon size={14} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           <ShareLinkBox url={currentUrl} />
 

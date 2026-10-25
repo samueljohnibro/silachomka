@@ -507,7 +507,7 @@ const AdminGalleryPage = () => {
                         {primaryAssetObj?.original_filename || "Selected Media Asset"}
                       </div>
                       <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                        Type: {isPrimaryVideo ? "Video" : "Image"} • ID: {currentPost.primary_asset_id}
+                        Format: {isPrimaryVideo ? "Video" : "Image"}{primaryAssetObj?.size_bytes ? ` • ${(primaryAssetObj.size_bytes / 1024).toFixed(1)} KB` : ""}{primaryAssetObj?.mime_type ? ` • ${primaryAssetObj.mime_type}` : ""}
                       </div>
                       <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
                         <button
@@ -722,7 +722,7 @@ const AdminGalleryPage = () => {
                             </div>
                             <div>
                               <div style={{ color: "var(--text-h)", fontSize: 13, fontWeight: 500 }}>
-                                {slideAssetObj?.original_filename || `Asset ${slide.asset_id.slice(0, 8)}...`}
+                                {slideAssetObj?.original_filename || `${slide.slide_type === 'video' ? 'Video' : 'Image'} Slide #${idx + 1}`}
                               </div>
                               <span
                                 style={{
@@ -1232,7 +1232,8 @@ const AdminGalleryPage = () => {
             const postSlides = slides.filter((s) => s.post_id === post.id);
             const primaryAssetId = post.primary_asset_id || (postSlides[0] ? postSlides[0].asset_id : null);
             const assetUrl = getMediaUrl(primaryAssetId);
-            const displayTitle = post.title || post.caption || "Visual Archive Post";
+            const formattedPostDate = post.post_date ? formatGalleryDate(post.post_date) : "";
+            const displayTitle = post.title?.trim() || post.caption?.trim() || (formattedPostDate ? `Untitled Gallery Post — ${formattedPostDate}` : `Untitled ${post.post_type || "Media"} Post`);
 
             return (
               <div key={post.id} className="admin-item-card">
@@ -1374,7 +1375,8 @@ const AdminGalleryPage = () => {
                 const postSlides = slides.filter((s) => s.post_id === post.id);
                 const primaryAssetId = post.primary_asset_id || (postSlides[0] ? postSlides[0].asset_id : null);
                 const assetUrl = getMediaUrl(primaryAssetId);
-                const displayTitle = post.title || post.caption || "Visual Archive Post";
+                const formattedPostDate = post.post_date ? formatGalleryDate(post.post_date) : "";
+                const displayTitle = post.title?.trim() || post.caption?.trim() || (formattedPostDate ? `Untitled Gallery Post — ${formattedPostDate}` : `Untitled ${post.post_type || "Media"} Post`);
 
                 return (
                   <tr key={post.id} style={{ borderBottom: "1px solid var(--border)" }}>

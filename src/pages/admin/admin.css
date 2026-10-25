@@ -19,7 +19,11 @@
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  position: relative;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  flex-shrink: 0;
   z-index: 100;
   transition: transform 0.3s ease;
 }

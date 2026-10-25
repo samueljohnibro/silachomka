@@ -250,7 +250,9 @@ const AdminMediaPage = () => {
                 <tr key={asset.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={{ padding: "16px", color: "var(--text-h)", fontWeight: 500 }}>
                     {asset.r2_key}
-                    <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 400, marginTop: 4 }}>ID: {asset.id}</div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 400, marginTop: 4 }}>
+                      {asset.original_filename ? `${asset.original_filename} • ` : ""}{asset.mime_type || asset.asset_type}{asset.size_bytes ? ` • ${(asset.size_bytes / 1024).toFixed(1)} KB` : ""}
+                    </div>
                   </td>
                   <td style={{ padding: "16px" }}>
                     <span style={{ 

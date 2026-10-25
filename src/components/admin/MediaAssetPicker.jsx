@@ -58,7 +58,7 @@ export const MediaAssetPicker = ({
           ? `/api/media/asset/${value}`
           : null;
 
-  const displayName = selectedAsset?.original_filename || selectedAsset?.r2_key || (value ? `Asset (${value.slice(0, 8)}...)` : 'Selected Asset');
+  const displayName = selectedAsset?.original_filename || selectedAsset?.r2_key || (value ? `Attached ${assetType === 'IMAGE' ? 'Image' : assetType === 'VIDEO' ? 'Video' : 'Audio'}` : 'Selected Asset');
 
   // Accepted file types based on assetType
   const acceptMap = {
@@ -259,7 +259,7 @@ export const MediaAssetPicker = ({
               {displayName}
             </div>
             <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-              Key: <span style={{ color: 'var(--gold)' }}>{selectedAsset?.r2_key || value}</span>
+              Reference: <span style={{ color: 'var(--gold)' }}>{selectedAsset?.original_filename || selectedAsset?.r2_key || 'Uploaded Media Asset'}</span>
               {selectedAsset?.size_bytes && <span> • {formatFileSize(selectedAsset.size_bytes)}</span>}
               {selectedAsset?.mime_type && <span> • {selectedAsset.mime_type}</span>}
             </div>

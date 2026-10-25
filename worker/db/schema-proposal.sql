@@ -83,7 +83,8 @@ CREATE TABLE media_assets (
     alt_text VARCHAR(255),
     blurhash VARCHAR(100),
     uploaded_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ==========================================

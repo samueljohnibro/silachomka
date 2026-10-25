@@ -826,7 +826,8 @@ adminApp.put('/media-assets/:id', async (c) => {
         height = ${up.height},
         duration_seconds = ${up.duration_seconds},
         alt_text = ${up.alt_text},
-        blurhash = ${up.blurhash}
+        blurhash = ${up.blurhash},
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
@@ -900,7 +901,8 @@ adminApp.post('/media-assets/upload', async (c) => {
           asset_type = ${assetType},
           mime_type = ${detectedMime},
           size_bytes = ${file.size || null},
-          file_data = decode(${hex}, 'hex')
+          file_data = decode(${hex}, 'hex'),
+          updated_at = CURRENT_TIMESTAMP
         WHERE id = ${existing[0].id}
         RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by, created_at, updated_at,
           CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data

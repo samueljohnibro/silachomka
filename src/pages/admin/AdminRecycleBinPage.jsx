@@ -262,9 +262,9 @@ export default function AdminRecycleBinPage() {
                       </span>
                     </td>
                     <td style={{ padding: "14px 16px", color: "var(--text-h)", fontWeight: 500 }}>
-                      {item.title || item.id}
+                      {item.title || `Deleted ${TABLE_LABELS[item.table_name] || "Item"}`}
                       <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
-                        ID: {item.id}
+                        {TABLE_LABELS[item.table_name] || item.table_name}
                       </div>
                     </td>
                     <td style={{ padding: "14px 16px", color: "var(--muted)", fontSize: 13 }}>

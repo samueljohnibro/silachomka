@@ -18,18 +18,59 @@ const SUPPORTED_CURRENCIES = [
 // In-memory cache across hook instances and currency switches
 const pricingCache = new Map();
 
+function detectInitialCurrency(override) {
+  if (override) return override.toUpperCase();
+  try {
+    const session = sessionStorage.getItem("chomka_preferred_currency");
+    if (session) return session.toUpperCase();
+    const stored = localStorage.getItem("chomka_preferred_currency");
+    if (stored) return stored.toUpperCase();
+  } catch {}
+
+  // Instant timezone-based geolocation heuristic
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (tz.includes("Lagos") || tz.includes("Nigeria")) return "NGN";
+    if (tz.includes("Accra") || tz.includes("Ghana")) return "GHS";
+    if (tz.includes("Nairobi") || tz.includes("Kenya")) return "KES";
+    if (tz.includes("Johannesburg") || tz.includes("South_Africa")) return "ZAR";
+    if (tz.includes("London")) return "GBP";
+    if (tz.includes("Kampala")) return "UGX";
+    if (tz.includes("Dar_es_Salaam")) return "TZS";
+    if (tz.includes("Kigali")) return "RWF";
+    if (tz.includes("Lusaka")) return "ZMW";
+    if (tz.includes("America") || tz.includes("New_York") || tz.includes("Chicago") || tz.includes("Los_Angeles")) return "USD";
+  } catch {}
+
+  return "NGN";
+}
+
 export function useSelarPricing(initialCurrency) {
-  const [currency, setCurrencyState] = useState(() => {
-    if (initialCurrency) return initialCurrency.toUpperCase();
-    try {
-      const stored = localStorage.getItem("chomka_preferred_currency");
-      if (stored) return stored.toUpperCase();
-    } catch {}
-    return "NGN";
-  });
+  const [currency, setCurrencyState] = useState(() => detectInitialCurrency(initialCurrency));
 
   const activeCurrencyRef = useRef(currency);
   activeCurrencyRef.current = currency;
+
+  // Background geolocation detection from Worker CF headers if user has no manual override
+  useEffect(() => {
+    try {
+      const hasOverride = sessionStorage.getItem("chomka_preferred_currency") || localStorage.getItem("chomka_preferred_currency");
+      if (!hasOverride) {
+        fetch("/api/geo")
+          .then((r) => r.json())
+          .then((geo) => {
+            if (geo?.currency && geo.currency !== activeCurrencyRef.current) {
+              const matched = SUPPORTED_CURRENCIES.find((c) => c.code === geo.currency);
+              if (matched) {
+                activeCurrencyRef.current = geo.currency;
+                setCurrencyState(geo.currency);
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
+  }, []);
 
   const [pricingData, setPricingData] = useState(() => pricingCache.get(currency) || null);
   const [isLoading, setIsLoading] = useState(!pricingCache.has(currency));
@@ -86,6 +127,7 @@ export function useSelarPricing(initialCurrency) {
       setPricingData(null);
     }
     try {
+      sessionStorage.setItem("chomka_preferred_currency", upper);
       localStorage.setItem("chomka_preferred_currency", upper);
     } catch {}
   };

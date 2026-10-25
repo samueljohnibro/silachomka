@@ -490,7 +490,7 @@ const AdminMusicPage = () => {
               {view === "CREATE" ? "Create Project / Release" : `Manage Project: ${currentRelease.title}`}
             </h2>
             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-              {view === "EDIT" ? `Project ID: ${currentRelease.id}` : "Configure project metadata, artwork, sources, and tracks."}
+              {view === "EDIT" ? `Editing "${currentRelease.title || "Untitled Project"}" • /release/${currentRelease.slug || ""}` : "Configure project metadata, artwork, sources, and tracks."}
             </div>
           </div>
           <button onClick={handleCancelForm} className="studio-pill-btn" style={{ background: "transparent", color: "var(--text)" }} disabled={isSaving}>
