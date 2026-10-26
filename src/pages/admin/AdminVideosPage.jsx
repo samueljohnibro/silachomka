@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import { refreshCatalogue } from "../../data/store";
+import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
 import PlatformLinksEditor from "../../components/admin/PlatformLinksEditor";
 import AdminSortControl from "../../components/admin/AdminSortControl";
 import AdminViewToggle from "../../components/admin/AdminViewToggle";
@@ -36,6 +38,19 @@ const AdminVideosPage = () => {
   const [newFeatureArtist, setNewFeatureArtist] = useState("");
   const [isAddingFeature, setIsAddingFeature] = useState(false);
   const [featureError, setFeatureError] = useState(null);
+
+  const {
+    hasRestorableDraft,
+    lastSavedAt,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+  } = useDraftAutosave({
+    entityKey: currentVideo?.id ? `video_${currentVideo.id}` : "video_new",
+    formData: currentVideo,
+    setFormData: setCurrentVideo,
+    enabled: view === "CREATE" || view === "EDIT",
+  });
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -74,7 +89,7 @@ const AdminVideosPage = () => {
       platforms: {},
       related_release_id: "",
       related_track_id: "",
-      status: "PUBLISHED",
+      status: "DRAFT",
       created_at: new Date().toISOString().split("T")[0],
     });
     setView("CREATE");
@@ -180,7 +195,9 @@ const AdminVideosPage = () => {
         await adminApi.updateVideo(payload.id, payload);
       }
 
+      clearDraft();
       await fetchData();
+      refreshCatalogue();
       setView("LIST");
       setCurrentVideo(null);
       setSaveSuccess(true);
@@ -198,6 +215,7 @@ const AdminVideosPage = () => {
     try {
       await adminApi.deleteVideo(id);
       await fetchData();
+      refreshCatalogue();
       setDeleteConfirmId(null);
     } catch (err) {
       setError(err.message || "Failed to delete music video.");
@@ -267,6 +285,13 @@ const AdminVideosPage = () => {
         </div>
 
         {error && <div className="admin-login-error">{error}</div>}
+
+        <DraftAutosaveBanner
+          hasRestorableDraft={hasRestorableDraft}
+          lastSavedAt={lastSavedAt}
+          onRestore={restoreDraft}
+          onDiscard={discardDraft}
+        />
 
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>General Information</h3>

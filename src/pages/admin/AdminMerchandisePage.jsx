@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import { refreshCatalogue } from "../../data/store";
+import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
 import MediaAssetPicker from "../../components/admin/MediaAssetPicker";
 import AdminSortControl from "../../components/admin/AdminSortControl";
 import AdminViewToggle from "../../components/admin/AdminViewToggle";
@@ -19,6 +21,19 @@ const AdminMerchandisePage = () => {
   
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const {
+    hasRestorableDraft,
+    lastSavedAt,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+  } = useDraftAutosave({
+    entityKey: currentItem?.id ? `merch_${currentItem.id}` : "merch_new",
+    formData: currentItem,
+    setFormData: setCurrentItem,
+    enabled: view === "CREATE" || view === "EDIT",
+  });
 
   const fetchMerchandise = async () => {
     setIsLoading(true);
@@ -107,7 +122,9 @@ const AdminMerchandisePage = () => {
         await adminApi.updateMerchandise(payload.id, payload);
       }
       
+      clearDraft();
       await fetchMerchandise();
+      refreshCatalogue();
       setView("LIST");
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 4000);
@@ -123,6 +140,7 @@ const AdminMerchandisePage = () => {
     try {
       await adminApi.deleteMerchandise(id);
       await fetchMerchandise();
+      refreshCatalogue();
       setDeleteConfirmId(null);
     } catch (err) {
       setError(err.message || "Failed to delete merchandise.");
@@ -148,6 +166,13 @@ const AdminMerchandisePage = () => {
         </div>
 
         {error && <div className="admin-login-error">{error}</div>}
+
+        <DraftAutosaveBanner
+          hasRestorableDraft={hasRestorableDraft}
+          lastSavedAt={lastSavedAt}
+          onRestore={restoreDraft}
+          onDiscard={discardDraft}
+        />
 
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           

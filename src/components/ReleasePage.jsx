@@ -1,12 +1,13 @@
-import { UpRightArrowIcon, RightArrowIcon } from '../components/Icons';
+import { UpRightArrowIcon, RightArrowIcon, LoadingSpinner } from "../components/Icons";
 // src/components/ReleasePage.jsx
 
 import { useState, useMemo, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
 import RandomPreviewPlayer from "./RandomPreviewPlayer";
 import { useChomkaStore } from "../data/store";
+import { normalizeGalleryPost } from "../data/api";
 import { formatGalleryDate } from "../utils/dateFormatter";
 import {
   absoluteUrl,
@@ -57,7 +58,9 @@ export function getPlatformName(key) {
 export function getPlatformEntries(platformsObj) {
   if (!platformsObj || typeof platformsObj !== "object") return [];
   return Object.entries(platformsObj)
-    .filter(([_, url]) => Boolean(url && typeof url === "string" && url.trim().length > 0))
+    .filter(([_, url]) =>
+      Boolean(url && typeof url === "string" && url.trim().length > 0)
+    )
     .map(([key, url]) => ({
       key,
       name: getPlatformName(key),
@@ -65,14 +68,10 @@ export function getPlatformEntries(platformsObj) {
     }));
 }
 
-/* 
- * Utility to convert standard Spotify URLs to Embed URLs
- * e.g., https://open.spotify.com/album/55sd... -> https://open.spotify.com/embed/album/55sd...
- */
 function getSpotifyEmbedUrl(url) {
   if (!url || typeof url !== "string") return null;
   if (!url.includes("spotify.com")) return null;
-  
+
   try {
     const urlObj = new URL(url);
     let pathname = urlObj.pathname.replace(/\/+/g, "/");
@@ -101,14 +100,12 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
     else setLocalExpanded((prev) => !prev);
   };
 
-  // Check if track has any valid individual platform links
   const availablePlatforms = getPlatformEntries(trackPlatforms);
-  
   const hasLinks = availablePlatforms.length > 0;
 
   return (
     <div className={`track-item-row ${expanded ? "is-expanded" : ""}`}>
-      <div 
+      <div
         className="track-item-main"
         onClick={() => hasLinks && handleToggle()}
         role="button"
@@ -118,9 +115,7 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
         aria-label={`${track.title} stream links`}
       >
         <div className="track-title-left">
-          <span className="track-idx">
-            {String(index + 1).padStart(2, "0")}
-          </span>
+          <span className="track-idx">{String(index + 1).padStart(2, "0")}</span>
           <span className="track-name-stack">
             <span className="track-name-text">{track.title}</span>
           </span>
@@ -132,7 +127,7 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
               {formatFeatures(track.featuring)}
             </span>
           )}
-          
+
           {hasLinks && (
             <span className="track-dropdown-icon" aria-hidden="true">
               ▼
@@ -141,11 +136,13 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
         </div>
       </div>
 
-      {/* Expanded Links Dropdown — includes producer credit beside platform buttons */}
       {hasLinks && (
         <div className="track-dropdown-content">
           <div className="track-dropdown-producer">
-            Produced by <strong style={{ color: "var(--gold)" }}>{getTrackProducerString(track)}</strong>
+            Produced by{" "}
+            <strong style={{ color: "var(--gold)" }}>
+              {getTrackProducerString(track)}
+            </strong>
           </div>
           <div className="track-platform-grid">
             {availablePlatforms.map((platform) => (
@@ -171,15 +168,157 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
    RELEASE PAGE COMPONENT
    ========================================================= */
 
-export default function ReleasePage({ release }) {
+export default function ReleasePage({ release: propRelease }) {
+  const params = useParams();
   const [searchParams] = useSearchParams();
   const activeFilter = searchParams.get("filter") || "all";
+  const {
+    releases: storeReleases,
+    videos: storeVideos,
+    gallery: storeGallery,
+    isLoading: isStoreLoading,
+  } = useChomkaStore();
+
+  const [fetchedRelease, setFetchedRelease] = useState(null);
+  const [isFetchingRelease, setIsFetchingRelease] = useState(false);
+
+  const routeSlug = params?.slug || propRelease?.slug;
+
+  const storeMatchedRelease = useMemo(() => {
+    if (propRelease) return propRelease;
+    if (!routeSlug || !Array.isArray(storeReleases)) return null;
+    return storeReleases.find((r) => r.slug === routeSlug) || null;
+  }, [propRelease, routeSlug, storeReleases]);
+
+  // Direct API fetch for newly created / scheduled releases or to enrich associatedGallery & track previews
+  useEffect(() => {
+    const targetSlug = routeSlug || propRelease?.slug;
+    if (!targetSlug) return;
+    let cancelled = false;
+    setIsFetchingRelease(true);
+    fetch(`/api/releases/${encodeURIComponent(targetSlug)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && data.slug) {
+          setFetchedRelease({
+            ...data,
+            type: data.type ? data.type.toLowerCase() : "ep",
+            associatedGallery: Array.isArray(data.associatedGallery)
+              ? data.associatedGallery.map(normalizeGalleryPost)
+              : [],
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsFetchingRelease(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [routeSlug, propRelease?.slug]);
+
+  const release = fetchedRelease || storeMatchedRelease;
+
+  const [expandedTrackIdx, setExpandedTrackIdx] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const rawReleaseDate = release?.release_date || release?.date;
+  const releaseTimestamp = useMemo(() => {
+    if (!rawReleaseDate) return 0;
+    const t = new Date(rawReleaseDate).getTime();
+    return isNaN(t) ? 0 : t;
+  }, [rawReleaseDate]);
+
+  useEffect(() => {
+    if (!releaseTimestamp) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [releaseTimestamp]);
+
+  const isFuture = releaseTimestamp > 0 && releaseTimestamp > now;
+  const isRecentRelease =
+    releaseTimestamp > 0 &&
+    !isFuture &&
+    now - releaseTimestamp <= 30 * 24 * 60 * 60 * 1000;
+
+  // Req #12: Smooth, non-blocking entry splash animation ("COMING SOON" or "OUT NOW") once per session
+  const [showEntrySplash, setShowEntrySplash] = useState(false);
+
+  useEffect(() => {
+    if (!release?.slug) return;
+    if (!isFuture && !isRecentRelease) {
+      setShowEntrySplash(false);
+      return;
+    }
+    const sessionKey = `chomka_release_entry_splash_${release.slug}`;
+    try {
+      if (sessionStorage.getItem(sessionKey) === "shown") {
+        return;
+      }
+      sessionStorage.setItem(sessionKey, "shown");
+    } catch {}
+
+    setShowEntrySplash(true);
+    const timer = setTimeout(() => {
+      setShowEntrySplash(false);
+    }, 2600);
+    return () => clearTimeout(timer);
+  }, [release?.slug, isFuture, isRecentRelease]);
+
+  // Session-based dismissal for the persistent "OUT NOW" badge bar
+  const [showOutNowCelebration, setShowOutNowCelebration] = useState(false);
+
+  useEffect(() => {
+    if (!release?.slug || !isRecentRelease) {
+      setShowOutNowCelebration(false);
+      return;
+    }
+    try {
+      const key = `chomka_outnow_${release.slug || release.id}`;
+      setShowOutNowCelebration(sessionStorage.getItem(key) !== "dismissed");
+    } catch {
+      setShowOutNowCelebration(true);
+    }
+  }, [release?.slug, release?.id, isRecentRelease]);
+
+  const handleDismissOutNow = () => {
+    setShowOutNowCelebration(false);
+    try {
+      const key = `chomka_outnow_${release?.slug || release?.id}`;
+      sessionStorage.setItem(key, "dismissed");
+    } catch {}
+  };
+
+  if (!release && (isStoreLoading || isFetchingRelease)) {
+    return (
+      <main className="release-page-view">
+        <div
+          style={{
+            maxWidth: "600px",
+            margin: "100px auto",
+            textAlign: "center",
+            color: "var(--gold)",
+          }}
+        >
+          <LoadingSpinner size={28} />
+          <p style={{ marginTop: "14px", color: "var(--muted)", fontSize: "13px" }}>
+            Loading release...
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   /* Fallback for missing release */
   if (!release) {
     return (
       <main className="release-page-view">
-        <div style={{ maxWidth: "600px", margin: "80px auto", textAlign: "center" }}>
+        <div
+          style={{ maxWidth: "600px", margin: "80px auto", textAlign: "center" }}
+        >
           <p className="eyebrow">silachomka / 404</p>
           <h1 className="release-title">Release Not Found</h1>
           <p style={{ color: "var(--muted)", margin: "20px 0 35px" }}>
@@ -195,48 +334,62 @@ export default function ReleasePage({ release }) {
 
   const platforms = release.platforms || {};
   const allTracks = release.tracks || [];
-  const [expandedTrackIdx, setExpandedTrackIdx] = useState(null);
+
+  // Collect all track-level preview audio URLs + release-level preview audio URL (Req #19)
+  const previewAudioPool = [];
+  if (Array.isArray(release.preview_audio_urls)) {
+    for (const u of release.preview_audio_urls) {
+      if (u && !previewAudioPool.includes(u)) previewAudioPool.push(u);
+    }
+  }
+  if (release.preview_audio_url && !previewAudioPool.includes(release.preview_audio_url)) {
+    previewAudioPool.push(release.preview_audio_url);
+  }
+  for (const t of allTracks) {
+    if (t?.preview_audio_url && !previewAudioPool.includes(t.preview_audio_url)) {
+      previewAudioPool.push(t.preview_audio_url);
+    }
+  }
 
   // Filter tracks based on the active filter from Music section
-  const tracks = useMemo(() => {
+  const tracks = allTracks.filter((track) => {
     if (activeFilter === "ft_silachomka") {
-      return allTracks.filter((track) =>
-        Array.isArray(track.featuring) && track.featuring.some(
-          (f) => f.toLowerCase() === "silachomka"
-        )
+      return (
+        Array.isArray(track.featuring) &&
+        track.featuring.some((f) => f.toLowerCase() === "silachomka")
       );
     }
     if (activeFilter === "prod_by_silachomka") {
-      return allTracks.filter((track) =>
-        Array.isArray(track.producers) && track.producers.some(
-          (p) => p.toLowerCase() === "silachomka"
-        )
+      return (
+        Array.isArray(track.producers) &&
+        track.producers.some((p) => p.toLowerCase() === "silachomka")
       );
     }
-    return allTracks;
-  }, [allTracks, activeFilter]);
+    return true;
+  });
 
-  const { videos: storeVideos, gallery: storeGallery } = useChomkaStore();
+  const associatedVideos =
+    Array.isArray(release.videos) && release.videos.length > 0
+      ? release.videos
+      : Array.isArray(storeVideos) && release.id
+      ? storeVideos.filter(
+          (v) =>
+            v.relatedReleaseId === release.id ||
+            v.related_release_id === release.id
+        )
+      : [];
 
-  const associatedVideos = useMemo(() => {
-    const directVideos = Array.isArray(release.videos) ? release.videos : [];
-    if (directVideos.length > 0) return directVideos;
-
-    if (!release.id || !Array.isArray(storeVideos)) return [];
-    return storeVideos.filter(
-      (v) => v.relatedReleaseId === release.id || v.related_release_id === release.id
-    );
-  }, [release.videos, release.id, storeVideos]);
-
-  const associatedGallery = useMemo(() => {
-    const directGallery = Array.isArray(release.associatedGallery) ? release.associatedGallery : [];
-    if (directGallery.length > 0) return directGallery;
-
-    if (!release.id || !Array.isArray(storeGallery)) return [];
-    return storeGallery.filter(
-      (g) => g.relatedReleaseId === release.id || g.related_release_id === release.id
-    );
-  }, [release.associatedGallery, release.id, storeGallery]);
+  const associatedGallery =
+    Array.isArray(release.associatedGallery) &&
+    release.associatedGallery.length > 0
+      ? release.associatedGallery
+      : Array.isArray(storeGallery) && release.id
+      ? storeGallery.filter(
+          (g) =>
+            g.relatedReleaseId === release.id ||
+            g.related_release_id === release.id
+        )
+      : [];
 
   const trackCount = tracks.length;
   const releaseNumber = String(release.number ?? "").padStart(2, "0");
@@ -244,45 +397,22 @@ export default function ReleasePage({ release }) {
   const source = getReleaseSourceString(release);
   const spotifyEmbedUrl = getSpotifyEmbedUrl(platforms.spotify);
 
-  // Canonical release date & countdown calculation
-  const rawReleaseDate = release.release_date || release.date;
-  const releaseTimestamp = useMemo(() => {
-    if (!rawReleaseDate) return 0;
-    const t = new Date(rawReleaseDate).getTime();
-    return isNaN(t) ? 0 : t;
-  }, [rawReleaseDate]);
+  const canonicalDateLabel =
+    release.displayDate || formatGalleryDate(rawReleaseDate);
 
-  const [now, setNow] = useState(() => Date.now());
+  // Req #11: Dynamic social share description for Future vs Active releases
+  const statusLeadDescription = isFuture
+    ? `${release.title} — Coming soon${
+        canonicalDateLabel ? ` on ${canonicalDateLabel}` : ""
+      }.`
+    : `${release.title} — Out now.`;
 
-  useEffect(() => {
-    if (!releaseTimestamp) return;
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [releaseTimestamp]);
-
-  const isFuture = releaseTimestamp > 0 && releaseTimestamp > now;
-  const isRecentRelease = releaseTimestamp > 0 && !isFuture && (now - releaseTimestamp) <= 30 * 24 * 60 * 60 * 1000;
-
-  // Session-based dismissal for the "OUT NOW" celebration
-  const [showOutNowCelebration, setShowOutNowCelebration] = useState(() => {
-    if (!isRecentRelease) return false;
-    try {
-      const key = `chomka_outnow_${release.slug || release.id}`;
-      return sessionStorage.getItem(key) !== "dismissed";
-    } catch {
-      return true;
-    }
-  });
-
-  const handleDismissOutNow = () => {
-    setShowOutNowCelebration(false);
-    try {
-      const key = `chomka_outnow_${release.slug || release.id}`;
-      sessionStorage.setItem(key, "dismissed");
-    } catch {}
-  };
+  const socialShareDescription =
+    release.description &&
+    !release.description.toLowerCase().includes("coming soon") &&
+    !release.description.toLowerCase().includes("out now")
+      ? `${statusLeadDescription} ${release.description}`
+      : statusLeadDescription;
 
   const timeDiff = Math.max(0, releaseTimestamp - now);
   const countdownDays = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
@@ -294,17 +424,34 @@ export default function ReleasePage({ release }) {
     <main className="release-page-view">
       <SeoHead
         title={`${release.title} | silachomka`}
-        description={release.description}
+        description={socialShareDescription}
         path={`/release/${release.slug}`}
         image={release.cover || "/og-image.png"}
+        type="music.album"
         imageAlt={`${release.title} official cover art`}
       />
 
-      {/* Atmospheric Product-Themed Ambient Backdrop */}
+      {/* Req #12: Smooth, Non-Blocking Entry Animation ("COMING SOON" or "OUT NOW") */}
+      {showEntrySplash && (
+        <div
+          className="release-entry-splash"
+          aria-hidden="true"
+          style={{ pointerEvents: "none" }}
+        >
+          <div className="release-entry-splash-card">
+            <span className="release-entry-splash-kicker">
+              {isFuture ? "COMING SOON" : "OUT NOW"}
+            </span>
+            <span className="release-entry-splash-title">{release.title}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Req #7: Atmospheric Product-Themed Ambient Backdrop */}
       {release.cover && (
         <div className="product-ambient-backdrop" aria-hidden="true">
           <div
-            className="ambient-artwork"
+            className="ambient-artwork ambient-image-layer"
             style={{ backgroundImage: `url(${release.cover})` }}
           />
           <div className="ambient-gradient-overlay" />
@@ -312,7 +459,12 @@ export default function ReleasePage({ release }) {
       )}
 
       {/* Breadcrumb Navigation */}
-      <Link className="release-breadcrumb" to={`/?${activeFilter !== "all" ? "filter=" + activeFilter + "#music" : "#music"}`}>
+      <Link
+        className="release-breadcrumb"
+        to={`/?${
+          activeFilter !== "all" ? "filter=" + activeFilter + "#music" : "#music"
+        }`}
+      >
         ← All Music
       </Link>
 
@@ -328,8 +480,8 @@ export default function ReleasePage({ release }) {
               loading="eager"
               onError={(e) => {
                 if (!e.target.dataset.triedFallback) {
-                  e.target.dataset.triedFallback = 'true';
-                  e.target.src = '/og-image.png';
+                  e.target.dataset.triedFallback = "true";
+                  e.target.src = "/og-image.png";
                 }
               }}
             />
@@ -351,17 +503,31 @@ export default function ReleasePage({ release }) {
         <div className="release-content-panel">
           {showOutNowCelebration && isRecentRelease && (
             <div className="out-now-celebration-banner">
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "10px" }}
+              >
                 <span className="out-now-badge">OUT NOW</span>
-                <span className="out-now-tagline">Official Release · Available Worldwide</span>
+                <span className="out-now-tagline">
+                  Official Release · Available Worldwide
+                </span>
               </div>
-              <button 
-                type="button" 
-                onClick={handleDismissOutNow} 
+              <button
+                type="button"
+                onClick={handleDismissOutNow}
                 className="out-now-close-btn"
                 aria-label="Dismiss celebration"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <line x1="18" y1="6" x2="6" y2="18"></line>
                   <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
@@ -370,7 +536,9 @@ export default function ReleasePage({ release }) {
           )}
 
           <p className="eyebrow">
-            {isFuture ? "chomkaMUSIC™ Upcoming Release" : "chomkaMUSIC™ Official Release"}
+            {isFuture
+              ? "chomkaMUSIC™ Upcoming Release"
+              : "chomkaMUSIC™ Official Release"}
           </p>
 
           <h1 className="release-title">{release.title}</h1>
@@ -378,7 +546,7 @@ export default function ReleasePage({ release }) {
           <div className="release-meta-bar">
             <span>Release {releaseNumber}</span>
             <span>•</span>
-            <span>{release.displayDate}</span>
+            <span>{canonicalDateLabel}</span>
             <span>•</span>
             <span>
               {trackCount} {trackCount === 1 ? "Track" : "Tracks"}
@@ -398,7 +566,7 @@ export default function ReleasePage({ release }) {
           </div>
 
           <p className="release-description-text">
-            {release.description}
+            {release.description || statusLeadDescription}
           </p>
 
           {/* ===============================================
@@ -409,45 +577,57 @@ export default function ReleasePage({ release }) {
               <div className="coming-soon-header">
                 <span className="coming-soon-badge-label">COMING SOON</span>
                 <span className="coming-soon-canonical-date">
-                  Official Launch: {release.displayDate || formatGalleryDate(rawReleaseDate)}
+                  Official Launch: {canonicalDateLabel}
                 </span>
               </div>
-              
+
               <div className="countdown-timer-grid">
                 <div className="countdown-timer-box">
-                  <span className="countdown-timer-num">{String(countdownDays).padStart(2, '0')}</span>
+                  <span className="countdown-timer-num">
+                    {String(countdownDays).padStart(2, "0")}
+                  </span>
                   <span className="countdown-timer-unit">Days</span>
                 </div>
                 <div className="countdown-timer-colon">:</div>
                 <div className="countdown-timer-box">
-                  <span className="countdown-timer-num">{String(countdownHours).padStart(2, '0')}</span>
+                  <span className="countdown-timer-num">
+                    {String(countdownHours).padStart(2, "0")}
+                  </span>
                   <span className="countdown-timer-unit">Hours</span>
                 </div>
                 <div className="countdown-timer-colon">:</div>
                 <div className="countdown-timer-box">
-                  <span className="countdown-timer-num">{String(countdownMinutes).padStart(2, '0')}</span>
+                  <span className="countdown-timer-num">
+                    {String(countdownMinutes).padStart(2, "0")}
+                  </span>
                   <span className="countdown-timer-unit">Minutes</span>
                 </div>
                 <div className="countdown-timer-colon">:</div>
                 <div className="countdown-timer-box">
-                  <span className="countdown-timer-num">{String(countdownSeconds).padStart(2, '0')}</span>
+                  <span className="countdown-timer-num">
+                    {String(countdownSeconds).padStart(2, "0")}
+                  </span>
                   <span className="countdown-timer-unit">Seconds</span>
                 </div>
               </div>
 
-              {/* 30-Second Pre-Release Preview Player */}
-              {release.preview_audio_url && (
+              {/* 30-Second Pre-Release Preview Player (Track-level & Release-level pool, Req #19) */}
+              {previewAudioPool.length > 0 && (
                 <div style={{ marginTop: "24px" }}>
                   <RandomPreviewPlayer
-                    audioUrl={release.preview_audio_url}
-                    title={`${release.title} Pre-Release Snippet`}
+                    audioUrl={previewAudioPool[0]}
+                    audioUrls={previewAudioPool}
+                    projectTitle={release.title}
+                    title={`${release.title} — PREVIEW`}
                   />
                 </div>
               )}
 
               {getPlatformEntries(platforms).length > 0 && (
                 <div style={{ marginTop: "20px" }}>
-                  <div className="platform-section-title">Pre-Save / Pre-Order</div>
+                  <div className="platform-section-title">
+                    Pre-Save / Pre-Order
+                  </div>
                   <div className="platform-grid">
                     {getPlatformEntries(platforms).map((platform) => (
                       <a
@@ -470,10 +650,10 @@ export default function ReleasePage({ release }) {
               {/* EMBEDDED AUDIO PLAYER */}
               {spotifyEmbedUrl && (
                 <div className="spotify-embed-container">
-                  <iframe 
-                    src={spotifyEmbedUrl} 
-                    width="100%" 
-                    height={trackCount > 1 ? "352" : "152"} 
+                  <iframe
+                    src={spotifyEmbedUrl}
+                    width="100%"
+                    height={trackCount > 1 ? "352" : "152"}
                     style={{
                       borderRadius: "12px",
                       border: "none",
@@ -481,9 +661,9 @@ export default function ReleasePage({ release }) {
                       minHeight: trackCount > 1 ? "352px" : "152px",
                       width: "100%",
                     }}
-                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
                     allowFullScreen
-                    title={`${release.title} Spotify Player`} 
+                    title={`${release.title} Spotify Player`}
                   />
                 </div>
               )}
@@ -511,11 +691,21 @@ export default function ReleasePage({ release }) {
 
           <ShareLinkBox url={currentUrl} />
 
-          {/* Tracklist Card (Interactive — click to expand platform links + producer) */}
+          {/* Tracklist Card */}
           <div className="tracklist-card">
-            <div className="platform-section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+            <div
+              className="platform-section-title"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "8px",
+              }}
+            >
               <span>
-                Tracklist ({trackCount}{trackCount < allTracks.length ? ` of ${allTracks.length}` : ""})
+                Tracklist ({trackCount}
+                {trackCount < allTracks.length ? ` of ${allTracks.length}` : ""})
               </span>
               {trackCount < allTracks.length && (
                 <Link
@@ -538,17 +728,20 @@ export default function ReleasePage({ release }) {
             </div>
             <div>
               {tracks.map((track, index) => (
-                <TrackRow 
-                  key={`${track.title}-${index}`} 
-                  track={track} 
+                <TrackRow
+                  key={`${track.title}-${index}`}
+                  track={track}
                   index={index}
                   isExpanded={expandedTrackIdx === index}
-                  onToggle={() => setExpandedTrackIdx(expandedTrackIdx === index ? null : index)}
+                  onToggle={() =>
+                    setExpandedTrackIdx(
+                      expandedTrackIdx === index ? null : index
+                    )
+                  }
                 />
               ))}
             </div>
 
-            {/* Source credit — shown after the tracklist */}
             <div className="release-source-footer">
               Source: <strong>{source}</strong>
             </div>
@@ -558,8 +751,14 @@ export default function ReleasePage({ release }) {
               ASSOCIATED MUSIC VIDEOS & VISUALIZERS SECTION
               ========================================================= */}
           {associatedVideos.length > 0 && (
-            <div className="release-videos-section" style={{ marginTop: "32px" }}>
-              <div className="platform-section-title" style={{ marginBottom: "16px" }}>
+            <div
+              className="release-videos-section"
+              style={{ marginTop: "32px" }}
+            >
+              <div
+                className="platform-section-title"
+                style={{ marginBottom: "16px" }}
+              >
                 Official Music Videos & Visualizers ({associatedVideos.length})
               </div>
               <div
@@ -573,7 +772,8 @@ export default function ReleasePage({ release }) {
                 {associatedVideos.map((video) => {
                   const yId = video.youtubeId || video.youtube_id;
                   const isPortrait =
-                    video.aspectRatio === "9:16" || video.aspect_ratio === "9:16";
+                    video.aspectRatio === "9:16" ||
+                    video.aspect_ratio === "9:16";
                   return (
                     <div
                       key={video.id || yId}
@@ -717,8 +917,14 @@ export default function ReleasePage({ release }) {
               ASSOCIATED GALLERY, VISUALS & REELS SECTION
               ========================================================= */}
           {associatedGallery.length > 0 && (
-            <div className="release-gallery-section" style={{ marginTop: "32px" }}>
-              <div className="platform-section-title" style={{ marginBottom: "16px" }}>
+            <div
+              className="release-gallery-section"
+              style={{ marginTop: "32px" }}
+            >
+              <div
+                className="platform-section-title"
+                style={{ marginBottom: "16px" }}
+              >
                 Associated Gallery & Visuals ({associatedGallery.length})
               </div>
               <div
@@ -730,9 +936,24 @@ export default function ReleasePage({ release }) {
                 }}
               >
                 {associatedGallery.map((item) => {
-                  const mediaSrc = item.asset || (item.slides && item.slides[0]?.asset) || null;
-                  const isReel = item.type === "reel" || item.post_type === "reel";
-                  const itemTitle = item.title || item.caption || "Studio Visual";
+                  const mediaSrc =
+                    item.src ||
+                    item.asset ||
+                    (Array.isArray(item.slides) &&
+                      (typeof item.slides[0] === "string"
+                        ? item.slides[0]
+                        : item.slides[0]?.asset || item.slides[0]?.src)) ||
+                    null;
+                  const isVid =
+                    item.isVideo ||
+                    item.type === "video" ||
+                    item.post_type === "video" ||
+                    item.assetType === "VIDEO" ||
+                    /\.(mp4|webm|mov)(\?.*)?$/i.test(mediaSrc || "");
+                  const isReel =
+                    item.type === "reel" || item.post_type === "reel";
+                  const itemTitle =
+                    item.title || item.caption || "Studio Visual";
 
                   return (
                     <div
@@ -757,7 +978,7 @@ export default function ReleasePage({ release }) {
                         }}
                       >
                         {mediaSrc ? (
-                          mediaSrc.endsWith(".mp4") || mediaSrc.endsWith(".webm") ? (
+                          isVid ? (
                             <video
                               src={mediaSrc}
                               muted
@@ -850,7 +1071,9 @@ export default function ReleasePage({ release }) {
                           >
                             {item.category || "Gallery"}
                           </span>
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                          <span
+                            style={{ fontSize: "11px", color: "var(--muted)" }}
+                          >
                             {formatGalleryDate(item.displayDate || item.date)}
                           </span>
                         </div>
@@ -880,9 +1103,9 @@ export default function ReleasePage({ release }) {
                             {item.caption}
                           </p>
                         )}
-                        {item.link ? (
+                        {item.externalSocialUrl || item.link ? (
                           <a
-                            href={item.link}
+                            href={item.externalSocialUrl || item.link}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{

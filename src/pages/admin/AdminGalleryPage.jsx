@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { adminApi } from "../../data/adminApi";
+import { refreshCatalogue } from "../../data/store";
+import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
 import AdminSortControl from "../../components/admin/AdminSortControl";
 import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import { formatGalleryDate } from "../../utils/dateFormatter";
@@ -40,6 +42,19 @@ const AdminGalleryPage = () => {
   // File input refs
   const primaryFileInputRef = useRef(null);
   const carouselFileInputRef = useRef(null);
+
+  const {
+    hasRestorableDraft,
+    lastSavedAt,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+  } = useDraftAutosave({
+    entityKey: currentPost?.id ? `gallery_${currentPost.id}` : "gallery_new",
+    formData: currentPost,
+    setFormData: setCurrentPost,
+    enabled: view === "CREATE" || view === "EDIT",
+  });
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -95,6 +110,8 @@ const AdminGalleryPage = () => {
       related_release_id: "",
       related_track_id: "",
       legacy_link: "",
+      external_social_url: "",
+      external_social_platform: "",
       post_date: today,
       status: "DRAFT",
       carouselSlides: [],
@@ -118,6 +135,8 @@ const AdminGalleryPage = () => {
       title: post.title || "",
       caption: post.caption || "",
       category: post.category || "Portraits & Style",
+      external_social_url: post.external_social_url || post.legacy_link || "",
+      external_social_platform: post.external_social_platform || "",
       post_date: post.post_date ? post.post_date.split("T")[0] : "",
       carouselSlides: postSlides,
     });
@@ -302,7 +321,9 @@ const AdminGalleryPage = () => {
             : (currentPost.primary_asset_id || null),
         related_release_id: currentPost.related_release_id || null,
         related_track_id: currentPost.related_track_id || null,
-        legacy_link: currentPost.legacy_link || null,
+        legacy_link: currentPost.external_social_url || currentPost.legacy_link || null,
+        external_social_url: currentPost.external_social_url || currentPost.legacy_link || null,
+        external_social_platform: currentPost.external_social_platform || null,
         slides: currentPost.post_type === "carousel" ? (currentPost.carouselSlides || []) : [],
       };
 
@@ -312,7 +333,9 @@ const AdminGalleryPage = () => {
         await adminApi.updateGalleryPost(currentPost.id, payload);
       }
 
+      clearDraft();
       await fetchData();
+      refreshCatalogue();
       setView("LIST");
       setCurrentPost(null);
       setSaveSuccess(true);
@@ -329,6 +352,7 @@ const AdminGalleryPage = () => {
     try {
       await adminApi.deleteGalleryPost(id);
       await fetchData();
+      refreshCatalogue();
       setDeleteConfirmId(null);
     } catch (err) {
       setError(err.message || "Failed to delete post.");
@@ -396,6 +420,13 @@ const AdminGalleryPage = () => {
 
         {error && <div className="admin-login-error" style={{ marginBottom: 16 }}>{error}</div>}
 
+        <DraftAutosaveBanner
+          hasRestorableDraft={hasRestorableDraft}
+          lastSavedAt={lastSavedAt}
+          onRestore={restoreDraft}
+          onDiscard={discardDraft}
+        />
+
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           {/* SECTION 1: GALLERY MEDIA SECTION */}
           <div
@@ -408,7 +439,7 @@ const AdminGalleryPage = () => {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <h3 style={{ fontSize: 15, color: "var(--gold)", margin: 0, fontWeight: 600 }}>
-                📷 Gallery Media
+                1. Gallery Media
               </h3>
               <div style={{ fontSize: 12, color: "var(--muted)" }}>
                 Format: <strong style={{ color: "var(--text-h)" }}>{currentPost.post_type.toUpperCase()}</strong>
@@ -812,7 +843,7 @@ const AdminGalleryPage = () => {
             }}
           >
             <h3 style={{ fontSize: 15, color: "var(--gold)", margin: "0 0 16px 0", fontWeight: 600 }}>
-              📝 Post Details
+              2. Post Details
             </h3>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -868,7 +899,7 @@ const AdminGalleryPage = () => {
                   ))}
                 </datalist>
                 <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
-                  💡 New categories typed here are automatically saved permanently.
+                  New categories typed here are automatically saved permanently.
                 </span>
               </div>
             </div>
@@ -887,7 +918,7 @@ const AdminGalleryPage = () => {
             </div>
           </div>
 
-          {/* SECTION 3: PROJECT & TRACK ASSOCIATIONS & SCHEDULING */}
+          {/* SECTION 3: PROJECT & TRACK ASSOCIATIONS, EXTERNAL SOCIAL EMBED & SCHEDULING */}
           <div
             style={{
               padding: "20px",
@@ -897,7 +928,7 @@ const AdminGalleryPage = () => {
             }}
           >
             <h3 style={{ fontSize: 15, color: "var(--gold)", margin: "0 0 16px 0", fontWeight: 600 }}>
-              🔗 Associations & Publication
+              3. Associations, External Social Embed & Publication
             </h3>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -940,16 +971,43 @@ const AdminGalleryPage = () => {
               </div>
 
               <div className="studio-field" style={{ textAlign: "left" }}>
-                <label>External Post / Instagram Link (Optional)</label>
+                <label>External Social Post URL (Instagram, X, Snapchat — Optional)</label>
                 <input
-                  type="text"
-                  name="legacy_link"
+                  type="url"
+                  name="external_social_url"
                   className="studio-input"
-                  value={currentPost.legacy_link || ""}
+                  value={currentPost.external_social_url ?? currentPost.legacy_link ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCurrentPost((prev) => ({
+                      ...prev,
+                      external_social_url: val,
+                      legacy_link: val,
+                    }));
+                  }}
+                  disabled={isSaving}
+                  placeholder="https://www.instagram.com/p/... or https://x.com/..."
+                />
+                <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
+                  Renders an embedded post or interactive social card inside the public gallery modal.
+                </span>
+              </div>
+
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>External Social Platform</label>
+                <select
+                  name="external_social_platform"
+                  className="studio-input"
+                  value={currentPost.external_social_platform || ""}
                   onChange={handleChange}
                   disabled={isSaving}
-                  placeholder="https://instagram.com/p/..."
-                />
+                  style={{ height: "44px" }}
+                >
+                  <option value="">Auto-Detect from URL</option>
+                  <option value="Instagram">Instagram</option>
+                  <option value="X">X (Twitter)</option>
+                  <option value="Snapchat">Snapchat</option>
+                </select>
               </div>
 
               <div className="studio-field" style={{ textAlign: "left" }}>
@@ -970,7 +1028,7 @@ const AdminGalleryPage = () => {
                 </select>
               </div>
 
-              <div className="studio-field" style={{ textAlign: "left", gridColumn: "1 / -1" }}>
+              <div className="studio-field" style={{ textAlign: "left" }}>
                 <label>Schedule Publication (Optional)</label>
                 <div style={{ display: "flex", gap: "8px", maxWidth: "450px" }}>
                   <input
@@ -1008,7 +1066,7 @@ const AdminGalleryPage = () => {
                 </div>
                 {currentPost.scheduled_at && (
                   <span style={{ fontSize: 11, color: "var(--gold)", marginTop: 4, display: "block" }}>
-                    ⏰ Scheduled for {new Date(currentPost.scheduled_at).toLocaleString()}
+                    Scheduled for {new Date(currentPost.scheduled_at).toLocaleString()}
                   </span>
                 )}
               </div>

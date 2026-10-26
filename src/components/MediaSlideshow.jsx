@@ -1,6 +1,7 @@
 // src/components/MediaSlideshow.jsx
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import BeatArtwork from "./BeatArtwork";
 
 const DEFAULT_DURATION = 6000;
 const FADE_DURATION = 1200;
@@ -55,16 +56,16 @@ export default function MediaSlideshow({
   const [panIndex, setPanIndex] = useState(0);
   const transitionTimerRef = useRef(null);
 
-  /* Preload images */
+  /* Only preload the active slide's poster (never pre-decode all animated GIFs at once) */
   useEffect(() => {
-    safeMedia.forEach((item) => {
-      const src = getMediaSrc(item);
-      if (src && !isVideoMedia(item, src)) {
-        const img = new Image();
-        img.src = src;
-      }
-    });
-  }, [safeMedia]);
+    const activeItem = safeMedia[activeIndex];
+    if (!activeItem) return;
+    const posterSrc = activeItem.poster || activeItem.beat?.image;
+    if (posterSrc) {
+      const img = new Image();
+      img.src = posterSrc;
+    }
+  }, [safeMedia, activeIndex]);
 
   /* Slide rotation timer */
   useEffect(() => {
@@ -155,6 +156,25 @@ export default function MediaSlideshow({
                   filter: "brightness(0.72) contrast(1.08)",
                 }}
               />
+            ) : (item.beat || item.poster) && /\.gif(\?.*)?$/i.test(src) ? (
+              <div
+                className={`hero-slideshow-media ${activeClasses}`}
+                style={{
+                  position: "absolute",
+                  inset: "-10%",
+                  width: "120%",
+                  height: "120%",
+                  filter: "brightness(0.75) contrast(1.08)",
+                }}
+              >
+                <BeatArtwork
+                  image={item.poster || item.beat?.image}
+                  video={src}
+                  videoMimeType={item.beat?.videoMimeType || "image/gif"}
+                  alt={alt}
+                  lazy={false}
+                />
+              </div>
             ) : (
               <img
                 src={src}

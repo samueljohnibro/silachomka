@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '../../data/adminApi';
+import { refreshCatalogue } from '../../data/store';
+import { useDraftAutosave, DraftAutosaveBanner } from '../../utils/useDraftAutosave';
 import MediaAssetPicker from '../../components/admin/MediaAssetPicker';
 import AdminSortControl from '../../components/admin/AdminSortControl';
 import AdminViewToggle from '../../components/admin/AdminViewToggle';
@@ -30,6 +32,19 @@ const AdminBeatsPage = () => {
   
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const {
+    hasRestorableDraft,
+    lastSavedAt,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+  } = useDraftAutosave({
+    entityKey: currentBeat?.id ? `beat_${currentBeat.id}` : 'beat_new',
+    formData: currentBeat,
+    setFormData: setCurrentBeat,
+    enabled: view === 'CREATE' || view === 'EDIT',
+  });
 
   // Fetch list and Selar authoritative pricing
   const fetchBeats = async () => {
@@ -123,6 +138,7 @@ const AdminBeatsPage = () => {
       await adminApi.deleteBeat(id);
       setDeleteConfirmId(null);
       await fetchBeats();
+      refreshCatalogue();
     } catch (err) {
       setError(err.message || 'Failed to delete beat.');
     } finally {
@@ -174,7 +190,9 @@ const AdminBeatsPage = () => {
         await adminApi.updateBeat(payload.id, payload);
       }
 
+      clearDraft();
       await fetchBeats();
+      refreshCatalogue();
       setView('LIST');
       setCurrentBeat(null);
       setSaveSuccess(true);
@@ -234,6 +252,13 @@ const AdminBeatsPage = () => {
 
         {error && <div className="admin-login-error">{error}</div>}
 
+        <DraftAutosaveBanner
+          hasRestorableDraft={hasRestorableDraft}
+          lastSavedAt={lastSavedAt}
+          onRestore={restoreDraft}
+          onDiscard={discardDraft}
+        />
+
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
@@ -280,7 +305,7 @@ const AdminBeatsPage = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
               <h3 style={{ fontSize: 14, color: 'var(--gold)', margin: 0, fontWeight: 600 }}>
-                👑 Authoritative Selar License Pricing
+                Authoritative Selar License Pricing
               </h3>
               <span style={{
                 fontSize: 11,

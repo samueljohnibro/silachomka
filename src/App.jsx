@@ -13,6 +13,7 @@ import {
 } from "react-router-dom";
 
 import { useChomkaStore } from "./data/store";
+import { CurrencyProvider } from "./data/CurrencyContext";
 
 // Admin CMS Imports
 import { AdminAuthProvider } from "./pages/admin/AdminAuthProvider";
@@ -729,11 +730,13 @@ function UpcomingReleaseSection({ release }) {
             </div>
           </div>
 
-          {release.preview_audio_url && (
+          {(release.preview_audio_url || (Array.isArray(release.preview_audio_urls) && release.preview_audio_urls.length > 0)) && (
             <div className="upcoming-preview-wrap">
               <RandomPreviewPlayer
                 audioUrl={release.preview_audio_url}
-                title={`${release.title} Pre-Release Snippet`}
+                audioUrls={release.preview_audio_urls || []}
+                projectTitle={release.title}
+                title={`${release.title} — PREVIEW`}
               />
             </div>
           )}
@@ -1338,9 +1341,14 @@ function GallerySection() {
       {/* Instagram-Style Grid */}
       <div className="gallery-grid">
         {filteredPosts.map((post) => {
-          const primarySrc = post.src || post.slides?.[0] || post.videoSrc;
+          const firstSlide = Array.isArray(post.slides) && post.slides.length > 0
+            ? (typeof post.slides[0] === "string" ? post.slides[0] : post.slides[0]?.src || post.slides[0]?.asset)
+            : null;
+          const primarySrc = post.src || post.asset || firstSlide || post.videoSrc;
           const isVideo =
+            post.isVideo ||
             post.type === "video" ||
+            post.assetType === "VIDEO" ||
             Boolean(post.videoSrc) ||
             (typeof primarySrc === "string" &&
               (primarySrc.startsWith("data:video") ||
@@ -1349,6 +1357,7 @@ function GallerySection() {
                 primarySrc.endsWith(".mov")));
           const isCarousel =
             (post.type === "carousel" || post.slides?.length > 1) && post.slides?.length > 1;
+          const hasSocialEmbed = Boolean(post.externalSocialUrl || post.external_social_url);
 
           return (
             <article
@@ -1361,20 +1370,44 @@ function GallerySection() {
               aria-label={`Open ${post.title || "archive post"}`}
             >
               <div className="gallery-card-frame">
-                {isVideo ? (
-                  <video
-                    src={primarySrc}
-                    muted
-                    playsInline
-                    className="gallery-card-image"
-                  />
+                {primarySrc ? (
+                  isVideo ? (
+                    <video
+                      src={primarySrc}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="gallery-card-image"
+                    />
+                  ) : (
+                    <img
+                      src={primarySrc}
+                      alt={post.title || "Archive item"}
+                      className="gallery-card-image"
+                      loading="lazy"
+                    />
+                  )
                 ) : (
-                  <img
-                    src={primarySrc}
-                    alt={post.title || "Archive item"}
+                  <div
                     className="gallery-card-image"
-                    loading="lazy"
-                  />
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "linear-gradient(145deg, #121218 0%, #09090d 100%)",
+                      color: "var(--gold)",
+                      padding: "20px",
+                      textAlign: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 700 }}>
+                      {post.externalSocialPlatform || post.external_social_platform || "Social Archive"}
+                    </span>
+                    <span style={{ fontSize: "13px", color: "var(--text)", marginTop: "6px", fontWeight: 600 }}>
+                      {post.title || "View Post"}
+                    </span>
+                  </div>
                 )}
 
                 {/* Media Type Badges in Top-Right */}
@@ -1387,6 +1420,12 @@ function GallerySection() {
                 {isVideo && !isCarousel && (
                   <span className="gallery-card-badge" title="Video Clip">
                     ▶
+                  </span>
+                )}
+
+                {hasSocialEmbed && !isCarousel && !isVideo && (
+                  <span className="gallery-card-badge" title="Social Post" style={{ fontSize: "10px", padding: "2px 6px" }}>
+                    {post.externalSocialPlatform || post.external_social_platform || "SOCIAL"}
                   </span>
                 )}
 
@@ -1876,6 +1915,7 @@ function App() {
 
   return (
     <AdminAuthProvider>
+      <CurrencyProvider>
       <>
         {/* Dynamic Starry Space Atmosphere */}
         <StarrySpaceBackground />
@@ -1969,6 +2009,7 @@ function App() {
           />
         </Routes>
       </>
+      </CurrencyProvider>
     </AdminAuthProvider>
   );
 }

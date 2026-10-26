@@ -175,8 +175,8 @@ adminApp.post('/tracks', async (c) => {
 
   try {
     const rows = await sql`
-      INSERT INTO tracks (release_id, track_number, title, platforms)
-      VALUES (${body.release_id}, ${body.track_number}, ${body.title}, ${body.platforms ? JSON.stringify(body.platforms) : null})
+      INSERT INTO tracks (release_id, track_number, title, preview_asset_id, platforms)
+      VALUES (${body.release_id}, ${body.track_number}, ${body.title}, ${body.preview_asset_id || null}, ${body.platforms ? JSON.stringify(body.platforms) : null})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'tracks', rows[0].id, null, rows[0])
@@ -199,7 +199,8 @@ adminApp.put('/tracks/:id', async (c) => {
       UPDATE tracks SET
         track_number = ${up.track_number},
         title = ${up.title},
-        platforms = ${up.platforms ? JSON.stringify(body.platforms) : null},
+        preview_asset_id = ${up.preview_asset_id || null},
+        platforms = ${up.platforms ? JSON.stringify(body.platforms !== undefined ? body.platforms : e.platforms) : null},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
@@ -539,6 +540,19 @@ function formatCanonicalDate(rawDate) {
   return null
 }
 
+function detectSocialPlatform(url, explicitPlatform) {
+  if (explicitPlatform && String(explicitPlatform).trim()) return String(explicitPlatform).trim()
+  if (!url || typeof url !== 'string') return null
+  const lower = url.toLowerCase()
+  if (lower.includes('instagram.com') || lower.includes('instagr.am')) return 'Instagram'
+  if (lower.includes('x.com') || lower.includes('twitter.com')) return 'X'
+  if (lower.includes('snapchat.com')) return 'Snapchat'
+  if (lower.includes('tiktok.com')) return 'TikTok'
+  if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'YouTube'
+  if (lower.includes('threads.net')) return 'Threads'
+  return null
+}
+
 adminApp.get('/gallery-categories', async (c) => {
   const sql = c.get('sql')
   const rows = await sql`SELECT slug, label FROM gallery_categories ORDER BY label ASC`
@@ -618,10 +632,13 @@ adminApp.post('/gallery-posts', async (c) => {
     primaryAssetId = body.slides[0].asset_id || null
   }
 
+  const extSocialUrl = body.external_social_url ? String(body.external_social_url).trim() : null
+  const extSocialPlatform = detectSocialPlatform(extSocialUrl, body.external_social_platform)
+
   try {
     const rows = await sql`
-      INSERT INTO gallery_posts (slug, title, caption, category, post_type, primary_asset_id, related_release_id, related_track_id, related_beat_id, legacy_link, tags, post_date, display_date, status, scheduled_at)
-      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${catSlug || 'portraits'}, ${body.post_type}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
+      INSERT INTO gallery_posts (slug, title, caption, category, post_type, primary_asset_id, related_release_id, related_track_id, related_beat_id, legacy_link, external_social_url, external_social_platform, tags, post_date, display_date, status, scheduled_at)
+      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${catSlug || 'portraits'}, ${body.post_type}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${extSocialUrl}, ${extSocialPlatform}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
       RETURNING *
     `
 
@@ -691,6 +708,9 @@ adminApp.put('/gallery-posts/:id', async (c) => {
     primaryAssetId = body.slides[0].asset_id || null
   }
 
+  const extSocialUrl = up.external_social_url ? String(up.external_social_url).trim() : null
+  const extSocialPlatform = extSocialUrl ? detectSocialPlatform(extSocialUrl, up.external_social_platform) : null
+
   try {
     const rows = await sql`
       UPDATE gallery_posts SET
@@ -704,7 +724,9 @@ adminApp.put('/gallery-posts/:id', async (c) => {
         related_track_id = ${up.related_track_id || null},
         related_beat_id = ${up.related_beat_id || null},
         legacy_link = ${up.legacy_link || null},
-        tags = ${up.tags ? JSON.stringify(body.tags) : null},
+        external_social_url = ${extSocialUrl},
+        external_social_platform = ${extSocialPlatform},
+        tags = ${up.tags ? JSON.stringify(body.tags !== undefined ? body.tags : e.tags) : null},
         post_date = ${up.post_date},
         display_date = ${canonicalDisplayDate},
         status = ${status},
@@ -794,7 +816,9 @@ adminApp.get('/media-assets', async (c) => {
   const sql = c.get('sql')
   const rows = await sql`
     SELECT id, r2_key, original_filename, asset_type, mime_type, size_bytes, 
-      width, height, duration_seconds, alt_text, blurhash, uploaded_by, created_at, updated_at,
+      width, height, duration_seconds, alt_text, blurhash,
+      asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status,
+      uploaded_by, created_at, updated_at,
       CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
     FROM media_assets WHERE deleted_at IS NULL ORDER BY created_at DESC
   `
@@ -808,9 +832,9 @@ adminApp.post('/media-assets', async (c) => {
 
   try {
     const rows = await sql`
-      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, uploaded_by)
-      VALUES (${body.r2_key}, ${body.original_filename || null}, ${body.asset_type}, ${body.mime_type || null}, ${body.size_bytes || null}, ${body.width || null}, ${body.height || null}, ${body.duration_seconds || null}, ${body.alt_text || null}, ${body.blurhash || null}, ${c.get('user').sub})
-      RETURNING *
+      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by)
+      VALUES (${body.r2_key}, ${body.original_filename || null}, ${body.asset_type}, ${body.mime_type || null}, ${body.size_bytes || null}, ${body.width || null}, ${body.height || null}, ${body.duration_seconds || null}, ${body.alt_text || null}, ${body.blurhash || null}, ${body.asset_role || 'OPTIMIZED_WEB'}, ${body.source_asset_id || null}, ${body.original_size_bytes || null}, ${body.original_mime_type || null}, ${body.optimization_status || 'OPTIMIZED'}, ${c.get('user').sub})
+      RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'media_assets', rows[0].id, null, rows[0])
     return c.json(rows[0], 201)
@@ -840,14 +864,26 @@ adminApp.put('/media-assets/:id', async (c) => {
         duration_seconds = ${up.duration_seconds},
         alt_text = ${up.alt_text},
         blurhash = ${up.blurhash},
+        asset_role = ${up.asset_role || 'OPTIMIZED_WEB'},
+        source_asset_id = ${up.source_asset_id || null},
+        original_size_bytes = ${up.original_size_bytes || null},
+        original_mime_type = ${up.original_mime_type || null},
+        optimization_status = ${up.optimization_status || 'OPTIMIZED'},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
-      RETURNING *
+      RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at
     `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'media_assets', id, existing[0], rows[0])
     return c.json(rows[0])
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
+
+const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024 // 100MB safe ceiling
+const ALLOWED_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif',
+  'mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac',
+  'mp4', 'mov', 'webm'
+])
 
 adminApp.post('/media-assets/upload', async (c) => {
   const sql = c.get('sql')
@@ -857,13 +893,30 @@ adminApp.post('/media-assets/upload', async (c) => {
     const formData = await c.req.formData()
     const file = formData.get('file')
     const assetType = formData.get('asset_type') || 'IMAGE'
+    const assetRole = formData.get('asset_role') || 'OPTIMIZED_WEB'
+    const sourceAssetId = formData.get('source_asset_id') || null
+    const originalSizeBytes = formData.get('original_size_bytes') ? Number(formData.get('original_size_bytes')) : (file?.size || null)
+    const originalMimeType = formData.get('original_mime_type') || file?.type || null
+    const widthVal = formData.get('width') ? Number(formData.get('width')) : null
+    const heightVal = formData.get('height') ? Number(formData.get('height')) : null
+    const durationVal = formData.get('duration_seconds') ? Number(formData.get('duration_seconds')) : null
+    const optimizationStatus = formData.get('optimization_status') || 'OPTIMIZED'
 
     if (!file || typeof file === 'string') {
       return c.json({ error: 'No file provided' }, 400)
     }
 
+    if (file.size && file.size > MAX_UPLOAD_SIZE_BYTES) {
+      return c.json({ error: 'File exceeds maximum allowed size (100 MB)' }, 400)
+    }
+
     const filename = file.name || `upload-${Date.now()}`
     const cleanBasename = filename.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const ext = cleanBasename.includes('.') ? cleanBasename.split('.').pop().toLowerCase() : ''
+
+    if (ext && !ALLOWED_EXTENSIONS.has(ext)) {
+      return c.json({ error: `Unsupported file extension: .${ext}` }, 400)
+    }
 
     // Determine storage folder prefix
     const folder = assetType === 'AUDIO' ? 'beats' : assetType === 'VIDEO' ? 'beats' : 'covers'
@@ -887,7 +940,6 @@ adminApp.post('/media-assets/upload', async (c) => {
       }
       hex = parts.join('')
     }
-    const hexStr = '\\x' + hex
 
     // If Cloudflare R2 bucket is bound in env, also write to R2
     if (c.env?.MEDIA_BUCKET) {
@@ -897,18 +949,17 @@ adminApp.post('/media-assets/upload', async (c) => {
     }
 
     // Determine MIME type
-    const ext = cleanBasename.split('.').pop().toLowerCase()
     const mimeMap = {
       jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-      gif: 'image/gif', webp: 'image/webp', mp3: 'audio/mpeg',
-      wav: 'audio/wav', mp4: 'video/mp4', m4a: 'audio/mp4',
-      mov: 'video/quicktime', webm: 'video/webm', aac: 'audio/aac',
-      ogg: 'audio/ogg'
+      gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+      mp3: 'audio/mpeg', wav: 'audio/wav', mp4: 'video/mp4',
+      m4a: 'audio/mp4', mov: 'video/quicktime', webm: 'video/webm',
+      aac: 'audio/aac', ogg: 'audio/ogg', flac: 'audio/flac'
     }
     const detectedMime = file.type || mimeMap[ext] || (assetType === 'AUDIO' ? 'audio/mpeg' : assetType === 'VIDEO' ? 'video/mp4' : 'image/jpeg')
 
     // Check if asset with this r2_key already exists in DB
-    const existing = await sql`SELECT * FROM media_assets WHERE r2_key = ${storageKey}`
+    const existing = await sql`SELECT id, r2_key, original_filename, asset_type, mime_type, size_bytes FROM media_assets WHERE r2_key = ${storageKey}`
     if (existing.length > 0) {
       const updated = await sql`
         UPDATE media_assets SET
@@ -916,29 +967,40 @@ adminApp.post('/media-assets/upload', async (c) => {
           asset_type = ${assetType},
           mime_type = ${detectedMime},
           size_bytes = ${file.size || null},
+          width = COALESCE(${widthVal}, width),
+          height = COALESCE(${heightVal}, height),
+          duration_seconds = COALESCE(${durationVal}, duration_seconds),
+          asset_role = ${assetRole},
+          source_asset_id = COALESCE(${sourceAssetId}, source_asset_id),
+          original_size_bytes = COALESCE(${originalSizeBytes}, original_size_bytes),
+          original_mime_type = COALESCE(${originalMimeType}, original_mime_type),
+          optimization_status = ${optimizationStatus},
           file_data = decode(${hex}, 'hex'),
+          deleted_at = NULL,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${existing[0].id}
-        RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by, created_at, updated_at,
+        RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at,
           CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
       `
       await logAudit(sql, user?.sub, 'UPDATE', 'media_assets', existing[0].id, existing[0], updated[0])
+      const urlSuffix = detectedMime === 'image/gif' ? '?.gif' : ''
       return c.json({
         ...updated[0],
-        url: `/api/media/asset/${updated[0].id}`
+        url: `/api/media/asset/${updated[0].id}${urlSuffix}`
       })
     }
 
     const inserted = await sql`
-      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by, file_data)
-      VALUES (${storageKey}, ${filename}, ${assetType}, ${detectedMime}, ${file.size || null}, ${user?.sub || null}, decode(${hex}, 'hex'))
-      RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, uploaded_by, created_at, updated_at,
+      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, file_data)
+      VALUES (${storageKey}, ${filename}, ${assetType}, ${detectedMime}, ${file.size || null}, ${widthVal}, ${heightVal}, ${durationVal}, ${assetRole}, ${sourceAssetId}, ${originalSizeBytes}, ${originalMimeType}, ${optimizationStatus}, ${user?.sub || null}, decode(${hex}, 'hex'))
+      RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at,
         CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
     `
     await logAudit(sql, user?.sub, 'CREATE', 'media_assets', inserted[0].id, null, inserted[0])
+    const urlSuffix = detectedMime === 'image/gif' ? '?.gif' : ''
     return c.json({
       ...inserted[0],
-      url: `/api/media/asset/${inserted[0].id}`
+      url: `/api/media/asset/${inserted[0].id}${urlSuffix}`
     }, 201)
   } catch (err) {
     return c.json({ error: err.message || 'File upload failed' }, 400)

@@ -5,16 +5,7 @@ import MediaSlideshow from "./MediaSlideshow";
  * BeatHeroSlideshow
  *
  * Specialized wrapper around the generic MediaSlideshow engine.
- *
- * Responsibilities:
- * - Receives the existing beat catalog.
- * - Extracts beat.video values.
- * - Removes invalid / missing video entries.
- * - Removes duplicate video sources.
- * - Preserves the relationship between the slideshow media
- *   and the originating beat where possible.
- *
- * The actual slideshow behavior remains inside MediaSlideshow.
+ * Preserves JPG poster + GIF progressive loading for beat hero visuals.
  */
 export default function BeatHeroSlideshow({ beats = [] }) {
   const media = useMemo(() => {
@@ -30,7 +21,7 @@ export default function BeatHeroSlideshow({ beats = [] }) {
           return null;
         }
 
-        const video = beat.video;
+        const video = beat.video || beat.image;
 
         if (typeof video !== "string" || !video.trim()) {
           return null;
@@ -44,9 +35,14 @@ export default function BeatHeroSlideshow({ beats = [] }) {
 
         seen.add(src);
 
+        const isVid =
+          (beat.videoMimeType && beat.videoMimeType.startsWith("video/")) ||
+          /\.(mp4|webm|mov)(\?.*)?$/i.test(src);
+
         return {
-          type: src.endsWith(".mp4") || src.endsWith(".webm") ? "video" : "image",
+          type: isVid ? "video" : "image",
           src,
+          poster: beat.image || null,
           beat,
         };
       })

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { adminApi } from '../../data/adminApi';
+import { LoadingSpinner } from '../Icons';
 
 /**
  * MediaAssetPicker
@@ -251,13 +252,21 @@ export const MediaAssetPicker = ({
 
           {assetType === 'VIDEO' && (
             <div style={{ position: 'relative', width: '72px', height: '56px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', background: '#000', border: '1px solid var(--border)' }}>
-              <video
-                src={previewUrl}
-                muted
-                playsInline
-                preload="metadata"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
+              {(selectedAsset?.mime_type === 'image/gif' || /\.gif(\?.*)?$/i.test(selectedAsset?.r2_key || previewUrl || '')) ? (
+                <img
+                  src={previewUrl}
+                  alt={displayName}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <video
+                  src={previewUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              )}
             </div>
           )}
 
@@ -319,8 +328,8 @@ export const MediaAssetPicker = ({
           >
             {isUploading ? (
               <>
-                <span className="beat-loading-spinner" style={{ width: 14, height: 14 }} />
-                <span>Uploading {label}...</span>
+                <LoadingSpinner size={14} />
+                <span>Optimizing & Uploading {label}...</span>
               </>
             ) : (
               <>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import { refreshCatalogue } from "../../data/store";
+import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
 import AdminSortControl from "../../components/admin/AdminSortControl";
 import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import "./admin.css";
@@ -25,6 +27,19 @@ const AdminLinksPage = () => {
   
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const {
+    hasRestorableDraft,
+    lastSavedAt,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+  } = useDraftAutosave({
+    entityKey: currentLink?.id ? `link_${currentLink.id}` : "link_new",
+    formData: currentLink,
+    setFormData: setCurrentLink,
+    enabled: view === "CREATE" || view === "EDIT",
+  });
 
   const fetchLinks = async () => {
     setIsLoading(true);
@@ -124,7 +139,9 @@ const AdminLinksPage = () => {
         await adminApi.updateSocialLink(payload.id, payload);
       }
       
+      clearDraft();
       await fetchLinks();
+      refreshCatalogue();
       setView("LIST");
       setSaveSuccess(true);
       setSaveState("SAVED");
@@ -142,6 +159,7 @@ const AdminLinksPage = () => {
     try {
       await adminApi.deleteSocialLink(id);
       await fetchLinks();
+      refreshCatalogue();
       setDeleteConfirmId(null);
     } catch (err) {
       setError(err.message || "Failed to delete link.");
@@ -167,6 +185,13 @@ const AdminLinksPage = () => {
         </div>
 
         {error && <div className="admin-login-error">{error}</div>}
+
+        <DraftAutosaveBanner
+          hasRestorableDraft={hasRestorableDraft}
+          lastSavedAt={lastSavedAt}
+          onRestore={restoreDraft}
+          onDiscard={discardDraft}
+        />
 
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           

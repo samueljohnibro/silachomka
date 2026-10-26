@@ -272,6 +272,24 @@ app.get('/api/unsubscribe', async (c) => {
 // ------------------------------------------
 // Releases
 // ------------------------------------------
+function enrichReleasePreviews(rel) {
+  if (!rel) return rel
+  const urls = []
+  if (rel.preview_audio_url) urls.push(rel.preview_audio_url)
+  if (Array.isArray(rel.tracks)) {
+    for (const t of rel.tracks) {
+      if (t && t.preview_audio_url && !urls.includes(t.preview_audio_url)) {
+        urls.push(t.preview_audio_url)
+      }
+    }
+  }
+  return {
+    ...rel,
+    preview_audio_url: rel.preview_audio_url || urls[0] || null,
+    preview_audio_urls: urls
+  }
+}
+
 app.get('/api/releases', async (c) => {
   const sql = c.get('sql')
   
@@ -289,6 +307,10 @@ app.get('/api/releases', async (c) => {
           SELECT json_agg(json_build_object(
             'id', t.id,
             'title', t.title,
+            'track_number', t.track_number,
+            'preview_audio_url', CASE WHEN tp.file_data IS NOT NULL THEN '/api/media/asset/' || tp.id
+                                      WHEN tp.r2_key IS NOT NULL THEN '/' || tp.r2_key
+                                      ELSE NULL END,
             'platforms', CASE WHEN r.release_date > NOW() THEN '{}'::jsonb ELSE t.platforms END,
             'featuring', (
               SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
@@ -300,6 +322,7 @@ app.get('/api/releases', async (c) => {
             )
           ) ORDER BY t.track_number)
           FROM tracks t 
+          LEFT JOIN media_assets tp ON t.preview_asset_id = tp.id
           WHERE t.release_id = r.id AND t.deleted_at IS NULL
         ),
         '[]'::json
@@ -330,7 +353,7 @@ app.get('/api/releases', async (c) => {
       AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
     ORDER BY r.release_date DESC
   `
-  return c.json(releases)
+  return c.json(releases.map(enrichReleasePreviews))
 })
 
 app.get('/api/releases/:slug', async (c) => {
@@ -351,6 +374,10 @@ app.get('/api/releases/:slug', async (c) => {
           SELECT json_agg(json_build_object(
             'id', t.id,
             'title', t.title,
+            'track_number', t.track_number,
+            'preview_audio_url', CASE WHEN tp.file_data IS NOT NULL THEN '/api/media/asset/' || tp.id
+                                      WHEN tp.r2_key IS NOT NULL THEN '/' || tp.r2_key
+                                      ELSE NULL END,
             'platforms', CASE WHEN r.release_date > NOW() THEN '{}'::jsonb ELSE t.platforms END,
             'featuring', (
               SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
@@ -362,6 +389,7 @@ app.get('/api/releases/:slug', async (c) => {
             )
           ) ORDER BY t.track_number)
           FROM tracks t 
+          LEFT JOIN media_assets tp ON t.preview_asset_id = tp.id
           WHERE t.release_id = r.id AND t.deleted_at IS NULL
         ),
         '[]'::json
@@ -396,13 +424,21 @@ app.get('/api/releases/:slug', async (c) => {
             'date', gp.post_date,
             'displayDate', gp.display_date,
             'asset', CASE WHEN gpm.file_data IS NOT NULL THEN '/api/media/asset/' || gpm.id ELSE '/' || gpm.r2_key END,
+            'src', CASE WHEN gpm.file_data IS NOT NULL THEN '/api/media/asset/' || gpm.id ELSE '/' || gpm.r2_key END,
+            'mimeType', gpm.mime_type,
+            'assetType', gpm.asset_type,
+            'externalSocialUrl', gp.external_social_url,
+            'externalSocialPlatform', gp.external_social_platform,
             'link', gp.legacy_link,
             'slides', (
               SELECT COALESCE(json_agg(json_build_object(
                 'id', gs.id,
                 'sortOrder', gs.sort_order,
                 'slideType', gs.slide_type,
-                'asset', CASE WHEN gsm.file_data IS NOT NULL THEN '/api/media/asset/' || gsm.id ELSE '/' || gsm.r2_key END
+                'asset', CASE WHEN gsm.file_data IS NOT NULL THEN '/api/media/asset/' || gsm.id ELSE '/' || gsm.r2_key END,
+                'src', CASE WHEN gsm.file_data IS NOT NULL THEN '/api/media/asset/' || gsm.id ELSE '/' || gsm.r2_key END,
+                'mimeType', gsm.mime_type,
+                'assetType', gsm.asset_type
               ) ORDER BY gs.sort_order ASC), '[]'::json)
               FROM gallery_slides gs
               LEFT JOIN media_assets gsm ON gs.asset_id = gsm.id
@@ -426,7 +462,7 @@ app.get('/api/releases/:slug', async (c) => {
   `
   
   if (releases.length === 0) return c.json({ error: 'Not found' }, 404)
-  return c.json(releases[0])
+  return c.json(enrichReleasePreviews(releases[0]))
 })
 
 app.get('/api/tracks/:id', async (c) => {
@@ -434,7 +470,10 @@ app.get('/api/tracks/:id', async (c) => {
   const id = c.req.param('id')
   const tracks = await sql`
     SELECT 
-      t.id, t.title, t.track_number, t.platforms,
+      t.id, t.title, t.track_number, t.platforms, t.preview_asset_id,
+      CASE WHEN tp.file_data IS NOT NULL THEN '/api/media/asset/' || tp.id
+           WHEN tp.r2_key IS NOT NULL THEN '/' || tp.r2_key
+           ELSE NULL END as preview_audio_url,
       (
         SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
         FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'FEATURING'
@@ -444,6 +483,7 @@ app.get('/api/tracks/:id', async (c) => {
         FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'PRODUCER'
       ) as producers
     FROM tracks t
+    LEFT JOIN media_assets tp ON t.preview_asset_id = tp.id
     WHERE t.id = ${id} AND t.deleted_at IS NULL
   `
   if (tracks.length === 0) return c.json({ error: 'Not found' }, 404)
@@ -506,6 +546,7 @@ app.get('/api/beats/pricing', async (c) => {
 
     const productsBySlug = {}
     const byBeat = {}
+    const defaultTiers = {}
 
     for (const p of allProducts) {
       const slug = p.url_slug
@@ -515,7 +556,7 @@ app.get('/api/beats/pricing', async (c) => {
         maximumFractionDigits: 2
       })}`
 
-      productsBySlug[slug] = {
+      const prodObj = {
         code: p.code,
         name: p.name,
         amount: numericAmount,
@@ -525,20 +566,20 @@ app.get('/api/beats/pricing', async (c) => {
         url: p.url
       }
 
+      productsBySlug[slug] = prodObj
+      if (p.code) {
+        productsBySlug[p.code] = prodObj
+      }
+
       // Pattern: chomkamusicstudio-{beatSlug}-{tier}
       const match = slug.match(/^chomkamusicstudio-(.+)-(basic|premium|ultimate)$/)
       if (match) {
         const beatSlug = match[1]
         const tier = match[2]
         if (!byBeat[beatSlug]) byBeat[beatSlug] = {}
-        byBeat[beatSlug][tier] = {
-          code: p.code,
-          name: p.name,
-          amount: numericAmount,
-          currency: p.currency,
-          currencySymbol: p.currency_code,
-          formatted,
-          url: p.url
+        byBeat[beatSlug][tier] = prodObj
+        if (!defaultTiers[tier]) {
+          defaultTiers[tier] = prodObj
         }
       }
     }
@@ -552,6 +593,7 @@ app.get('/api/beats/pricing', async (c) => {
       ],
       products: productsBySlug,
       byBeat,
+      defaultTiers,
       cachedAt: new Date().toISOString()
     }
 
@@ -576,11 +618,20 @@ app.get('/api/beats', async (c) => {
   const beats = await sql`
     SELECT 
       b.id as db_id, b.slug as id, b.title, b.genre, b.short_genre as "shortGenre", b.categories,
-      b.bpm, b.beat_key as key, b.producer,
+      b.bpm, b.beat_key as key, b.producer, b.description, b.mood,
       b.price_basic as "priceBasic", b.price_premium as "pricePremium", b.price_exclusive as "priceExclusive",
-      CASE WHEN img.file_data IS NOT NULL THEN '/api/media/asset/' || img.id ELSE '/' || img.r2_key END as image,
-      CASE WHEN vid.file_data IS NOT NULL THEN '/api/media/asset/' || vid.id ELSE '/' || vid.r2_key END as video,
-      CASE WHEN aud.file_data IS NOT NULL THEN '/api/media/asset/' || aud.id ELSE '/' || aud.r2_key END as audio,
+      CASE WHEN img.file_data IS NOT NULL THEN '/api/media/asset/' || img.id
+           WHEN img.r2_key IS NOT NULL THEN '/' || img.r2_key
+           ELSE NULL END as image,
+      img.mime_type as "imageMimeType",
+      CASE WHEN vid.file_data IS NOT NULL THEN
+             '/api/media/asset/' || vid.id || CASE WHEN vid.mime_type = 'image/gif' OR vid.r2_key ILIKE '%.gif' THEN '?.gif' ELSE '' END
+           WHEN vid.r2_key IS NOT NULL THEN '/' || vid.r2_key
+           ELSE NULL END as video,
+      vid.mime_type as "videoMimeType",
+      CASE WHEN aud.file_data IS NOT NULL THEN '/api/media/asset/' || aud.id
+           WHEN aud.r2_key IS NOT NULL THEN '/' || aud.r2_key
+           ELSE NULL END as audio,
       json_build_object(
         'basic', b.selar_basic_url,
         'premium', b.selar_premium_url,
@@ -603,11 +654,20 @@ app.get('/api/beats/:slug', async (c) => {
   const beats = await sql`
     SELECT 
       b.id as db_id, b.slug as id, b.title, b.genre, b.short_genre as "shortGenre", b.categories,
-      b.bpm, b.beat_key as key, b.producer,
+      b.bpm, b.beat_key as key, b.producer, b.description, b.mood,
       b.price_basic as "priceBasic", b.price_premium as "pricePremium", b.price_exclusive as "priceExclusive",
-      CASE WHEN img.file_data IS NOT NULL THEN '/api/media/asset/' || img.id ELSE '/' || img.r2_key END as image,
-      CASE WHEN vid.file_data IS NOT NULL THEN '/api/media/asset/' || vid.id ELSE '/' || vid.r2_key END as video,
-      CASE WHEN aud.file_data IS NOT NULL THEN '/api/media/asset/' || aud.id ELSE '/' || aud.r2_key END as audio,
+      CASE WHEN img.file_data IS NOT NULL THEN '/api/media/asset/' || img.id
+           WHEN img.r2_key IS NOT NULL THEN '/' || img.r2_key
+           ELSE NULL END as image,
+      img.mime_type as "imageMimeType",
+      CASE WHEN vid.file_data IS NOT NULL THEN
+             '/api/media/asset/' || vid.id || CASE WHEN vid.mime_type = 'image/gif' OR vid.r2_key ILIKE '%.gif' THEN '?.gif' ELSE '' END
+           WHEN vid.r2_key IS NOT NULL THEN '/' || vid.r2_key
+           ELSE NULL END as video,
+      vid.mime_type as "videoMimeType",
+      CASE WHEN aud.file_data IS NOT NULL THEN '/api/media/asset/' || aud.id
+           WHEN aud.r2_key IS NOT NULL THEN '/' || aud.r2_key
+           ELSE NULL END as audio,
       json_build_object(
         'basic', b.selar_basic_url,
         'premium', b.selar_premium_url,
@@ -702,15 +762,27 @@ app.get('/api/gallery', async (c) => {
       g.slug as id, g.title, g.caption, g.category, g.post_type as type,
       g.post_date as date, 
       COALESCE(to_char(g.post_date, 'FMDay, FMMonth FMDD, YYYY'), g.display_date) as "displayDate",
-      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as asset,
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id
+           WHEN m.r2_key IS NOT NULL THEN '/' || m.r2_key
+           ELSE NULL END as asset,
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id
+           WHEN m.r2_key IS NOT NULL THEN '/' || m.r2_key
+           ELSE NULL END as src,
+      m.mime_type as "mimeType",
+      m.asset_type as "assetType",
       g.legacy_link as link,
+      g.external_social_url as "externalSocialUrl",
+      g.external_social_platform as "externalSocialPlatform",
       COALESCE(
         (
           SELECT json_agg(json_build_object(
             'id', gs.id,
             'sortOrder', gs.sort_order,
             'slideType', gs.slide_type,
-            'asset', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END
+            'asset', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END,
+            'src', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END,
+            'mimeType', sm.mime_type,
+            'assetType', sm.asset_type
           ) ORDER BY gs.sort_order ASC)
           FROM gallery_slides gs
           LEFT JOIN media_assets sm ON gs.asset_id = sm.id
@@ -735,15 +807,27 @@ app.get('/api/gallery/:slug', async (c) => {
       g.slug as id, g.title, g.caption, g.category, g.post_type as type,
       g.post_date as date, 
       COALESCE(to_char(g.post_date, 'FMDay, FMMonth FMDD, YYYY'), g.display_date) as "displayDate",
-      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as asset,
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id
+           WHEN m.r2_key IS NOT NULL THEN '/' || m.r2_key
+           ELSE NULL END as asset,
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id
+           WHEN m.r2_key IS NOT NULL THEN '/' || m.r2_key
+           ELSE NULL END as src,
+      m.mime_type as "mimeType",
+      m.asset_type as "assetType",
       g.legacy_link as link,
+      g.external_social_url as "externalSocialUrl",
+      g.external_social_platform as "externalSocialPlatform",
       COALESCE(
         (
           SELECT json_agg(json_build_object(
             'id', gs.id,
             'sortOrder', gs.sort_order,
             'slideType', gs.slide_type,
-            'asset', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END
+            'asset', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END,
+            'src', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END,
+            'mimeType', sm.mime_type,
+            'assetType', sm.asset_type
           ) ORDER BY gs.sort_order ASC)
           FROM gallery_slides gs
           LEFT JOIN media_assets sm ON gs.asset_id = sm.id
@@ -759,6 +843,182 @@ app.get('/api/gallery/:slug', async (c) => {
   `
   if (posts.length === 0) return c.json({ error: 'Not found' }, 404)
   return c.json(posts[0])
+})
+
+// ------------------------------------------
+// Dynamic Social Crawler Share Metadata (/api/share/:type/:slug)
+// Ensures newly created beats, future releases & gallery posts immediately render accurate Open Graph / Twitter Cards
+// ------------------------------------------
+function escapeHtmlAttr(val) {
+  return String(val || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function resolvePublicMediaUrl(pathOrUrl, workerOrigin, siteOrigin) {
+  if (!pathOrUrl) return `${siteOrigin}/media/gallery/post2_1.jpg`
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl
+  if (pathOrUrl.startsWith('/api/')) return `${workerOrigin}${pathOrUrl}`
+  const clean = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`
+  return `${siteOrigin}${clean}`
+}
+
+function buildShareHtml({ title, description, url, image, type = 'website', audio = null }) {
+  const safeTitle = escapeHtmlAttr(title)
+  const safeDesc = escapeHtmlAttr(description)
+  const safeUrl = escapeHtmlAttr(url)
+  const safeImg = escapeHtmlAttr(image)
+  const safeType = escapeHtmlAttr(type)
+  const audioMeta = audio
+    ? `\n    <meta property="og:audio" content="${escapeHtmlAttr(audio)}" />\n    <meta property="og:audio:type" content="audio/mpeg" />`
+    : ''
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${safeTitle}</title>
+    <meta name="description" content="${safeDesc}" />
+    <link rel="canonical" href="${safeUrl}" />
+    <meta property="og:type" content="${safeType}" />
+    <meta property="og:site_name" content="silachomka" />
+    <meta property="og:title" content="${safeTitle}" />
+    <meta property="og:description" content="${safeDesc}" />
+    <meta property="og:url" content="${safeUrl}" />
+    <meta property="og:image" content="${safeImg}" />
+    <meta property="og:image:secure_url" content="${safeImg}" />
+    <meta property="og:image:alt" content="${safeTitle}" />${audioMeta}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${safeTitle}" />
+    <meta name="twitter:description" content="${safeDesc}" />
+    <meta name="twitter:image" content="${safeImg}" />
+    <meta name="twitter:image:alt" content="${safeTitle}" />
+  </head>
+  <body style="background:#050507;color:#f5f3ef;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;">
+    <div style="text-align:center;max-width:480px;padding:32px;">
+      <h1 style="font-size:20px;margin-bottom:12px;">${safeTitle}</h1>
+      <p style="color:#a39e93;font-size:14px;line-height:1.6;">${safeDesc}</p>
+      <p style="margin-top:20px;"><a href="${safeUrl}" style="color:#dfc27d;text-decoration:none;">Open on silachomka →</a></p>
+    </div>
+  </body>
+</html>`
+}
+
+app.get('/api/share/:type/:slug', async (c) => {
+  const sql = c.get('sql')
+  const shareType = c.req.param('type')
+  const slug = c.req.param('slug')
+  const siteOrigin = c.env?.PUBLIC_ORIGIN || 'https://silachomka.vercel.app'
+  const workerOrigin = new URL(c.req.url).origin
+
+  if (shareType === 'beats' || shareType === 'beat') {
+    const rows = await sql`
+      SELECT b.slug, b.title, b.genre, b.short_genre, b.bpm, b.beat_key, b.producer, b.description,
+             CASE WHEN img.file_data IS NOT NULL THEN '/api/media/asset/' || img.id
+                  WHEN img.r2_key IS NOT NULL THEN '/' || img.r2_key
+                  ELSE NULL END as image,
+             CASE WHEN aud.file_data IS NOT NULL THEN '/api/media/asset/' || aud.id
+                  WHEN aud.r2_key IS NOT NULL THEN '/' || aud.r2_key
+                  ELSE NULL END as audio
+      FROM beats b
+      LEFT JOIN media_assets img ON b.image_asset_id = img.id
+      LEFT JOIN media_assets aud ON b.audio_asset_id = aud.id
+      WHERE b.slug = ${slug} AND b.deleted_at IS NULL
+        AND (b.status = 'PUBLISHED' OR (b.status = 'SCHEDULED' AND b.scheduled_at <= NOW()))
+    `
+    if (rows.length > 0) {
+      const b = rows[0]
+      const genreText = b.genre || b.short_genre || 'Instrumental'
+      const metaParts = [genreText, b.bpm, b.beat_key].filter(Boolean).join(' • ')
+      const desc = b.description
+        ? `${b.title} (${metaParts}) — ${b.description}`
+        : `Listen and license "${b.title}" (${metaParts}) produced by ${b.producer || 'silachomka'} at Chomka Music Studio.`
+      const html = buildShareHtml({
+        title: `${b.title} — Beat by ${b.producer || 'silachomka'} | silachomka`,
+        description: desc,
+        url: `${siteOrigin}/beats/${b.slug}`,
+        image: resolvePublicMediaUrl(b.image, workerOrigin, siteOrigin),
+        type: 'music.song',
+        audio: b.audio ? resolvePublicMediaUrl(b.audio, workerOrigin, siteOrigin) : null
+      })
+      return c.html(html)
+    }
+  }
+
+  if (shareType === 'release' || shareType === 'releases') {
+    const rows = await sql`
+      SELECT r.slug, r.title, r.release_date, r.display_date, r.type, r.primary_artist, r.description, r.status,
+             CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id
+                  WHEN m.r2_key IS NOT NULL THEN '/' || m.r2_key
+                  ELSE NULL END as cover
+      FROM releases r
+      LEFT JOIN media_assets m ON r.cover_asset_id = m.id
+      WHERE r.slug = ${slug} AND r.deleted_at IS NULL
+        AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
+    `
+    if (rows.length > 0) {
+      const r = rows[0]
+      const relDate = r.release_date ? new Date(r.release_date) : null
+      const isFuture = (relDate && relDate.getTime() > Date.now()) || r.status === 'SCHEDULED'
+      let formattedDate = r.display_date
+      if (!formattedDate && relDate && !isNaN(relDate.getTime())) {
+        formattedDate = relDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+      }
+      const statusLead = isFuture
+        ? `${r.title} — Coming soon${formattedDate ? ` on ${formattedDate}` : ''}.`
+        : `${r.title} — Out now.`
+      const customNote = r.description && !r.description.toLowerCase().includes('out now') && !r.description.toLowerCase().includes('coming soon')
+        ? ` ${r.description}`
+        : ''
+      const desc = `${statusLead}${customNote}`.trim()
+      const html = buildShareHtml({
+        title: `${r.title} — ${r.primary_artist || 'silachomka'} | silachomka`,
+        description: desc,
+        url: `${siteOrigin}/release/${r.slug}`,
+        image: resolvePublicMediaUrl(r.cover, workerOrigin, siteOrigin),
+        type: 'music.album'
+      })
+      return c.html(html)
+    }
+  }
+
+  if (shareType === 'gallery') {
+    const rows = await sql`
+      SELECT g.slug, g.title, g.caption, g.display_date, g.post_date,
+             CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id
+                  WHEN m.r2_key IS NOT NULL THEN '/' || m.r2_key
+                  ELSE NULL END as asset,
+             m.mime_type as "mimeType"
+      FROM gallery_posts g
+      LEFT JOIN media_assets m ON g.primary_asset_id = m.id
+      WHERE g.slug = ${slug} AND g.deleted_at IS NULL
+        AND (g.status = 'PUBLISHED' OR (g.status = 'SCHEDULED' AND g.scheduled_at <= NOW()))
+    `
+    if (rows.length > 0) {
+      const g = rows[0]
+      const isVideoAsset = g.mimeType?.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(g.asset || '')
+      const imagePath = (!isVideoAsset && g.asset) ? g.asset : '/media/gallery/post2_1.jpg'
+      const html = buildShareHtml({
+        title: `${g.title || 'Visual Archive'} — silachomka Gallery`,
+        description: g.caption || `${g.title || 'Visual Archive'} (${g.display_date || ''}) — Official visual archive by silachomka.`,
+        url: `${siteOrigin}/gallery/${g.slug}`,
+        image: resolvePublicMediaUrl(imagePath, workerOrigin, siteOrigin),
+        type: 'article'
+      })
+      return c.html(html)
+    }
+  }
+
+  // Fallback default share HTML
+  return c.html(buildShareHtml({
+    title: 'silachomka — Artist, Producer & Sound Architect',
+    description: 'Official artist platform, discography, beat store, and visual archive of silachomka.',
+    url: siteOrigin,
+    image: `${siteOrigin}/media/gallery/post2_1.jpg`
+  }))
 })
 
 // ==========================================

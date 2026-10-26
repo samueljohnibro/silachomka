@@ -83,10 +83,8 @@ function notifyUpdate() {
   }
 }
 
-async function initializeStore() {
-  if (globalIsLoaded || isFetching) return;
+export async function refreshCatalogue() {
   isFetching = true;
-  
   try {
     const data = await fetchAllCatalogue();
     memoryStore.releases = data.releases;
@@ -94,7 +92,6 @@ async function initializeStore() {
     memoryStore.gallery = data.gallery;
     memoryStore.videos = data.videos;
     globalSocials = data.socials;
-    
     globalIsLoaded = true;
     globalError = null;
   } catch (err) {
@@ -103,6 +100,11 @@ async function initializeStore() {
     isFetching = false;
     notifyUpdate();
   }
+}
+
+async function initializeStore() {
+  if (globalIsLoaded || isFetching) return;
+  await refreshCatalogue();
 }
 
 // Kick off fetch early
@@ -294,5 +296,6 @@ export function useChomkaStore() {
     deleteGalleryPost,
     saveVideo,
     deleteVideo,
+    refreshCatalogue,
   };
 }

@@ -165,6 +165,25 @@ export function useSelarPricing(initialCurrency) {
         return pricingData.byBeat[normalizedSlug][tier];
       }
 
+      // 3. Authoritative Selar Studio tier fallback for newly created beats without a custom product slug
+      if (pricingData?.defaultTiers?.[tier]) {
+        return {
+          ...pricingData.defaultTiers[tier],
+          url: urlField || pricingData.defaultTiers[tier].url,
+        };
+      }
+
+      if (pricingData?.byBeat) {
+        for (const key of Object.keys(pricingData.byBeat)) {
+          if (pricingData.byBeat[key]?.[tier]) {
+            return {
+              ...pricingData.byBeat[key][tier],
+              url: urlField || pricingData.byBeat[key][tier].url,
+            };
+          }
+        }
+      }
+
       return null;
     },
     [pricingData, currency]

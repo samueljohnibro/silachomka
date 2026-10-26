@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import { refreshCatalogue } from "../../data/store";
+import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
 import MediaAssetPicker from "../../components/admin/MediaAssetPicker";
 import PlatformLinksEditor from "../../components/admin/PlatformLinksEditor";
 import AdminSortControl from "../../components/admin/AdminSortControl";
@@ -79,6 +81,29 @@ const AdminMusicPage = () => {
   const [deleteTrackConfirmId, setDeleteTrackConfirmId] = useState(null);
   const [newTrackCreditName, setNewTrackCreditName] = useState("");
   const [newTrackCreditRole, setNewTrackCreditRole] = useState("FEATURING");
+
+  const {
+    hasRestorableDraft,
+    lastSavedAt,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+  } = useDraftAutosave({
+    entityKey: currentRelease?.id ? `release_${currentRelease.id}` : "release_new",
+    formData: currentRelease,
+    setFormData: (restored) => {
+      if (!restored) return;
+      setCurrentRelease(restored);
+      if (restored.release_date) {
+        const d = new Date(restored.release_date);
+        if (!isNaN(d.getTime())) {
+          setReleaseDatePart(d.toISOString().split("T")[0]);
+          setReleaseTimePart(d.toISOString().split("T")[1]?.slice(0, 5) || "00:00");
+        }
+      }
+    },
+    enabled: view === "CREATE" || view === "EDIT",
+  });
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -337,12 +362,16 @@ const AdminMusicPage = () => {
       setSaveState("SAVING");
       if (view === "CREATE") {
         const saved = await adminApi.createRelease(payload);
+        clearDraft();
         await fetchData();
+        refreshCatalogue();
         setCurrentRelease(saved);
         setView("EDIT"); // Transition to EDIT view so user can immediately manage project tracks!
       } else {
         const updated = await adminApi.updateRelease(payload.id, payload);
+        clearDraft();
         await fetchData();
+        refreshCatalogue();
         setCurrentRelease(updated);
       }
       setSaveSuccess(true);
@@ -361,6 +390,7 @@ const AdminMusicPage = () => {
     try {
       await adminApi.deleteRelease(id);
       await fetchData();
+      refreshCatalogue();
       setDeleteConfirmId(null);
     } catch (err) {
       setError(err.message || "Failed to delete release.");
@@ -381,6 +411,7 @@ const AdminMusicPage = () => {
       release_id: currentRelease.id,
       track_number: projectTracks.length + 1,
       title: "",
+      preview_asset_id: null,
       platforms: {},
       credits: []
     });
@@ -392,6 +423,7 @@ const AdminMusicPage = () => {
     const trackCredits = credits.filter(c => c.track_id === track.id);
     setEditingTrack({
       ...track,
+      preview_asset_id: track.preview_asset_id || null,
       platforms: track.platforms && typeof track.platforms === "object" ? track.platforms : {},
       credits: trackCredits
     });
@@ -413,6 +445,7 @@ const AdminMusicPage = () => {
         release_id: currentRelease.id,
         track_number: Number(editingTrack.track_number) || (projectTracks.length + 1),
         title: editingTrack.title.trim(),
+        preview_asset_id: editingTrack.preview_asset_id || null,
         platforms: editingTrack.platforms && Object.keys(editingTrack.platforms).length > 0 ? editingTrack.platforms : null
       };
 
@@ -425,6 +458,7 @@ const AdminMusicPage = () => {
       // Refresh data
       const updatedTracks = await adminApi.getTracks();
       setTracks(updatedTracks);
+      refreshCatalogue();
       setIsTrackModalOpen(false);
       setEditingTrack(null);
     } catch (err) {
@@ -439,6 +473,7 @@ const AdminMusicPage = () => {
       await adminApi.deleteTrack(trackId);
       const updatedTracks = await adminApi.getTracks();
       setTracks(updatedTracks);
+      refreshCatalogue();
       setDeleteTrackConfirmId(null);
     } catch (err) {
       setError(err.message || "Failed to delete track.");
@@ -523,6 +558,13 @@ const AdminMusicPage = () => {
         </div>
 
         {error && <div className="admin-login-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+        <DraftAutosaveBanner
+          hasRestorableDraft={hasRestorableDraft}
+          lastSavedAt={lastSavedAt}
+          onRestore={restoreDraft}
+          onDiscard={discardDraft}
+        />
 
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           
@@ -638,7 +680,7 @@ const AdminMusicPage = () => {
               </div>
               {currentRelease.scheduled_at && (
                 <span style={{ fontSize: 11, color: "var(--gold)", marginTop: 4, display: "block" }}>
-                  ⏰ Scheduled for {new Date(currentRelease.scheduled_at).toLocaleString()}
+                  Scheduled for {new Date(currentRelease.scheduled_at).toLocaleString()}
                 </span>
               )}
             </div>
@@ -844,7 +886,25 @@ const AdminMusicPage = () => {
                             #{trk.track_number}
                           </td>
                           <td style={{ padding: "10px 12px", color: "var(--text-h)", fontWeight: 500 }}>
-                            {trk.title}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              <span>{trk.title}</span>
+                              {trk.preview_asset_id && (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    padding: "2px 6px",
+                                    borderRadius: 4,
+                                    background: "rgba(223, 194, 125, 0.14)",
+                                    border: "1px solid rgba(223, 194, 125, 0.4)",
+                                    color: "var(--gold)",
+                                    fontWeight: 600,
+                                    textTransform: "uppercase",
+                                  }}
+                                >
+                                  Preview Ready
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td style={{ padding: "10px 12px", color: "var(--muted)", fontSize: 12 }}>
                             {trackCredits.length > 0 ? (
@@ -978,6 +1038,22 @@ const AdminMusicPage = () => {
 
                 <div style={{ fontSize: 12, color: "var(--muted)" }}>
                   Inherited Release Date: <strong style={{ color: "var(--gold)" }}>{currentRelease.display_date || currentRelease.release_date}</strong>
+                </div>
+
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
+                  <MediaAssetPicker
+                    label="Track Preview Audio (MP3 — Optional Pre-Release Snippet)"
+                    assetType="AUDIO"
+                    value={editingTrack.preview_asset_id}
+                    onChange={(id, assetRecord) => {
+                      setEditingTrack(prev => ({ ...prev, preview_asset_id: id }));
+                      if (assetRecord) {
+                        setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
+                      }
+                    }}
+                    disabled={isSavingTrack}
+                    hint="Plays a random 30s snippet on upcoming release pages without revealing the track title publicly."
+                  />
                 </div>
 
                 <PlatformLinksEditor

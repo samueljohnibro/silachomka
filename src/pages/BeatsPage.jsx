@@ -1,7 +1,25 @@
-import { DownCaretIcon, PlayIcon, PauseIcon, RightArrowIcon, UpRightArrowIcon, ShuffleIcon, RepeatIcon, RepeatOneIcon, PreviousTrackIcon, NextTrackIcon, SkipBackIcon, SkipForwardIcon, GridIcon, ReelIcon, CameraIcon } from '../components/Icons';
+import {
+  DownCaretIcon,
+  PlayIcon,
+  PauseIcon,
+  RightArrowIcon,
+  UpRightArrowIcon,
+  ShuffleIcon,
+  RepeatIcon,
+  RepeatOneIcon,
+  PreviousTrackIcon,
+  NextTrackIcon,
+  SkipBackIcon,
+  SkipForwardIcon,
+  GridIcon,
+  ReelIcon,
+  CameraIcon,
+  LoadingSpinner,
+} from "../components/Icons";
 // src/pages/BeatsPage.jsx
 
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -11,14 +29,21 @@ import {
 import { Link } from "react-router-dom";
 
 import { useChomkaStore } from "../data/store";
-import { useSelarPricing } from "../data/useSelarPricing";
+import { useCurrency } from "../data/CurrencyContext";
+import BeatArtwork from "../components/BeatArtwork";
 import BeatHeroSlideshow from "../components/BeatHeroSlideshow";
 import ExclusiveBeatModal from "../components/ExclusiveBeatModal";
 import SeoHead from "../components/SeoHead";
-import ShareLinkBox from "../components/ShareLinkBox";
-import { absoluteUrl, getBeatProducer, getBeatSource } from "../data/credits";
+import { getBeatProducer, getBeatSource } from "../data/credits";
 
 const PREVIEW_LENGTH = 60;
+
+function formatClock(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
 
 /* =========================================================
    CIRCULAR PLAYBACK PROGRESS RING
@@ -51,83 +76,28 @@ function ProgressRing({ progress, isPlaying }) {
 }
 
 /* =========================================================
-   BEAT CARD
+   BEAT CARD (Memoized to prevent 60fps grid re-renders)
    ========================================================= */
 
-function BeatCard({ beat, isPlaying, isLoading, progress, onPlay, startingPrice }) {
-  const videoRef = useRef(null);
-
-  /* Visual Video Autoplay */
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return undefined;
-
-    video.muted = true;
-    video.defaultMuted = true;
-    video.playsInline = true;
-    video.loop = true;
-
-    const playVideo = () => {
-      if (document.visibilityState === "hidden") return;
-      const promise = video.play();
-      if (promise !== undefined) {
-        promise.catch(() => {});
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        playVideo();
-      } else {
-        video.pause();
-      }
-    };
-
-    if (video.readyState >= 2) {
-      playVideo();
-    } else {
-      video.addEventListener("loadeddata", playVideo, { once: true });
-      video.addEventListener("canplay", playVideo, { once: true });
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      video.removeEventListener("loadeddata", playVideo);
-      video.removeEventListener("canplay", playVideo);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      video.pause();
-    };
-  }, [beat.video]);
-
+const BeatCard = memo(function BeatCard({
+  beat,
+  isPlaying,
+  isLoading,
+  progress,
+  onPlay,
+  startingPrice,
+}) {
   return (
     <article className={`beat-card ${isPlaying ? "is-playing" : ""}`}>
       {/* Visualizer Frame */}
       <div className={`beat-art ${isPlaying ? "is-playing" : ""}`}>
-        {beat.video?.endsWith(".gif") ? (
-          <img
-            src={beat.video}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
-            style={{ objectFit: "cover" }}
-            aria-hidden="true"
-          />
-        ) : (
-          <video
-            ref={videoRef}
-            className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
-            src={beat.video}
-            poster={beat.image}
-            muted
-            autoPlay
-            playsInline
-            loop
-            preload="metadata"
-            aria-hidden="true"
-          />
-        )}
+        <BeatArtwork
+          image={beat.image}
+          video={beat.video}
+          videoMimeType={beat.videoMimeType}
+          alt={beat.title || ""}
+          className={`beat-video${beat.letterboxed ? " is-letterboxed" : ""}`}
+        />
 
         <div className="beat-video-overlay" aria-hidden="true" />
 
@@ -147,15 +117,21 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay, startingPrice 
         {/* Circular Audio Trigger */}
         <button
           type="button"
-          className={`beat-play ${isPlaying ? "is-playing" : ""}`}
+          className={`beat-play ${isPlaying ? "is-playing" : ""} ${isLoading ? "is-loading" : ""}`}
           onClick={() => onPlay(beat)}
-          aria-label={isLoading ? `Loading ${beat.title}` : isPlaying ? `Pause ${beat.title}` : `Play ${beat.title}`}
+          aria-label={
+            isLoading
+              ? `Loading ${beat.title}`
+              : isPlaying
+              ? `Pause ${beat.title}`
+              : `Play ${beat.title}`
+          }
           aria-pressed={isPlaying}
           aria-busy={isLoading}
         >
           <ProgressRing progress={progress} isPlaying={isPlaying} />
           {isLoading ? (
-            <div className="beat-loading-spinner" aria-hidden="true" />
+            <LoadingSpinner size={18} />
           ) : (
             <span className="beat-play-icon" aria-hidden="true">
               {isPlaying ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
@@ -170,12 +146,14 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay, startingPrice 
           <p className="beat-name">{beat.title}</p>
           <p className="beat-type">{beat.genre}</p>
           <p className="credit-line">
-            prod. {getBeatProducer(beat)}<span className="credit-dot"> · </span>{getBeatSource(beat)}
+            prod. {getBeatProducer(beat)}
+            <span className="credit-dot"> · </span>
+            {getBeatSource(beat)}
           </p>
         </div>
 
-        <p className="beat-price">
-          {startingPrice ? `From ${startingPrice}` : "From ₦15,000"}
+        <p className="beat-price" data-currency-price={startingPrice || ""}>
+          {startingPrice ? `From ${startingPrice}` : "From Selar"}
         </p>
       </div>
 
@@ -190,7 +168,7 @@ function BeatCard({ beat, isPlaying, isLoading, progress, onPlay, startingPrice 
       </div>
     </article>
   );
-}
+});
 
 /* =========================================================
    BEAT REEL PLAYER (PORTRAIT 9:16 EXPERIENCE)
@@ -201,40 +179,42 @@ function BeatReelPlayer({
   currentIndex,
   onNext,
   onPrev,
-  onReplay,
   isShuffle,
   onToggleShuffle,
   isPlaying,
   isLoading,
   progress,
+  previewDuration,
+  playbackMode,
+  onChangePlaybackMode,
   onPlay,
   onExitReel,
   onSkip,
   repeatMode,
   onCycleRepeat,
+  getBeatStartingPrice,
 }) {
   const currentBeat = beats[currentIndex];
-  const videoRef = useRef(null);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = true;
-    video.defaultMuted = true;
-    video.playsInline = true;
-    video.loop = true;
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(() => {});
-    }
-  }, [currentBeat?.video]);
 
   if (!currentBeat) return null;
 
-  const elapsedSeconds = Math.min(60, Math.floor(progress * 60));
+  const effectiveDuration =
+    Number.isFinite(previewDuration) && previewDuration > 0
+      ? previewDuration
+      : playbackMode === "1min"
+      ? 60
+      : 180;
+  const elapsedSeconds = Math.min(
+    effectiveDuration,
+    Math.floor(progress * effectiveDuration)
+  );
+  const startingPrice = getBeatStartingPrice(currentBeat);
 
   return (
-    <div className="beat-reel-wrapper" style={{ margin: "20px auto 40px", maxWidth: "440px", padding: "0 12px" }}>
+    <div
+      className="beat-reel-wrapper"
+      style={{ margin: "20px auto 40px", maxWidth: "440px", padding: "0 12px" }}
+    >
       {/* 9:16 Portrait Reel Viewport */}
       <div
         className="beat-reel-viewport"
@@ -247,43 +227,26 @@ function BeatReelPlayer({
           borderRadius: "16px",
           overflow: "hidden",
           background: "#080808",
-          boxShadow: "0 24px 60px rgba(0,0,0,0.8), 0 0 30px rgba(223, 194, 125, 0.15)",
+          boxShadow:
+            "0 24px 60px rgba(0,0,0,0.8), 0 0 30px rgba(223, 194, 125, 0.15)",
           border: "1px solid rgba(223, 194, 125, 0.3)",
         }}
       >
-        {/* Background Visualizer / Video */}
-        {currentBeat.video?.endsWith(".gif") ? (
-          <img
-            src={currentBeat.video}
-            alt=""
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-            }}
-          />
-        ) : (
-          <video
-            ref={videoRef}
-            src={currentBeat.video}
-            poster={currentBeat.image}
-            muted
-            autoPlay
-            playsInline
-            loop
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-            }}
-          />
-        )}
+        {/* Background Visualizer / GIF / Video */}
+        <BeatArtwork
+          image={currentBeat.image}
+          video={currentBeat.video}
+          videoMimeType={currentBeat.videoMimeType}
+          alt={currentBeat.title || ""}
+          lazy={false}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+          }}
+        />
 
         {/* Cinematic Gradient Overlays */}
         <div
@@ -291,12 +254,12 @@ function BeatReelPlayer({
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.92) 100%)",
+              "linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.12) 25%, rgba(0,0,0,0.15) 50%, rgba(0,0,0,0.94) 100%)",
             pointerEvents: "none",
           }}
         />
 
-        {/* Top Header Bar: 60s Progress Bar & Controls */}
+        {/* Top Header Bar: Progress Bar & Mode Controls */}
         <div
           style={{
             position: "absolute",
@@ -307,7 +270,7 @@ function BeatReelPlayer({
             zIndex: 10,
           }}
         >
-          {/* 60-Second Segment Progress Bar */}
+          {/* Segment Progress Bar */}
           <div
             style={{
               width: "100%",
@@ -337,6 +300,7 @@ function BeatReelPlayer({
               color: "#fff",
               fontSize: "12px",
               fontWeight: 500,
+              gap: "8px",
             }}
           >
             <span
@@ -344,10 +308,11 @@ function BeatReelPlayer({
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "6px",
-                background: "rgba(0,0,0,0.5)",
+                background: "rgba(0,0,0,0.55)",
                 padding: "4px 10px",
                 borderRadius: "20px",
                 border: "1px solid rgba(223, 194, 125, 0.3)",
+                fontSize: "11px",
               }}
             >
               <span
@@ -359,12 +324,64 @@ function BeatReelPlayer({
                   boxShadow: isPlaying ? "0 0 6px var(--gold)" : "none",
                 }}
               />
-              0:{String(elapsedSeconds).padStart(2, "0")} / 1:00 Preview
+              {playbackMode === "full"
+                ? `${formatClock(elapsedSeconds)} / ${formatClock(effectiveDuration)} Full`
+                : `${formatClock(elapsedSeconds)} / 1:00 Preview`}
             </span>
 
+            {/* 1 Min / Full Track Toggle inside Reel */}
+            <div
+              role="group"
+              aria-label="Playback duration mode"
+              style={{
+                display: "inline-flex",
+                background: "rgba(0,0,0,0.65)",
+                border: "1px solid rgba(223,194,125,0.35)",
+                borderRadius: "999px",
+                padding: "2px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => onChangePlaybackMode("1min")}
+                aria-pressed={playbackMode === "1min"}
+                style={{
+                  border: "none",
+                  background:
+                    playbackMode === "1min" ? "var(--gold)" : "transparent",
+                  color: playbackMode === "1min" ? "#050507" : "#d8d3c8",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  padding: "3px 8px",
+                  borderRadius: "999px",
+                  cursor: "pointer",
+                }}
+              >
+                1 MIN
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangePlaybackMode("full")}
+                aria-pressed={playbackMode === "full"}
+                style={{
+                  border: "none",
+                  background:
+                    playbackMode === "full" ? "var(--gold)" : "transparent",
+                  color: playbackMode === "full" ? "#050507" : "#d8d3c8",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  padding: "3px 8px",
+                  borderRadius: "999px",
+                  cursor: "pointer",
+                }}
+              >
+                FULL
+              </button>
+            </div>
+
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
-                {currentIndex + 1} of {beats.length}
+              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.75)" }}>
+                {currentIndex + 1}/{beats.length}
               </span>
               <button
                 type="button"
@@ -380,9 +397,10 @@ function BeatReelPlayer({
                   alignItems: "center",
                   justifyContent: "center",
                   cursor: "pointer",
-                  fontSize: "14px",
+                  fontSize: "13px",
                 }}
                 title="Exit Reel Mode"
+                aria-label="Exit Reel Mode"
               >
                 ✕
               </button>
@@ -395,7 +413,7 @@ function BeatReelPlayer({
           onClick={() => onPlay(currentBeat)}
           style={{
             position: "absolute",
-            inset: "80px 0 190px 0",
+            inset: "80px 0 210px 0",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -420,7 +438,7 @@ function BeatReelPlayer({
               }}
             >
               {isLoading ? (
-                <div className="beat-loading-spinner" />
+                <LoadingSpinner size={26} color="var(--gold)" />
               ) : (
                 <PlayIcon size={28} />
               )}
@@ -439,33 +457,76 @@ function BeatReelPlayer({
             zIndex: 10,
             display: "flex",
             flexDirection: "column",
-            gap: "10px",
+            gap: "12px",
           }}
         >
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+          {/* Req #15: Genre stacked above Price, both centered */}
+          <div
+            className="reel-meta-centered"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              gap: "4px",
+            }}
+          >
+            <div
+              className="reel-genre-price-stack"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "4px",
+                marginBottom: "2px",
+              }}
+            >
               <span
+                className="reel-genre-badge"
                 style={{
                   fontSize: "10px",
                   color: "var(--gold)",
-                  letterSpacing: "0.1em",
+                  letterSpacing: "0.12em",
                   fontWeight: 700,
                   textTransform: "uppercase",
-                  background: "rgba(223,194,125,0.15)",
-                  padding: "2px 8px",
-                  borderRadius: "4px",
+                  background: "rgba(223,194,125,0.16)",
+                  border: "1px solid rgba(223,194,125,0.3)",
+                  padding: "3px 10px",
+                  borderRadius: "999px",
                 }}
               >
                 {currentBeat.genre || "Instrumental"}
               </span>
-              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>
-                ₦15,000+
+              <span
+                className="reel-price-label"
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  color: "#f5f3ef",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {startingPrice ? `From ${startingPrice}` : "From Selar"}
               </span>
             </div>
-            <h2 style={{ margin: "2px 0 4px", fontSize: "20px", color: "#fff", fontWeight: 700 }}>
+
+            <h2
+              style={{
+                margin: "2px 0 2px",
+                fontSize: "20px",
+                color: "#fff",
+                fontWeight: 700,
+              }}
+            >
               {currentBeat.title}
             </h2>
-            <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "12px",
+                color: "rgba(255,255,255,0.72)",
+              }}
+            >
               prod. {getBeatProducer(currentBeat)} · {getBeatSource(currentBeat)}
             </p>
           </div>
@@ -508,9 +569,15 @@ function BeatReelPlayer({
               type="button"
               onClick={onToggleShuffle}
               title={isShuffle ? "Shuffle On" : "Shuffle Off"}
+              aria-label={isShuffle ? "Disable shuffle" : "Enable shuffle"}
+              aria-pressed={isShuffle}
               style={{
-                background: isShuffle ? "rgba(223, 194, 125, 0.25)" : "transparent",
-                border: isShuffle ? "1px solid var(--gold)" : "1px solid transparent",
+                background: isShuffle
+                  ? "rgba(223, 194, 125, 0.25)"
+                  : "transparent",
+                border: isShuffle
+                  ? "1px solid var(--gold)"
+                  : "1px solid transparent",
                 color: isShuffle ? "var(--gold)" : "rgba(255,255,255,0.6)",
                 borderRadius: "6px",
                 padding: "6px 10px",
@@ -527,6 +594,7 @@ function BeatReelPlayer({
               type="button"
               onClick={onPrev}
               title="Previous Beat"
+              aria-label="Previous Beat"
               style={{
                 background: "transparent",
                 border: "none",
@@ -539,54 +607,16 @@ function BeatReelPlayer({
               <PreviousTrackIcon size={18} />
             </button>
 
-            {/* Play / Pause Toggle */}
-            <button
-              type="button"
-              onClick={() => onPlay(currentBeat)}
-              title={isPlaying ? "Pause Preview" : "Play Preview"}
-              style={{
-                width: "42px",
-                height: "42px",
-                borderRadius: "50%",
-                background: "var(--gold)",
-                border: "none",
-                color: "#000",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                boxShadow: "0 0 12px var(--gold-glow)",
-              }}
-            >
-              {isPlaying ? <PauseIcon size={20} color="#000" /> : <PlayIcon size={20} color="#000" />}
-            </button>
-
-            {/* Next Beat */}
-            <button
-              type="button"
-              onClick={onNext}
-              title="Next Beat"
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#fff",
-                fontSize: "18px",
-                cursor: "pointer",
-                padding: "6px 10px",
-              }}
-            >
-              <NextTrackIcon size={18} />
-            </button>
-
             {/* Skip Back 5s */}
             <button
               type="button"
               onClick={() => onSkip && onSkip(-5)}
               title="Skip back 5 seconds"
+              aria-label="Skip back 5 seconds"
               style={{
                 background: "transparent",
                 border: "none",
-                color: "rgba(255,255,255,0.7)",
+                color: "rgba(255,255,255,0.75)",
                 fontSize: "14px",
                 cursor: "pointer",
                 padding: "6px 8px",
@@ -599,27 +629,34 @@ function BeatReelPlayer({
               <span style={{ fontSize: "9px", fontWeight: 600 }}>5</span>
             </button>
 
-            {/* Repeat Mode Toggle */}
+            {/* Play / Pause Toggle */}
             <button
               type="button"
-              onClick={onCycleRepeat}
-              title={
-                repeatMode === 'one' ? 'Repeat: One' :
-                repeatMode === 'all' ? 'Repeat: All' : 'Repeat: Off'
-              }
+              onClick={() => onPlay(currentBeat)}
+              title={isPlaying ? "Pause" : "Play"}
+              aria-label={isLoading ? "Loading audio" : isPlaying ? "Pause" : "Play"}
+              aria-busy={isLoading}
               style={{
-                background: repeatMode !== 'none' ? "rgba(223, 194, 125, 0.2)" : "transparent",
-                border: repeatMode !== 'none' ? "1px solid var(--gold)" : "1px solid transparent",
-                color: repeatMode !== 'none' ? "var(--gold)" : "rgba(255,255,255,0.5)",
-                borderRadius: "6px",
-                fontSize: "14px",
-                cursor: "pointer",
-                padding: "4px 8px",
+                width: "44px",
+                height: "44px",
+                borderRadius: "50%",
+                background: "var(--gold)",
+                border: "none",
+                color: "#050507",
                 display: "flex",
                 alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "0 0 12px var(--gold-glow)",
               }}
             >
-              {repeatMode === 'one' ? <RepeatOneIcon size={15} /> : <RepeatIcon size={15} />}
+              {isLoading ? (
+                <LoadingSpinner size={18} color="#050507" />
+              ) : isPlaying ? (
+                <PauseIcon size={20} color="#050507" />
+              ) : (
+                <PlayIcon size={20} color="#050507" />
+              )}
             </button>
 
             {/* Skip Forward 5s */}
@@ -627,10 +664,11 @@ function BeatReelPlayer({
               type="button"
               onClick={() => onSkip && onSkip(5)}
               title="Skip forward 5 seconds"
+              aria-label="Skip forward 5 seconds"
               style={{
                 background: "transparent",
                 border: "none",
-                color: "rgba(255,255,255,0.7)",
+                color: "rgba(255,255,255,0.75)",
                 fontSize: "14px",
                 cursor: "pointer",
                 padding: "6px 8px",
@@ -641,6 +679,70 @@ function BeatReelPlayer({
             >
               <span style={{ fontSize: "9px", fontWeight: 600 }}>5</span>
               <SkipForwardIcon size={14} />
+            </button>
+
+            {/* Next Beat */}
+            <button
+              type="button"
+              onClick={onNext}
+              title="Next Beat"
+              aria-label="Next Beat"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#fff",
+                fontSize: "18px",
+                cursor: "pointer",
+                padding: "6px 10px",
+              }}
+            >
+              <NextTrackIcon size={18} />
+            </button>
+
+            {/* Repeat Mode Toggle */}
+            <button
+              type="button"
+              onClick={onCycleRepeat}
+              title={
+                repeatMode === "one"
+                  ? "Repeat: One"
+                  : repeatMode === "all"
+                  ? "Repeat: All"
+                  : "Repeat: Off"
+              }
+              aria-label={
+                repeatMode === "one"
+                  ? "Repeat mode: One"
+                  : repeatMode === "all"
+                  ? "Repeat mode: All"
+                  : "Repeat mode: Off"
+              }
+              style={{
+                background:
+                  repeatMode !== "none"
+                    ? "rgba(223, 194, 125, 0.2)"
+                    : "transparent",
+                border:
+                  repeatMode !== "none"
+                    ? "1px solid var(--gold)"
+                    : "1px solid transparent",
+                color:
+                  repeatMode !== "none"
+                    ? "var(--gold)"
+                    : "rgba(255,255,255,0.5)",
+                borderRadius: "6px",
+                fontSize: "14px",
+                cursor: "pointer",
+                padding: "4px 8px",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              {repeatMode === "one" ? (
+                <RepeatOneIcon size={15} />
+              ) : (
+                <RepeatIcon size={15} />
+              )}
             </button>
           </div>
         </div>
@@ -655,21 +757,34 @@ function BeatReelPlayer({
 
 export default function BeatsPage() {
   const { beats } = useChomkaStore();
-  const { currency, setCurrency, supportedCurrencies, getBeatStartingPrice } = useSelarPricing();
+  const {
+    currency,
+    setCurrency,
+    supportedCurrencies,
+    getBeatStartingPrice,
+    playbackMode,
+    setPlaybackMode,
+  } = useCurrency();
+
   const audioRef = useRef(null);
+  const audioCleanupRef = useRef(null);
+  const autoAdvanceTimerRef = useRef(null);
   const activeBeatRef = useRef(null);
   const isPlayingRef = useRef(false);
   const previewStartRef = useRef(0);
   const previewDurationRef = useRef(0);
+  const playbackModeRef = useRef(playbackMode);
   const audioGenerationRef = useRef(0);
   const animationFrameRef = useRef(null);
+  const lastProgressCommitRef = useRef(0);
   const updateProgressRef = useRef(null);
-  const repeatModeRef = useRef('all');
+  const repeatModeRef = useRef("all");
   const handleNextReelRef = useRef(null);
 
   const [activeBeat, setActiveBeat] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [activePreviewDuration, setActivePreviewDuration] = useState(60);
   const [audioError, setAudioError] = useState(false);
   const [loadingBeatId, setLoadingBeatId] = useState(null);
   const [activeFilter, setActiveFilter] = useState("all");
@@ -678,7 +793,7 @@ export default function BeatsPage() {
   const [isReelMode, setIsReelMode] = useState(false);
   const [reelIndex, setReelIndex] = useState(0);
   const [isShuffle, setIsShuffle] = useState(false);
-  const [repeatMode, setRepeatMode] = useState('all'); // 'none' | 'all' | 'one'
+  const [repeatMode, setRepeatMode] = useState("all"); // 'none' | 'all' | 'one'
 
   useEffect(() => {
     activeBeatRef.current = activeBeat;
@@ -691,6 +806,36 @@ export default function BeatsPage() {
   useEffect(() => {
     repeatModeRef.current = repeatMode;
   }, [repeatMode]);
+
+  // Synchronize playback window when user switches between 1-Minute and Full Track
+  useEffect(() => {
+    playbackModeRef.current = playbackMode;
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+
+    if (playbackMode === "full") {
+      previewStartRef.current = 0;
+      previewDurationRef.current = audio.duration;
+      setActivePreviewDuration(audio.duration);
+      const nextProg = Math.max(0, Math.min(audio.currentTime / audio.duration, 1));
+      setProgress(nextProg);
+    } else {
+      const dur = Math.min(PREVIEW_LENGTH, audio.duration);
+      previewDurationRef.current = dur;
+      setActivePreviewDuration(dur);
+      if (
+        audio.currentTime < previewStartRef.current ||
+        audio.currentTime >= previewStartRef.current + dur
+      ) {
+        previewStartRef.current = Math.max(
+          0,
+          Math.min(audio.currentTime, Math.max(0, audio.duration - dur))
+        );
+      }
+      const elapsed = Math.max(0, audio.currentTime - previewStartRef.current);
+      setProgress(Math.max(0, Math.min(elapsed / dur, 1)));
+    }
+  }, [playbackMode]);
 
   const filters = useMemo(
     () => [
@@ -716,29 +861,39 @@ export default function BeatsPage() {
     }
   }, []);
 
+  const clearAutoAdvanceTimer = useCallback(() => {
+    if (autoAdvanceTimerRef.current !== null) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+  }, []);
+
   const resetAudioElement = useCallback((audio) => {
+    if (audioCleanupRef.current) {
+      try {
+        audioCleanupRef.current();
+      } catch {}
+      audioCleanupRef.current = null;
+    }
     if (!audio) return;
-    audio.pause();
+    try {
+      audio.pause();
+    } catch {}
     try {
       audio.currentTime = 0;
-    } catch {
-      // Ignore
-    }
-    audio.removeAttribute("src");
-    audio.load();
+    } catch {}
+    try {
+      audio.removeAttribute("src");
+      audio.load();
+    } catch {}
   }, []);
 
   useEffect(() => {
     return () => {
       audioGenerationRef.current += 1;
       cancelProgressAnimation();
-
-      const audio = audioRef.current;
-      if (audio) {
-        audio.pause();
-        audio.removeAttribute("src");
-        audio.load();
-      }
+      clearAutoAdvanceTimer();
+      resetAudioElement(audioRef.current);
 
       audioRef.current = null;
       activeBeatRef.current = null;
@@ -746,7 +901,7 @@ export default function BeatsPage() {
       previewStartRef.current = 0;
       previewDurationRef.current = 0;
     };
-  }, [cancelProgressAnimation]);
+  }, [cancelProgressAnimation, clearAutoAdvanceTimer, resetAudioElement]);
 
   const updateProgress = useCallback(() => {
     const audio = audioRef.current;
@@ -769,7 +924,12 @@ export default function BeatsPage() {
     const elapsed = Math.max(0, audio.currentTime - previewStart);
     const nextProgress = Math.max(0, Math.min(elapsed / previewDuration, 1));
 
-    setProgress(nextProgress);
+    // Throttle React state updates to ~12fps (every 80ms) to avoid 60fps full-page re-renders
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (now - lastProgressCommitRef.current >= 80 || nextProgress >= 1) {
+      lastProgressCommitRef.current = now;
+      setProgress(nextProgress);
+    }
 
     if (elapsed >= previewDuration || audio.ended || nextProgress >= 1) {
       audio.pause();
@@ -777,28 +937,31 @@ export default function BeatsPage() {
       isPlayingRef.current = false;
       setIsPlaying(false);
       cancelProgressAnimation();
+      clearAutoAdvanceTimer();
 
-      // Repeat mode logic
       const mode = repeatModeRef.current;
-      if (mode === 'one') {
-        // Replay the same beat from preview start
-        setTimeout(() => {
+      if (mode === "one") {
+        autoAdvanceTimerRef.current = setTimeout(() => {
           if (audioRef.current === audio && activeBeatRef.current) {
-            audio.currentTime = previewStartRef.current;
+            try {
+              audio.currentTime = previewStartRef.current;
+            } catch {}
             setProgress(0);
-            audio.play().then(() => {
-              isPlayingRef.current = true;
-              setIsPlaying(true);
-            }).catch(() => {});
+            audio
+              .play()
+              .then(() => {
+                isPlayingRef.current = true;
+                setIsPlaying(true);
+              })
+              .catch(() => {});
           }
         }, 150);
-      } else if (mode === 'all' && handleNextReelRef.current) {
-        // Auto-advance to next beat
-        setTimeout(() => {
+      } else if (mode === "all" && handleNextReelRef.current) {
+        autoAdvanceTimerRef.current = setTimeout(() => {
           if (handleNextReelRef.current) {
             handleNextReelRef.current();
           }
-        }, 300);
+        }, 250);
       }
       return;
     }
@@ -806,7 +969,7 @@ export default function BeatsPage() {
     if (updateProgressRef.current) {
       animationFrameRef.current = requestAnimationFrame(updateProgressRef.current);
     }
-  }, [cancelProgressAnimation]);
+  }, [cancelProgressAnimation, clearAutoAdvanceTimer]);
 
   useEffect(() => {
     updateProgressRef.current = updateProgress;
@@ -841,16 +1004,6 @@ export default function BeatsPage() {
 
     setProgress(0);
 
-    if (Math.abs(audio.currentTime - previewStart) > 0.05) {
-      await new Promise((resolve) => {
-        const handleSeeked = () => {
-          audio.removeEventListener("seeked", handleSeeked);
-          resolve();
-        };
-        audio.addEventListener("seeked", handleSeeked, { once: true });
-      });
-    }
-
     try {
       await audio.play();
       if (audioRef.current !== audio || !activeBeatRef.current) return false;
@@ -871,6 +1024,9 @@ export default function BeatsPage() {
 
   const handlePlay = useCallback(
     async (beat) => {
+      if (!beat?.audio) return;
+      clearAutoAdvanceTimer();
+
       const currentAudio = audioRef.current;
       const currentBeat = activeBeatRef.current;
       const currentlyPlaying = isPlayingRef.current;
@@ -884,7 +1040,7 @@ export default function BeatsPage() {
         return;
       }
 
-      /* Replay active */
+      /* Resume or Replay active */
       if (currentBeat?.id === beat.id && currentAudio && !currentlyPlaying) {
         if (
           currentAudio.ended ||
@@ -910,7 +1066,7 @@ export default function BeatsPage() {
         return;
       }
 
-      /* Play new */
+      /* Play new beat */
       audioGenerationRef.current += 1;
       const generation = audioGenerationRef.current;
       cancelProgressAnimation();
@@ -936,20 +1092,24 @@ export default function BeatsPage() {
       audio.src = beat.audio;
 
       if ("mediaSession" in navigator) {
-        const artSrc = beat.image
-          ? window.location.origin + beat.image
-          : window.location.origin + "/og-image.png";
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: beat.title,
-          artist: "chomkaMUSIC\u2122 Studio",
-          album: "chomkaMUSIC\u2122 Studio Beats",
-          artwork: [{ src: artSrc, sizes: "512x512", type: "image/jpeg" }],
-        });
+        try {
+          const artSrc = beat.image
+            ? window.location.origin + beat.image
+            : window.location.origin + "/og-image.png";
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: beat.title,
+            artist: "chomkaMUSIC\u2122 Studio",
+            album: "chomkaMUSIC\u2122 Studio Beats",
+            artwork: [{ src: artSrc, sizes: "512x512", type: "image/jpeg" }],
+          });
+        } catch {}
       }
 
       const isCurrentAudio = () =>
         audioRef.current === audio &&
         audioGenerationRef.current === generation;
+
+      let activeSeekHandler = null;
 
       const handleAudioError = () => {
         if (!isCurrentAudio()) return;
@@ -981,12 +1141,16 @@ export default function BeatsPage() {
           return;
         }
 
-        const previewDuration = Math.min(PREVIEW_LENGTH, duration);
-        const maxStart = Math.max(0, duration - previewDuration);
+        const isFullMode = playbackModeRef.current === "full";
+        const previewDuration = isFullMode
+          ? duration
+          : Math.min(PREVIEW_LENGTH, duration);
+        const maxStart = isFullMode ? 0 : Math.max(0, duration - previewDuration);
         const previewStart = maxStart > 0 ? Math.random() * maxStart : 0;
 
         previewStartRef.current = previewStart;
         previewDurationRef.current = previewDuration;
+        setActivePreviewDuration(previewDuration);
 
         const playPreview = async () => {
           if (!isCurrentAudio()) return;
@@ -1007,10 +1171,17 @@ export default function BeatsPage() {
           }
         };
 
+        if (previewStart <= 0.05) {
+          await playPreview();
+          return;
+        }
+
         const handleSeeked = () => {
           audio.removeEventListener("seeked", handleSeeked);
+          activeSeekHandler = null;
           playPreview();
         };
+        activeSeekHandler = handleSeeked;
 
         audio.addEventListener("seeked", handleSeeked, { once: true });
 
@@ -1018,7 +1189,18 @@ export default function BeatsPage() {
           audio.currentTime = previewStart;
         } catch {
           audio.removeEventListener("seeked", handleSeeked);
+          activeSeekHandler = null;
           await playPreview();
+        }
+      };
+
+      audioCleanupRef.current = () => {
+        audio.removeEventListener("loadedmetadata", startPreview);
+        audio.removeEventListener("error", handleAudioError);
+        audio.removeEventListener("ended", handleEnded);
+        if (activeSeekHandler) {
+          audio.removeEventListener("seeked", activeSeekHandler);
+          activeSeekHandler = null;
         }
       };
 
@@ -1027,7 +1209,12 @@ export default function BeatsPage() {
       audio.addEventListener("ended", handleEnded);
       audio.load();
     },
-    [cancelProgressAnimation, replayCurrentBeat, resetAudioElement]
+    [
+      cancelProgressAnimation,
+      clearAutoAdvanceTimer,
+      replayCurrentBeat,
+      resetAudioElement,
+    ]
   );
 
   const handleFilterChange = useCallback((filter) => {
@@ -1063,7 +1250,8 @@ export default function BeatsPage() {
 
   const handlePrevReel = useCallback(() => {
     if (filteredBeats.length === 0) return;
-    const prevIdx = (reelIndex - 1 + filteredBeats.length) % filteredBeats.length;
+    const prevIdx =
+      (reelIndex - 1 + filteredBeats.length) % filteredBeats.length;
     setReelIndex(prevIdx);
     const prevBeat = filteredBeats[prevIdx];
     if (prevBeat) {
@@ -1071,13 +1259,6 @@ export default function BeatsPage() {
     }
   }, [filteredBeats, reelIndex, handlePlay]);
 
-  const handleReplayReel = useCallback(async () => {
-    if (audioRef.current) {
-      await replayCurrentBeat(audioRef.current);
-    }
-  }, [replayCurrentBeat]);
-
-  // Sync ref for auto-advance from updateProgress
   useEffect(() => {
     handleNextReelRef.current = handleNextReel;
   }, [handleNextReel]);
@@ -1089,29 +1270,31 @@ export default function BeatsPage() {
     const previewStart = previewStartRef.current;
     const previewDuration = previewDurationRef.current;
     const previewEnd = previewStart + previewDuration;
-    const newTime = Math.max(previewStart, Math.min(audio.currentTime + seconds, previewEnd - 0.1));
+    const newTime = Math.max(
+      previewStart,
+      Math.min(audio.currentTime + seconds, previewEnd - 0.1)
+    );
     try {
       audio.currentTime = newTime;
       const elapsed = newTime - previewStart;
       setProgress(Math.max(0, Math.min(elapsed / previewDuration, 1)));
-    } catch {
-      // ignore seek errors
-    }
+    } catch {}
   }, []);
 
   // Cycle repeat mode: all → one → none → all
   const handleCycleRepeat = useCallback(() => {
     setRepeatMode((prev) => {
-      if (prev === 'all') return 'one';
-      if (prev === 'one') return 'none';
-      return 'all';
+      if (prev === "all") return "one";
+      if (prev === "one") return "none";
+      return "all";
     });
   }, []);
 
   useEffect(() => {
     if (!isReelMode) return undefined;
     const handleKeyDown = (e) => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
+        return;
       if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         e.preventDefault();
         handleNextReel();
@@ -1129,7 +1312,28 @@ export default function BeatsPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isReelMode, handleNextReel, handlePrevReel, filteredBeats, reelIndex, handlePlay]);
+  }, [
+    isReelMode,
+    handleNextReel,
+    handlePrevReel,
+    filteredBeats,
+    reelIndex,
+    handlePlay,
+  ]);
+
+  const enterReelOrGrid = (targetReel) => {
+    setIsReelMode(targetReel);
+    if (targetReel && filteredBeats.length > 0) {
+      const idx = activeBeat
+        ? filteredBeats.findIndex((b) => b.id === activeBeat.id)
+        : 0;
+      const targetIdx = idx !== -1 ? idx : 0;
+      setReelIndex(targetIdx);
+      if (!isPlaying && filteredBeats[targetIdx]) {
+        handlePlay(filteredBeats[targetIdx]);
+      }
+    }
+  };
 
   return (
     <main className="beats-page">
@@ -1141,10 +1345,14 @@ export default function BeatsPage() {
         icon="/beats-image.png"
         imageAlt="chomkaMUSIC™ Studio Beats by silachomka"
       />
+
       {/* =================================================
           HERO (CONSTRAINED & ATMOSPHERIC)
           ================================================= */}
-      <section className="beats-hero" aria-label="chomkaMUSIC™ Studio Beats Hero">
+      <section
+        className="beats-hero"
+        aria-label="chomkaMUSIC™ Studio Beats Hero"
+      >
         <BeatHeroSlideshow beats={beats} />
 
         <div className="hero-slideshow-overlay" aria-hidden="true" />
@@ -1158,83 +1366,121 @@ export default function BeatsPage() {
             Listen, license on Selar, and craft your next release.
           </p>
 
-          <a 
-            href="https://www.instagram.com/chomkamusicstudio/?__pwa=1" 
-            target="_blank" 
+          <a
+            href="https://www.instagram.com/chomkamusicstudio/?__pwa=1"
+            target="_blank"
             rel="noopener noreferrer"
             className="beats-studio-ig-badge"
           >
-            <CameraIcon size={14} /> @chomkamusicstudio on Instagram <UpRightArrowIcon size={14} />
+            <CameraIcon size={14} /> @chomkamusicstudio on Instagram{" "}
+            <UpRightArrowIcon size={14} />
           </a>
         </div>
       </section>
 
       {/* =================================================
-          CATALOG TOOLBAR
+          REDESIGNED STUDIO CATALOGUE HEADER (Req #13 & #14)
+          Hierarchy: Primary | View & Playback Mode | Genre Filters | Commerce Currency
           ================================================= */}
-      <section className="beats-toolbar" aria-label="Beat catalog filters">
-        <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-          <div>
-            <span className="toolbar-label">Catalog</span>
-            <span className="toolbar-count">
-              {filteredBeats.length} {filteredBeats.length === 1 ? "Beat" : "Beats"}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            className="reel-mode-toggle-btn"
-            onClick={() => {
-              const nextMode = !isReelMode;
-              setIsReelMode(nextMode);
-              if (nextMode && filteredBeats.length > 0) {
-                const idx = activeBeat ? filteredBeats.findIndex((b) => b.id === activeBeat.id) : 0;
-                const targetIdx = idx !== -1 ? idx : 0;
-                setReelIndex(targetIdx);
-                if (!isPlaying && filteredBeats[targetIdx]) {
-                  handlePlay(filteredBeats[targetIdx]);
-                }
-              }
-            }}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "6px 14px",
-              fontSize: "12px",
-              fontWeight: 700,
-              borderRadius: "20px",
-              background: isReelMode ? "var(--gold)" : "rgba(223, 194, 125, 0.12)",
-              color: isReelMode ? "#000" : "var(--gold)",
-              border: "1px solid var(--gold)",
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-            aria-pressed={isReelMode}
-          >
-            {isReelMode ? <><GridIcon size={14} /> Grid View</> : <><ReelIcon size={14} /> Reels Mode</>}
-          </button>
+      <section className="beats-toolbar" aria-label="Beat catalog controls">
+        {/* 1. Primary: Catalogue Count */}
+        <div className="beats-toolbar-primary">
+          <span className="toolbar-label">CATALOG</span>
+          <span className="toolbar-count">
+            {filteredBeats.length}{" "}
+            {filteredBeats.length === 1 ? "BEAT" : "BEATS"}
+          </span>
         </div>
 
-        <div className="filter-toolbar beats-filter-toolbar" role="group" aria-label="Filter beats by genre">
+        {/* 2. View & Playback Mode Toggles */}
+        <div className="beats-toolbar-modes">
+          {/* Grid / Reel View Segmented Control */}
+          <div
+            className="beats-segmented-group"
+            role="group"
+            aria-label="Catalog view mode"
+          >
+            <button
+              type="button"
+              className={`beats-segment-btn ${!isReelMode ? "is-active" : ""}`}
+              onClick={() => enterReelOrGrid(false)}
+              aria-pressed={!isReelMode}
+            >
+              <GridIcon size={13} />
+              <span>GRID</span>
+            </button>
+            <button
+              type="button"
+              className={`beats-segment-btn reel-mode-toggle-btn ${
+                isReelMode ? "is-active" : ""
+              }`}
+              onClick={() => enterReelOrGrid(true)}
+              aria-pressed={isReelMode}
+            >
+              <ReelIcon size={13} />
+              <span>REEL</span>
+            </button>
+          </div>
+
+          {/* 1-Minute / Full Track Playback Mode Segmented Control */}
+          <div
+            className="beats-segmented-group"
+            role="group"
+            aria-label="Audio playback length"
+          >
+            <button
+              type="button"
+              className={`beats-segment-btn ${
+                playbackMode === "1min" ? "is-active" : ""
+              }`}
+              onClick={() => setPlaybackMode("1min")}
+              aria-pressed={playbackMode === "1min"}
+              title="Play 1-minute random preview"
+            >
+              <span>1 MIN</span>
+            </button>
+            <button
+              type="button"
+              className={`beats-segment-btn ${
+                playbackMode === "full" ? "is-active" : ""
+              }`}
+              onClick={() => setPlaybackMode("full")}
+              aria-pressed={playbackMode === "full"}
+              title="Play full beat track"
+            >
+              <span>FULL TRACK</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 3. Genre Filters + 4. Commerce Currency Selector */}
+        <div
+          className="filter-toolbar beats-filter-toolbar"
+          role="group"
+          aria-label="Filter beats by genre"
+        >
           <div className="filter-hamburger">
             <button
+              type="button"
               className="filter-toggle-btn"
               onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
               aria-expanded={isFilterMenuOpen}
             >
-              {filters.find(f => f.id === activeFilter)?.label} 
-              <span className="filter-icon"><DownCaretIcon /></span>
+              {filters.find((f) => f.id === activeFilter)?.label}
+              <span className="filter-icon">
+                <DownCaretIcon />
+              </span>
             </button>
-            
+
             {isFilterMenuOpen && (
               <div className="filter-dropdown">
                 {filters.map((filter) => (
                   <button
                     key={filter.id}
-                    className={`filter-dropdown-item ${activeFilter === filter.id ? "is-active" : ""}`}
+                    type="button"
+                    className={`filter-dropdown-item ${
+                      activeFilter === filter.id ? "is-active" : ""
+                    }`}
                     onClick={() => {
                       handleFilterChange(filter.id);
                       setIsFilterMenuOpen(false);
@@ -1266,24 +1512,19 @@ export default function BeatsPage() {
           </div>
 
           {/* Authoritative Selar Currency Switcher */}
-          <div style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "8px" }}>
-            <label htmlFor="beats-currency-select" style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
-              Currency:
+          <div className="beats-toolbar-currency">
+            <label
+              htmlFor="beats-currency-select"
+              className="beats-currency-label"
+            >
+              CURRENCY
             </label>
             <select
               id="beats-currency-select"
+              className="beats-currency-select"
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
               aria-label="Select currency for beat licensing"
-              style={{
-                padding: "4px 8px",
-                fontSize: "12px",
-                background: "rgba(0,0,0,0.6)",
-                border: "1px solid var(--border)",
-                borderRadius: "4px",
-                color: "var(--gold)",
-                cursor: "pointer",
-              }}
             >
               {supportedCurrencies.map((c) => (
                 <option key={c.code} value={c.code}>
@@ -1304,17 +1545,20 @@ export default function BeatsPage() {
           currentIndex={reelIndex}
           onNext={handleNextReel}
           onPrev={handlePrevReel}
-          onReplay={handleReplayReel}
           isShuffle={isShuffle}
           onToggleShuffle={() => setIsShuffle((prev) => !prev)}
           isPlaying={isPlaying}
           isLoading={loadingBeatId === filteredBeats[reelIndex]?.id}
           progress={progress}
+          previewDuration={activePreviewDuration}
+          playbackMode={playbackMode}
+          onChangePlaybackMode={setPlaybackMode}
           onPlay={handlePlay}
           onExitReel={() => setIsReelMode(false)}
           onSkip={handleSkip}
           repeatMode={repeatMode}
           onCycleRepeat={handleCycleRepeat}
+          getBeatStartingPrice={getBeatStartingPrice}
         />
       ) : (
         <section className="beats-grid" aria-label="Beat catalog">
@@ -1346,8 +1590,7 @@ export default function BeatsPage() {
           ================================================= */}
       {audioError && (
         <div className="beat-audio-error" role="status">
-          Unable to play this beat. Verify that the MP3 asset exists in{" "}
-          <strong>public/beats</strong>.
+          Unable to play this beat preview right now. Please try again.
         </div>
       )}
 
@@ -1359,7 +1602,9 @@ export default function BeatsPage() {
           <p className="eyebrow">Private licensing</p>
           <h2>Want exclusive rights?</h2>
           <p>
-            Exclusive rights buyout and customized master licensing are negotiated privately. Select any beat to submit a direct acquisition offer to chomkaMUSIC™ Studio.
+            Exclusive rights buyout and customized master licensing are
+            negotiated privately. Select any beat to submit a direct acquisition
+            offer to chomkaMUSIC™ Studio.
           </p>
 
           <button

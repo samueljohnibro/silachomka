@@ -82,6 +82,11 @@ CREATE TABLE media_assets (
     duration_seconds FLOAT,  -- For audio/videos
     alt_text VARCHAR(255),
     blurhash VARCHAR(100),
+    asset_role VARCHAR(50) DEFAULT 'OPTIMIZED_WEB', -- 'ORIGINAL_SOURCE' | 'OPTIMIZED_WEB' | 'PREVIEW_ASSET'
+    source_asset_id UUID REFERENCES media_assets(id) ON DELETE SET NULL,
+    original_size_bytes BIGINT,
+    original_mime_type VARCHAR(100),
+    optimization_status VARCHAR(50) DEFAULT 'OPTIMIZED',
     uploaded_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -118,6 +123,7 @@ CREATE TABLE tracks (
     release_id UUID NOT NULL REFERENCES releases(id) ON DELETE CASCADE,
     track_number INT NOT NULL,
     title VARCHAR(255) NOT NULL,
+    preview_asset_id UUID REFERENCES media_assets(id) ON DELETE SET NULL,
     platforms JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -205,6 +211,8 @@ CREATE TABLE gallery_posts (
     related_track_id UUID REFERENCES tracks(id) ON DELETE SET NULL,
     related_beat_id UUID REFERENCES beats(id) ON DELETE SET NULL,
     legacy_link VARCHAR(512), -- Retained for unsupported legacy links
+    external_social_url TEXT,
+    external_social_platform VARCHAR(50),
     tags JSONB,
     post_date DATE NOT NULL,
     display_date VARCHAR(100),

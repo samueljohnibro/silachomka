@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import { refreshCatalogue } from "../../data/store";
+import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
 import PlatformLinksEditor from "../../components/admin/PlatformLinksEditor";
 import MediaAssetPicker from "../../components/admin/MediaAssetPicker";
 import AdminSortControl from "../../components/admin/AdminSortControl";
@@ -49,6 +51,19 @@ const AdminTracksPage = () => {
   const [isAddingCredit, setIsAddingCredit] = useState(false);
   const [creditError, setCreditError] = useState(null);
 
+  const {
+    hasRestorableDraft,
+    lastSavedAt,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+  } = useDraftAutosave({
+    entityKey: currentTrack?.id ? `track_${currentTrack.id}` : "track_new",
+    formData: currentTrack,
+    setFormData: setCurrentTrack,
+    enabled: view === "CREATE" || view === "EDIT",
+  });
+
   const fetchData = async () => {
     setIsLoading(true);
     setError(null);
@@ -77,6 +92,7 @@ const AdminTracksPage = () => {
       release_id: releases[0]?.id || "",
       track_number: 1,
       title: "",
+      preview_asset_id: null,
       platforms: {},
     });
     setIsCreatingNewRelease(false);
@@ -96,6 +112,7 @@ const AdminTracksPage = () => {
   const handleEditClick = (track) => {
     setCurrentTrack({
       ...track,
+      preview_asset_id: track.preview_asset_id || null,
       platforms: track.platforms && typeof track.platforms === "object" ? track.platforms : {},
     });
     setIsCreatingNewRelease(false);
@@ -182,6 +199,7 @@ const AdminTracksPage = () => {
         ...currentTrack,
         release_id: targetReleaseId,
         track_number: parseInt(currentTrack.track_number, 10),
+        preview_asset_id: currentTrack.preview_asset_id || null,
         platforms: currentTrack.platforms && typeof currentTrack.platforms === "object" && Object.keys(currentTrack.platforms).length > 0 ? currentTrack.platforms : null
       };
 
@@ -191,7 +209,9 @@ const AdminTracksPage = () => {
         await adminApi.updateTrack(payload.id, payload);
       }
 
+      clearDraft();
       await fetchData();
+      refreshCatalogue();
       setView("LIST");
       setCurrentTrack(null);
       setIsCreatingNewRelease(false);
@@ -209,6 +229,7 @@ const AdminTracksPage = () => {
     try {
       await adminApi.deleteTrack(id);
       await fetchData();
+      refreshCatalogue();
       setDeleteConfirmId(null);
     } catch (err) {
       setError(err.message || "Failed to delete track.");
@@ -301,6 +322,13 @@ const AdminTracksPage = () => {
         </div>
 
         {error && <div className="admin-login-error">{error}</div>}
+
+        <DraftAutosaveBanner
+          hasRestorableDraft={hasRestorableDraft}
+          lastSavedAt={lastSavedAt}
+          onRestore={restoreDraft}
+          onDiscard={discardDraft}
+        />
 
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>Track Details</h3>
@@ -459,6 +487,21 @@ const AdminTracksPage = () => {
               />
             </div>
           )}
+
+          {/* TRACK PREVIEW AUDIO */}
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px", marginTop: "8px" }}>
+            <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>
+              Track Preview Audio (Optional Pre-Release Snippet)
+            </h3>
+            <MediaAssetPicker
+              label="Track Preview Audio (MP3)"
+              assetType="AUDIO"
+              value={currentTrack.preview_asset_id}
+              onChange={(id) => setCurrentTrack(prev => ({ ...prev, preview_asset_id: id }))}
+              disabled={isSaving}
+              hint="Plays a random 30s snippet on upcoming release pages without revealing the track title publicly."
+            />
+          </div>
 
           {/* TRACK STREAMING LINKS */}
           <h3 style={{ fontSize: 14, color: "var(--gold)", marginTop: "16px", marginBottom: "8px" }}>

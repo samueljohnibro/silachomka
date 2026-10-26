@@ -3,9 +3,9 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import beats from "../src/data/beats.js";
-import gallery from "../src/data/gallery.js";
-import releases from "../src/data/releases.js";
+import staticBeats from "../src/data/beats.js";
+import staticGallery from "../src/data/gallery.js";
+import staticReleases from "../src/data/releases.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,13 +15,12 @@ const outputDirectory = path.join(rootDirectory, "dist");
 const SOCIAL_METADATA_PATTERN =
   /<!-- SOCIAL_METADATA:START -->[\s\S]*?<!-- SOCIAL_METADATA:END -->/;
 const DEFAULT_SITE_URL = "https://silachomka.vercel.app";
+const WORKER_API_ORIGIN = "https://silachomka-api.samueljohnibrotech.workers.dev";
 const DEFAULT_SOCIAL_IMAGE = "/og-image.png";
 const MAX_DESCRIPTION_LENGTH = 280;
 
 function getSiteUrl() {
-  // Hardcoded to the vercel.app domain because the custom .com domain is currently 
-  // offline/failing DNS resolution, which breaks image downloads for WhatsApp link previews.
-  return "https://silachomka.vercel.app";
+  return DEFAULT_SITE_URL;
 }
 
 const siteUrl = getSiteUrl();
@@ -58,8 +57,10 @@ function normalizeDescription(value, fallback) {
 }
 
 function toAbsoluteUrl(value) {
+  if (!value) return new URL("/", `${siteUrl}/`).toString();
+  if (/^https?:\/\//i.test(value)) return value;
   try {
-    return new URL(value || "/", `${siteUrl}/`).toString();
+    return new URL(value.startsWith("/") ? value : `/${value}`, `${siteUrl}/`).toString();
   } catch {
     return new URL("/", `${siteUrl}/`).toString();
   }
@@ -73,10 +74,11 @@ function toRoutePath(...segments) {
 }
 
 function isRasterImage(value) {
-  return (
-    typeof value === "string" &&
-    /\.(?:avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(value.trim())
-  );
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/\/api\/media\/asset\/[a-zA-Z0-9-]+/i.test(trimmed)) return true;
+  return /\.(?:avif|gif|jpe?g|png|webp)(?:[?#].*)?$/i.test(trimmed);
 }
 
 function imageMimeType(imageUrl) {
@@ -112,6 +114,8 @@ function renderSocialMetadata({
   canonicalPath,
   image,
   imageAlt,
+  type = "website",
+  audio = null,
 }) {
   const canonicalUrl = toAbsoluteUrl(canonicalPath);
   const imageUrl = toAbsoluteUrl(image || DEFAULT_SOCIAL_IMAGE);
@@ -121,8 +125,12 @@ function renderSocialMetadata({
   const escapedCanonicalUrl = escapeHtml(canonicalUrl);
   const escapedImageUrl = escapeHtml(imageUrl);
   const escapedImageAlt = escapeHtml(imageAlt || title);
+  const escapedType = escapeHtml(type || "website");
   const imageTypeTag = mimeType
     ? `\n    <meta property="og:image:type" content="${escapeHtml(mimeType)}" />`
+    : "";
+  const audioTags = audio
+    ? `\n    <meta property="og:audio" content="${escapeHtml(toAbsoluteUrl(audio))}" />\n    <meta property="og:audio:type" content="audio/mpeg" />`
     : "";
 
   return `<!-- SOCIAL_METADATA:START -->
@@ -132,14 +140,14 @@ function renderSocialMetadata({
     <meta name="author" content="silachomka" />
     <meta name="keywords" content="silachomka, chomkaMUSIC, Chomka Nation, music, beats, visual archive" />
 
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content="${escapedType}" />
     <meta property="og:url" content="${escapedCanonicalUrl}" />
     <meta property="og:site_name" content="silachomka" />
     <meta property="og:title" content="${escapedTitle}" />
     <meta property="og:description" content="${escapedDescription}" />
     <meta property="og:image" content="${escapedImageUrl}" />
     <meta property="og:image:secure_url" content="${escapedImageUrl}" />${imageTypeTag}
-    <meta property="og:image:alt" content="${escapedImageAlt}" />
+    <meta property="og:image:alt" content="${escapedImageAlt}" />${audioTags}
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@silachomka" />
@@ -192,7 +200,8 @@ function createBeatHubMetadata() {
 }
 
 function createBeatMetadata(beat) {
-  const canonicalPath = toRoutePath("beats", beat.id);
+  const beatKey = beat.id || beat.slug;
+  const canonicalPath = toRoutePath("beats", beatKey);
   const title = `${beat.title} | chomkaMUSIC™ Studio Beats | silachomka`;
   const genre = beat.genre ? ` ${beat.genre}` : "";
 
@@ -203,6 +212,8 @@ function createBeatMetadata(beat) {
       `${beat.title} is an original${genre} instrumental by silachomka, available to listen to and license through chomkaMUSIC™ Studio.`
     ),
     canonicalPath,
+    type: "music.song",
+    audio: beat.audio || null,
     image: resolveSocialImage(
       [
         beat.ogImage,
@@ -211,7 +222,8 @@ function createBeatMetadata(beat) {
         beat.thumbnail,
         beat.poster,
         beat.videoPoster,
-        beat.video ? beat.video.replace('.mp4', '.jpg') : null,
+        beat.video ? beat.video.replace(".mp4", ".jpg") : null,
+        "/beats-image.png",
       ],
       canonicalPath
     ),
@@ -220,37 +232,77 @@ function createBeatMetadata(beat) {
 }
 
 function createGalleryMetadata(post) {
-  const canonicalPath = toRoutePath("gallery", post.id);
-  const title = `${post.title} | silachomka Visual Archive`;
-  const slideImages = Array.isArray(post.slides) ? post.slides : [];
-  const generatedVideoPoster = post.src && post.src.endsWith('.mp4') ? post.src.replace('.mp4', '.jpg') : null;
+  const postKey = post.id || post.slug;
+  const canonicalPath = toRoutePath("gallery", postKey);
+  const displayTitle = (post.title && post.title.trim()) || post.category || "Visual Archive";
+  const title = `${displayTitle} | silachomka Visual Archive`;
+  const slideImages = Array.isArray(post.slides)
+    ? post.slides.map((s) => (typeof s === "string" ? s : s?.src || s?.asset))
+    : [];
+  const generatedVideoPoster =
+    post.src && post.src.endsWith(".mp4") ? post.src.replace(".mp4", ".jpg") : null;
 
   return {
     title,
     description: normalizeDescription(
       post.description || post.caption,
-      `${post.title} — a visual archive post by silachomka.`
+      `${displayTitle} — a visual archive post by silachomka.`
     ),
     canonicalPath,
     image: resolveSocialImage(
-      [post.ogImage, post.image, post.src, generatedVideoPoster, ...slideImages, post.videoSrc],
+      [
+        post.ogImage,
+        post.image,
+        post.src,
+        post.asset,
+        generatedVideoPoster,
+        ...slideImages,
+        post.videoSrc,
+      ],
       canonicalPath
     ),
-    imageAlt: `${post.title} — silachomka visual archive`,
+    imageAlt: `${displayTitle} — silachomka visual archive`,
   };
 }
 
 function createReleaseMetadata(release) {
   const canonicalPath = toRoutePath("release", release.slug);
   const title = `${release.title} | silachomka`;
+  const relDate = release.date ? new Date(release.date) : null;
+  const isFuture =
+    release.isUpcoming === true ||
+    release.status === "SCHEDULED" ||
+    (relDate && !isNaN(relDate.getTime()) && relDate.getTime() > Date.now());
+
+  let formattedDate = release.displayDate;
+  if (!formattedDate && relDate && !isNaN(relDate.getTime())) {
+    formattedDate = relDate.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  }
+
+  const statusLead = isFuture
+    ? `${release.title} — Coming soon${formattedDate ? ` on ${formattedDate}` : ""}.`
+    : `${release.title} — Out now.`;
+
+  const customDesc = String(release.description || "").trim();
+  const hasStatusWord =
+    customDesc.toLowerCase().includes("coming soon") ||
+    customDesc.toLowerCase().includes("out now");
+  const fullDesc = customDesc
+    ? hasStatusWord
+      ? customDesc
+      : `${statusLead} ${customDesc}`
+    : statusLead;
 
   return {
     title,
-    description: normalizeDescription(
-      release.description,
-      `${release.title} is an official studio release by silachomka published under chomkaMUSIC™.`
-    ),
+    description: normalizeDescription(fullDesc, statusLead),
     canonicalPath,
+    type: "music.album",
     image: resolveSocialImage(
       [release.ogImage, release.image, release.cover],
       canonicalPath
@@ -259,15 +311,44 @@ function createReleaseMetadata(release) {
   };
 }
 
-function validEntries(entries, key) {
+function validEntries(entries, key, requireTitle = true) {
   return entries.filter(
     (entry) =>
       entry &&
       typeof entry[key] === "string" &&
       entry[key].trim().length > 0 &&
-      typeof entry.title === "string" &&
-      entry.title.trim().length > 0
+      (!requireTitle ||
+        (typeof entry.title === "string" && entry.title.trim().length > 0))
   );
+}
+
+function mergeByKey(staticList, liveList, key) {
+  const map = new Map();
+  for (const item of Array.isArray(staticList) ? staticList : []) {
+    if (item && item[key]) map.set(String(item[key]).trim(), item);
+  }
+  for (const item of Array.isArray(liveList) ? liveList : []) {
+    const k = item?.[key] || item?.slug || item?.id;
+    if (k) {
+      const normalizedKey = String(k).trim();
+      const existing = map.get(normalizedKey) || {};
+      map.set(normalizedKey, { ...existing, ...item, [key]: normalizedKey });
+    }
+  }
+  return Array.from(map.values());
+}
+
+async function fetchLiveEndpoint(pathname) {
+  try {
+    const res = await fetch(`${WORKER_API_ORIGIN}${pathname}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
 }
 
 async function generateSocialPages() {
@@ -277,17 +358,31 @@ async function generateSocialPages() {
 
   await writeFile(baseHtmlPath, homeHtml, "utf8");
   await writePage(["beats"], withSocialMetadata(homeHtml, createBeatHubMetadata()));
-  await writePage(["studio"], withSocialMetadata(homeHtml, {
-    title: "chomkaMUSIC™ Studio Publishing",
-    description: "Official publishing catalog and sync licensing for silachomka. Explore rights, master ownership, and sync opportunities.",
-    canonicalPath: "/studio",
-    image: DEFAULT_SOCIAL_IMAGE,
-    imageAlt: "chomkaMUSIC™ Studio Publishing",
-  }));
+  await writePage(
+    ["studio"],
+    withSocialMetadata(homeHtml, {
+      title: "chomkaMUSIC™ Studio Publishing",
+      description:
+        "Official publishing catalog and sync licensing for silachomka. Explore rights, master ownership, and sync opportunities.",
+      canonicalPath: "/studio",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "chomkaMUSIC™ Studio Publishing",
+    })
+  );
 
-  const canonicalBeats = validEntries(beats, "id");
-  const canonicalGallery = validEntries(gallery, "id");
-  const canonicalReleases = validEntries(releases, "slug");
+  const [liveBeats, liveGallery, liveReleases] = await Promise.all([
+    fetchLiveEndpoint("/api/beats"),
+    fetchLiveEndpoint("/api/gallery"),
+    fetchLiveEndpoint("/api/releases"),
+  ]);
+
+  const mergedBeats = mergeByKey(staticBeats, liveBeats, "id");
+  const mergedGallery = mergeByKey(staticGallery, liveGallery, "id");
+  const mergedReleases = mergeByKey(staticReleases, liveReleases, "slug");
+
+  const canonicalBeats = validEntries(mergedBeats, "id", true);
+  const canonicalGallery = validEntries(mergedGallery, "id", false);
+  const canonicalReleases = validEntries(mergedReleases, "slug", true);
 
   await Promise.all([
     ...canonicalBeats.map((beat) =>

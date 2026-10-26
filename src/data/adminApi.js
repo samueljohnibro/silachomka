@@ -1,3 +1,5 @@
+import { optimizeMediaBeforeUpload } from '../utils/mediaOptimizer';
+
 /**
  * Admin API wrapper
  * Uses relative `/api/admin/*` paths to leverage Vercel rewrites (or Vite proxy).
@@ -116,10 +118,18 @@ export const adminApi = {
     method: 'POST',
     body: JSON.stringify(data)
   }),
-  uploadMediaAsset: async (file, assetType = 'IMAGE') => {
+  uploadMediaAsset: async (file, assetType = 'IMAGE', options = {}) => {
+    const { file: optimizedFile, meta } = await optimizeMediaBeforeUpload(file, assetType, options);
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', optimizedFile);
     formData.append('asset_type', assetType);
+    if (meta.asset_role) formData.append('asset_role', meta.asset_role);
+    if (meta.original_size_bytes) formData.append('original_size_bytes', String(meta.original_size_bytes));
+    if (meta.original_mime_type) formData.append('original_mime_type', meta.original_mime_type);
+    if (meta.width) formData.append('width', String(meta.width));
+    if (meta.height) formData.append('height', String(meta.height));
+    if (meta.duration_seconds) formData.append('duration_seconds', String(meta.duration_seconds));
+    if (meta.optimization_status) formData.append('optimization_status', meta.optimization_status);
     const response = await fetch('/api/admin/media-assets/upload', {
       method: 'POST',
       body: formData,

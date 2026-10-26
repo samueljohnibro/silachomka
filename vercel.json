@@ -5,20 +5,41 @@
       "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/$1"
     },
     {
-      "source": "/beats",
-      "destination": "/beats/index.html"
-    },
-    {
       "source": "/beats/:id",
-      "destination": "/beats/:id/index.html"
-    },
-    {
-      "source": "/gallery/:id",
-      "destination": "/gallery/:id/index.html"
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Twitterbot|WhatsApp|Slackbot|Discordbot|TelegramBot|LinkedInBot|Applebot|Iframely|MetaInspector|SkypeUriPreview|redditbot|vkShare).*"
+        }
+      ],
+      "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/share/beat/:id"
     },
     {
       "source": "/release/:slug",
-      "destination": "/release/:slug/index.html"
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Twitterbot|WhatsApp|Slackbot|Discordbot|TelegramBot|LinkedInBot|Applebot|Iframely|MetaInspector|SkypeUriPreview|redditbot|vkShare).*"
+        }
+      ],
+      "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/share/release/:slug"
+    },
+    {
+      "source": "/gallery/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Twitterbot|WhatsApp|Slackbot|Discordbot|TelegramBot|LinkedInBot|Applebot|Iframely|MetaInspector|SkypeUriPreview|redditbot|vkShare).*"
+        }
+      ],
+      "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/share/gallery/:id"
+    },
+    {
+      "source": "/beats",
+      "destination": "/beats/index.html"
     },
     {
       "source": "/studio",

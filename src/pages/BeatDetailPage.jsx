@@ -1,10 +1,27 @@
-import { PlayIcon, PauseIcon, LeftArrowIcon, RightArrowIcon , UpRightArrowIcon, LightningIcon} from '../components/Icons';
+import {
+  PlayIcon,
+  PauseIcon,
+  LeftArrowIcon,
+  RightArrowIcon,
+  UpRightArrowIcon,
+  LightningIcon,
+  ShuffleIcon,
+  RepeatIcon,
+  RepeatOneIcon,
+  PreviousTrackIcon,
+  NextTrackIcon,
+  SkipBackIcon,
+  SkipForwardIcon,
+  LoadingSpinner,
+  CrownIcon,
+} from "../components/Icons";
 // src/pages/BeatDetailPage.jsx
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
-import { useSelarPricing } from "../data/useSelarPricing";
+import { useCurrency } from "../data/CurrencyContext";
+import BeatArtwork from "../components/BeatArtwork";
 import SeoHead from "../components/SeoHead";
 import ShareLinkBox from "../components/ShareLinkBox";
 import {
@@ -13,26 +30,92 @@ import {
   getBeatSource,
 } from "../data/credits";
 
+const PREVIEW_LENGTH = 60;
+
 export default function BeatDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const licenseParam = searchParams.get("license");
-  const { beats } = useChomkaStore();
-  const { currency, setCurrency, supportedCurrencies, getBeatPrice } = useSelarPricing();
+  const { beats, isLoading: isStoreLoading } = useChomkaStore();
+  const {
+    currency,
+    setCurrency,
+    supportedCurrencies,
+    getBeatPrice,
+    playbackMode,
+    setPlaybackMode,
+  } = useCurrency();
 
-  /* Locate the authoritative beat */
-  const beat = useMemo(() => {
+  const [fetchedBeat, setFetchedBeat] = useState(null);
+  const [isFetchingBeat, setIsFetchingBeat] = useState(false);
+
+  /* Locate the authoritative beat from store or direct API fetch for newly created beats */
+  const storeBeat = useMemo(() => {
     if (!Array.isArray(beats)) return null;
     return beats.find((item) => item.id === id || item.slug === id) || null;
   }, [beats, id]);
 
-  /* Audio state */
+  useEffect(() => {
+    if (storeBeat) {
+      setFetchedBeat(null);
+      return;
+    }
+    if (!id) return;
+    let cancelled = false;
+    setIsFetchingBeat(true);
+    fetch(`/api/beats/${encodeURIComponent(id)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && data.id) {
+          setFetchedBeat({ ...data, showVisualTitle: true });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsFetchingBeat(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, storeBeat]);
+
+  const beat = storeBeat || fetchedBeat;
+
+  const currentBeatIndex = useMemo(() => {
+    if (!beat || !Array.isArray(beats) || beats.length === 0) return -1;
+    return beats.findIndex((b) => b.id === beat.id || b.slug === beat.id);
+  }, [beats, beat]);
+
+  /* Audio & Full Player Controls State (Req #13 & #16) */
   const audioRef = useRef(null);
+  const audioCleanupRef = useRef(null);
+  const previewStartRef = useRef(0);
+  const previewDurationRef = useRef(0);
+  const playbackModeRef = useRef(playbackMode);
+  const repeatModeRef = useRef("all");
+  const isShuffleRef = useRef(false);
+  const autoPlayOnSwitchRef = useRef(false);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState("0:00");
   const [durationTime, setDurationTime] = useState("0:00");
+  const [isShuffle, setIsShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState("all"); // 'all' | 'one' | 'none'
+
+  useEffect(() => {
+    playbackModeRef.current = playbackMode;
+  }, [playbackMode]);
+
+  useEffect(() => {
+    repeatModeRef.current = repeatMode;
+  }, [repeatMode]);
+
+  useEffect(() => {
+    isShuffleRef.current = isShuffle;
+  }, [isShuffle]);
 
   /* Licensing State — defaults to exclusive if requested in URL */
   const [selectedLicense, setSelectedLicense] = useState(
@@ -60,75 +143,272 @@ export default function BeatDetailPage() {
   const [offerError, setOfferError] = useState(null);
 
   /* Format seconds to M:SS */
-  const formatTime = (seconds) => {
+  const formatTime = useCallback((seconds) => {
     if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-  };
+  }, []);
+
+  const disposeAudio = useCallback(() => {
+    if (audioCleanupRef.current) {
+      try {
+        audioCleanupRef.current();
+      } catch {}
+      audioCleanupRef.current = null;
+    }
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute("src");
+        audioRef.current.load();
+      } catch {}
+      audioRef.current = null;
+    }
+    setIsPlaying(false);
+    setIsLoading(false);
+    setProgress(0);
+    setCurrentTime("0:00");
+    setDurationTime("0:00");
+  }, []);
 
   /* Cleanup audio on unmount */
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.removeAttribute("src");
-        audioRef.current.load();
-      }
+      disposeAudio();
     };
-  }, []);
+  }, [disposeAudio]);
+
+  /* Navigate to Previous or Next Beat */
+  const handleNextBeat = useCallback(() => {
+    if (!Array.isArray(beats) || beats.length === 0) return;
+    let nextIdx = 0;
+    if (isShuffleRef.current && beats.length > 1) {
+      do {
+        nextIdx = Math.floor(Math.random() * beats.length);
+      } while (nextIdx === currentBeatIndex);
+    } else if (currentBeatIndex >= 0) {
+      nextIdx = (currentBeatIndex + 1) % beats.length;
+    }
+    const nextTarget = beats[nextIdx];
+    if (nextTarget) {
+      autoPlayOnSwitchRef.current = true;
+      navigate(`/beats/${nextTarget.id}`);
+    }
+  }, [beats, currentBeatIndex, navigate]);
+
+  const handlePrevBeat = useCallback(() => {
+    if (!Array.isArray(beats) || beats.length === 0) return;
+    const prevIdx =
+      currentBeatIndex >= 0
+        ? (currentBeatIndex - 1 + beats.length) % beats.length
+        : 0;
+    const prevTarget = beats[prevIdx];
+    if (prevTarget) {
+      autoPlayOnSwitchRef.current = true;
+      navigate(`/beats/${prevTarget.id}`);
+    }
+  }, [beats, currentBeatIndex, navigate]);
+
+  const handleNextBeatRef = useRef(handleNextBeat);
+  useEffect(() => {
+    handleNextBeatRef.current = handleNextBeat;
+  }, [handleNextBeat]);
+
+  /* Synchronize window when playbackMode toggles between 1min and full */
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    if (playbackMode === "full") {
+      previewStartRef.current = 0;
+      previewDurationRef.current = audio.duration;
+      setDurationTime(formatTime(audio.duration));
+      setCurrentTime(formatTime(audio.currentTime));
+      setProgress(Math.max(0, Math.min(audio.currentTime / audio.duration, 1)));
+    } else {
+      const dur = Math.min(PREVIEW_LENGTH, audio.duration);
+      previewDurationRef.current = dur;
+      if (
+        audio.currentTime < previewStartRef.current ||
+        audio.currentTime >= previewStartRef.current + dur
+      ) {
+        previewStartRef.current = 0;
+      }
+      setDurationTime(formatTime(dur));
+      const elapsed = Math.max(0, audio.currentTime - previewStartRef.current);
+      setCurrentTime(formatTime(elapsed));
+      setProgress(Math.max(0, Math.min(elapsed / dur, 1)));
+    }
+  }, [playbackMode, formatTime]);
+
+  /* Initialize & Play Current Beat Audio */
+  const startBeatPlayback = useCallback(
+    (targetBeat) => {
+      if (!targetBeat?.audio) return;
+      disposeAudio();
+
+      const audio = new Audio(targetBeat.audio);
+      audio.preload = "metadata";
+      audioRef.current = audio;
+
+      if ("mediaSession" in navigator) {
+        try {
+          const artSrc = targetBeat.image
+            ? window.location.origin + targetBeat.image
+            : window.location.origin + "/og-image.png";
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: targetBeat.title,
+            artist: "chomkaMUSIC\u2122 Studio",
+            album: "chomkaMUSIC™ Studio Beats",
+            artwork: [{ src: artSrc, sizes: "512x512", type: "image/jpeg" }],
+          });
+        } catch {}
+      }
+
+      setIsLoading(true);
+
+      const onLoadedMetadata = () => {
+        if (audioRef.current !== audio) return;
+        const totalDur = audio.duration || 0;
+        const isFull = playbackModeRef.current === "full";
+        const winDur = isFull ? totalDur : Math.min(PREVIEW_LENGTH, totalDur);
+        const maxStart = isFull ? 0 : Math.max(0, totalDur - winDur);
+        const startOffset = maxStart > 0 ? Math.random() * maxStart : 0;
+
+        previewStartRef.current = startOffset;
+        previewDurationRef.current = winDur;
+        setDurationTime(formatTime(winDur));
+        setCurrentTime("0:00");
+
+        if (startOffset > 0.05) {
+          try {
+            audio.currentTime = startOffset;
+          } catch {}
+        }
+
+        audio
+          .play()
+          .then(() => {
+            if (audioRef.current !== audio) return;
+            setIsLoading(false);
+            setIsPlaying(true);
+          })
+          .catch(() => {
+            if (audioRef.current !== audio) return;
+            setIsLoading(false);
+            setIsPlaying(false);
+          });
+      };
+
+      const onTimeUpdate = () => {
+        if (audioRef.current !== audio || !audio.duration) return;
+        const start = previewStartRef.current;
+        const winDur = previewDurationRef.current || audio.duration;
+        const elapsed = Math.max(0, audio.currentTime - start);
+        const nextProg = Math.max(0, Math.min(elapsed / winDur, 1));
+        setProgress(nextProg);
+        setCurrentTime(formatTime(Math.min(elapsed, winDur)));
+
+        if (elapsed >= winDur || audio.ended) {
+          audio.pause();
+          const mode = repeatModeRef.current;
+          if (mode === "one") {
+            try {
+              audio.currentTime = previewStartRef.current;
+            } catch {}
+            setProgress(0);
+            setCurrentTime("0:00");
+            audio.play().catch(() => setIsPlaying(false));
+          } else if (mode === "all" && handleNextBeatRef.current) {
+            setIsPlaying(false);
+            handleNextBeatRef.current();
+          } else {
+            setIsPlaying(false);
+            setProgress(0);
+            setCurrentTime("0:00");
+          }
+        }
+      };
+
+      const onEnded = () => {
+        if (audioRef.current !== audio) return;
+        const mode = repeatModeRef.current;
+        if (mode === "one") {
+          try {
+            audio.currentTime = previewStartRef.current;
+          } catch {}
+          setProgress(0);
+          setCurrentTime("0:00");
+          audio.play().catch(() => setIsPlaying(false));
+        } else if (mode === "all" && handleNextBeatRef.current) {
+          setIsPlaying(false);
+          handleNextBeatRef.current();
+        } else {
+          setIsPlaying(false);
+          setProgress(0);
+          setCurrentTime("0:00");
+        }
+      };
+
+      const onError = () => {
+        if (audioRef.current !== audio) return;
+        setIsLoading(false);
+        setIsPlaying(false);
+      };
+
+      audioCleanupRef.current = () => {
+        audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+        audio.removeEventListener("timeupdate", onTimeUpdate);
+        audio.removeEventListener("ended", onEnded);
+        audio.removeEventListener("error", onError);
+      };
+
+      audio.addEventListener("loadedmetadata", onLoadedMetadata);
+      audio.addEventListener("timeupdate", onTimeUpdate);
+      audio.addEventListener("ended", onEnded);
+      audio.addEventListener("error", onError);
+      audio.load();
+    },
+    [disposeAudio, formatTime]
+  );
+
+  /* Reset or auto-play when switching between beats */
+  useEffect(() => {
+    disposeAudio();
+    if (beat && autoPlayOnSwitchRef.current) {
+      autoPlayOnSwitchRef.current = false;
+      startBeatPlayback(beat);
+    }
+  }, [beat?.id, disposeAudio, startBeatPlayback]);
 
   /* Audio play/pause toggle */
   const togglePlay = useCallback(() => {
     if (!beat?.audio) return;
 
     if (!audioRef.current) {
-      const audio = new Audio(beat.audio);
-      audioRef.current = audio;
-
-      if ("mediaSession" in navigator) {
-        const artSrc = beat.image
-          ? window.location.origin + beat.image
-          : window.location.origin + "/og-image.png";
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: beat.title,
-          artist: "chomkaMUSIC\u2122 Studio",
-          album: "chomkaMUSIC™ Studio Beats",
-          artwork: [{ src: artSrc, sizes: "512x512", type: "image/jpeg" }],
-        });
-      }
-
-      setIsLoading(true);
-
-      audio.addEventListener("loadedmetadata", () => {
-        setDurationTime(formatTime(audio.duration));
-      });
-
-      audio.addEventListener("timeupdate", () => {
-        if (audio.duration) {
-          setProgress(audio.currentTime / audio.duration);
-          setCurrentTime(formatTime(audio.currentTime));
-        }
-      });
-
-      audio.addEventListener("ended", () => {
-        setIsPlaying(false);
-        setProgress(0);
-        setCurrentTime("0:00");
-      });
-
-      audio.play()
-        .then(() => { setIsLoading(false); setIsPlaying(true); })
-        .catch(() => { setIsLoading(false); setIsPlaying(false); });
+      startBeatPlayback(beat);
     } else {
       if (isPlaying) {
         audioRef.current.pause();
         setIsPlaying(false);
       } else {
-        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+        const start = previewStartRef.current;
+        const winDur = previewDurationRef.current || audioRef.current.duration || 0;
+        if (
+          audioRef.current.ended ||
+          (winDur > 0 && audioRef.current.currentTime >= start + winDur - 0.1)
+        ) {
+          try {
+            audioRef.current.currentTime = start;
+          } catch {}
+        }
+        audioRef.current
+          .play()
+          .then(() => setIsPlaying(true))
+          .catch(() => setIsPlaying(false));
       }
     }
-  }, [beat, isPlaying]);
+  }, [beat, isPlaying, startBeatPlayback]);
 
   /* Seek handler */
   const handleSeek = (e) => {
@@ -136,21 +416,33 @@ export default function BeatDetailPage() {
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const nextProgress = Math.max(0, Math.min(clickX / rect.width, 1));
-    audioRef.current.currentTime = nextProgress * audioRef.current.duration;
+    const start = previewStartRef.current;
+    const winDur = previewDurationRef.current || audioRef.current.duration;
+    audioRef.current.currentTime = start + nextProgress * winDur;
     setProgress(nextProgress);
   };
 
   const seekBackward = () => {
     if (!audioRef.current) return;
+    const start = previewStartRef.current;
     const ct = audioRef.current.currentTime;
-    audioRef.current.currentTime = Math.max(0, ct - 5);
+    audioRef.current.currentTime = Math.max(start, ct - 5);
   };
 
   const seekForward = () => {
     if (!audioRef.current) return;
+    const start = previewStartRef.current;
+    const winDur = previewDurationRef.current || audioRef.current.duration || 0;
     const ct = audioRef.current.currentTime;
-    const duration = audioRef.current.duration || 0;
-    audioRef.current.currentTime = Math.min(duration, ct + 5);
+    audioRef.current.currentTime = Math.min(start + winDur, ct + 5);
+  };
+
+  const cycleRepeatMode = () => {
+    setRepeatMode((prev) => {
+      if (prev === "all") return "one";
+      if (prev === "one") return "none";
+      return "all";
+    });
   };
 
   /* Authoritative Selar Licensing Framework Matrix */
@@ -158,16 +450,24 @@ export default function BeatDetailPage() {
   const selarPremium = getBeatPrice(beat, "premium");
   const selarUltimate = getBeatPrice(beat, "ultimate");
 
-  const basicPriceFormatted = selarBasic?.formatted || (currency === "NGN" ? "₦15,000" : "From Selar");
-  const premiumPriceFormatted = selarPremium?.formatted || (currency === "NGN" ? "₦30,000" : "From Selar");
-  const ultimatePriceFormatted = selarUltimate?.formatted || (currency === "NGN" ? "₦60,000" : "From Selar");
+  const basicPriceFormatted =
+    selarBasic?.formatted || (currency === "NGN" ? "₦15,000" : "From Selar");
+  const premiumPriceFormatted =
+    selarPremium?.formatted || (currency === "NGN" ? "₦30,000" : "From Selar");
+  const ultimatePriceFormatted =
+    selarUltimate?.formatted || (currency === "NGN" ? "₦60,000" : "From Selar");
 
   const LICENSES = {
     basic: {
       name: "Standard Lease",
       short: "Basic",
       price: basicPriceFormatted,
-      priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
+      priceStatus: (
+        <>
+          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar
+          Checkout
+        </>
+      ),
       perks: [
         "✓ High-Quality MP3 Audio File",
         "✓ Non-Exclusive Commercial Distribution Rights",
@@ -181,7 +481,12 @@ export default function BeatDetailPage() {
       name: "Premium WAV",
       short: "Premium",
       price: premiumPriceFormatted,
-      priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
+      priceStatus: (
+        <>
+          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar
+          Checkout
+        </>
+      ),
       perks: [
         "✓ 24-bit Studio Master WAV + MP3",
         "✓ Radio, Streaming & Performance Clearance",
@@ -195,7 +500,12 @@ export default function BeatDetailPage() {
       name: "Trackout Stems",
       short: "Ultimate",
       price: ultimatePriceFormatted,
-      priceStatus: <><LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout</>,
+      priceStatus: (
+        <>
+          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar
+          Checkout
+        </>
+      ),
       perks: [
         "✓ Full Multi-Track Audio Stems (WAV)",
         "✓ Complete Mix & Arrangement Control",
@@ -203,13 +513,18 @@ export default function BeatDetailPage() {
         "✓ Instant Delivery via Selar",
       ],
       btnText: `Purchase Trackout Stems (${ultimatePriceFormatted}) on Selar`,
-      url: selarUltimate?.url || beat?.selar?.ultimate || beat?.selar_ultimate_url,
+      url:
+        selarUltimate?.url || beat?.selar?.ultimate || beat?.selar_ultimate_url,
     },
     exclusive: {
       name: "Exclusive Buyout",
       short: "Exclusive",
       price: "Private Studio Negotiation",
-      priceStatus: "👑 100% Sole Ownership Buyout",
+      priceStatus: (
+        <>
+          <CrownIcon size={15} color="#FFD700" /> 100% Sole Ownership Buyout
+        </>
+      ),
       perks: [
         "✓ 100% Sole Ownership Buyout",
         "✓ Beat Permanently Removed from Market",
@@ -223,15 +538,42 @@ export default function BeatDetailPage() {
 
   const activeLicenseData = LICENSES[selectedLicense];
 
+  if (!beat && (isStoreLoading || isFetchingBeat)) {
+    return (
+      <main className="beat-detail-view">
+        <div
+          style={{
+            maxWidth: "600px",
+            margin: "100px auto",
+            textAlign: "center",
+            color: "var(--gold)",
+          }}
+        >
+          <LoadingSpinner size={28} />
+          <p style={{ marginTop: "14px", color: "var(--muted)", fontSize: "13px" }}>
+            Loading studio beat...
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   /* 404 Fallback if beat not found */
   if (!beat) {
     return (
       <main className="beat-detail-view">
-        <div style={{ maxWidth: "600px", margin: "80px auto", textAlign: "center" }}>
+        <div
+          style={{
+            maxWidth: "600px",
+            margin: "80px auto",
+            textAlign: "center",
+          }}
+        >
           <p className="eyebrow">silachomka / 404</p>
           <h1 className="beat-detail-title">Beat Not Found</h1>
           <p style={{ color: "var(--muted)", margin: "20px 0 35px" }}>
-            The beat you requested does not exist in the official studio catalogue.
+            The beat you requested does not exist in the official studio
+            catalogue.
           </p>
           <Link className="primary-button" to="/beats">
             <LeftArrowIcon /> Back to All Beats
@@ -241,16 +583,45 @@ export default function BeatDetailPage() {
     );
   }
 
+  const shareDescription = beat.description
+    ? `${beat.title} (${[beat.genre, beat.bpm, beat.key].filter(Boolean).join(" • ")}) — ${beat.description}`
+    : `${beat.title} is an original${
+        beat.genre ? ` ${beat.genre}` : ""
+      } instrumental by silachomka, available to listen to and license through chomkaMUSIC™ Studio.`;
+
+  const shareImage =
+    beat.image ||
+    (beat.video && !/\.gif(\?.*)?$/i.test(beat.video)
+      ? beat.video.replace(/\.(mp4|webm|mov)$/i, ".jpg")
+      : null) ||
+    beat.ogImage ||
+    beat.cover ||
+    "/beats-image.png";
+
   return (
     <main className="beat-detail-view">
       <SeoHead
-        title={`${beat.title} | chomkaMUSIC™ Studio Beats | silachomka`}
-        description={`${beat.title} is an original${beat.genre ? ` ${beat.genre}` : ""} instrumental by silachomka, available to listen to and license through chomkaMUSIC™ Studio.`}
+        title={`${beat.title} — Beat by ${getBeatProducer(beat)} | silachomka`}
+        description={shareDescription}
         path={`/beats/${beat.id}`}
-        image={beat.image || (beat.video ? beat.video.replace('.mp4', '.jpg') : null) || beat.ogImage || beat.cover || beat.thumbnail || beat.poster || "/og-image.png"}
+        image={shareImage}
+        audio={beat.audio}
+        type="music.song"
         icon="/beats-image.png"
         imageAlt={`${beat.title} beat by silachomka`}
       />
+
+      {/* Req #7: Atmospheric Blurred Product Artwork Background */}
+      {beat.image && (
+        <div className="product-ambient-backdrop" aria-hidden="true">
+          <div
+            className="ambient-image-layer"
+            style={{ backgroundImage: `url(${beat.image})` }}
+          />
+          <div className="ambient-gradient-overlay" />
+        </div>
+      )}
+
       {/* Breadcrumb Navigation */}
       <Link className="release-breadcrumb" to="/beats">
         <LeftArrowIcon /> All Beats
@@ -258,29 +629,19 @@ export default function BeatDetailPage() {
 
       <div className="beat-detail-grid">
         {/* =================================================
-            LEFT COLUMN: VIDEO VISUALIZER & AUDIO CONTROLS
+            LEFT COLUMN: VIDEO VISUALIZER & FULL AUDIO CONTROLS
             ================================================= */}
         <div>
           <div className="beat-visualizer-card">
-            {beat.video ? (
-              beat.video.endsWith(".gif") ? (
-                <img
-                  src={beat.video}
-                  alt={`${beat.title} visualizer`}
-                  className="beat-visualizer-video"
-                  style={{ objectFit: "cover" }}
-                />
-              ) : (
-                <video
-                  src={beat.video}
-                  poster={beat.image}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  className="beat-visualizer-video"
-                />
-              )
+            {beat.video || beat.image ? (
+              <BeatArtwork
+                image={beat.image}
+                video={beat.video}
+                videoMimeType={beat.videoMimeType}
+                alt={`${beat.title} visualizer`}
+                className="beat-visualizer-video"
+                lazy={false}
+              />
             ) : (
               <div
                 style={{
@@ -298,103 +659,163 @@ export default function BeatDetailPage() {
             )}
           </div>
 
-          {/* Audio Playback Bar */}
-          <div
-            style={{
-              marginTop: "24px",
-              padding: "20px 24px",
-              background: "var(--surface)",
-              border: "1px solid var(--line-gold)",
-              borderRadius: "4px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Upgraded Full Audio Playback Deck (Req #13 & #16) */}
+          <div className="beat-detail-player-deck">
+            {/* Top Row: Playback Mode Toggle (1 MIN / FULL TRACK) & Track Position */}
+            <div className="beat-detail-player-top">
+              <div
+                className="beats-segmented-group"
+                role="group"
+                aria-label="Audio playback length"
+              >
                 <button
                   type="button"
-                  className="beat-skip-btn"
-                  onClick={seekBackward}
-                  aria-label="Skip backward 5 seconds"
+                  className={`beats-segment-btn ${
+                    playbackMode === "1min" ? "is-active" : ""
+                  }`}
+                  onClick={() => setPlaybackMode("1min")}
+                  aria-pressed={playbackMode === "1min"}
                 >
-                  -5s
+                  1 MIN
                 </button>
                 <button
                   type="button"
-                  onClick={togglePlay}
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    borderRadius: "50%",
-                    background: "var(--gold)",
-                    color: "var(--bg)",
-                    border: "none",
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: "14px",
-                    cursor: "pointer",
-                    boxShadow: "0 6px 20px var(--gold-glow)",
-                    transition: "transform 180ms ease",
-                  }}
-                  aria-label={isLoading ? "Loading audio" : isPlaying ? "Pause audio preview" : "Play audio preview"}
-                  aria-busy={isLoading}
+                  className={`beats-segment-btn ${
+                    playbackMode === "full" ? "is-active" : ""
+                  }`}
+                  onClick={() => setPlaybackMode("full")}
+                  aria-pressed={playbackMode === "full"}
                 >
-                  {isLoading ? (
-                    <div className="beat-detail-loading-spinner" aria-hidden="true" />
-                  ) : (
-                    isPlaying ? <PauseIcon size={20} /> : <PlayIcon size={20} />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="beat-skip-btn"
-                  onClick={seekForward}
-                  aria-label="Skip forward 5 seconds"
-                >
-                  +5s
+                  FULL TRACK
                 </button>
               </div>
 
-              <div style={{ flex: 1 }}>
-                <div
-                  onClick={handleSeek}
-                  style={{
-                    height: "8px",
-                    background: "rgba(223, 194, 125, 0.15)",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                  role="progressbar"
-                  aria-valuenow={Math.round(progress * 100)}
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                >
-                  <div
-                    style={{
-                      width: `${progress * 100}%`,
-                      height: "100%",
-                      background: "var(--gold)",
-                      borderRadius: "4px",
-                      transition: "width 0.1s linear",
-                    }}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginTop: "8px",
-                    color: "var(--gold)",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                  }}
-                >
-                  <span>{currentTime}</span>
-                  <span>{durationTime}</span>
-                </div>
+              <div className="beat-detail-time-readout">
+                <span>{currentTime}</span>
+                <span style={{ opacity: 0.45, margin: "0 4px" }}>/</span>
+                <span>{durationTime}</span>
               </div>
+            </div>
+
+            {/* Scrubber Progress Bar */}
+            <div
+              onClick={handleSeek}
+              className="beat-detail-scrubber"
+              role="progressbar"
+              aria-valuenow={Math.round(progress * 100)}
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <div
+                className="beat-detail-scrubber-fill"
+                style={{ width: `${Math.max(0, Math.min(progress * 100, 100))}%` }}
+              />
+            </div>
+
+            {/* Full Transport Controls: Shuffle | Prev | -5s | Play/Pause | +5s | Next | Repeat */}
+            <div className="beat-detail-transport">
+              <button
+                type="button"
+                className={`beat-transport-btn ${isShuffle ? "is-active" : ""}`}
+                onClick={() => setIsShuffle((prev) => !prev)}
+                aria-label={isShuffle ? "Disable shuffle" : "Enable shuffle"}
+                aria-pressed={isShuffle}
+                title={isShuffle ? "Shuffle On" : "Shuffle Off"}
+              >
+                <ShuffleIcon size={16} />
+              </button>
+
+              <button
+                type="button"
+                className="beat-transport-btn"
+                onClick={handlePrevBeat}
+                aria-label="Previous beat"
+                title="Previous Beat"
+              >
+                <PreviousTrackIcon size={18} />
+              </button>
+
+              <button
+                type="button"
+                className="beat-skip-btn"
+                onClick={seekBackward}
+                aria-label="Skip backward 5 seconds"
+                title="Skip backward 5 seconds"
+              >
+                <SkipBackIcon size={13} />
+                <span>5s</span>
+              </button>
+
+              <button
+                type="button"
+                className="beat-detail-play-btn"
+                onClick={togglePlay}
+                aria-label={
+                  isLoading
+                    ? "Loading audio"
+                    : isPlaying
+                    ? "Pause audio"
+                    : "Play audio"
+                }
+                aria-busy={isLoading}
+              >
+                {isLoading ? (
+                  <LoadingSpinner size={20} color="#050507" />
+                ) : isPlaying ? (
+                  <PauseIcon size={20} color="#050507" />
+                ) : (
+                  <PlayIcon size={20} color="#050507" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                className="beat-skip-btn"
+                onClick={seekForward}
+                aria-label="Skip forward 5 seconds"
+                title="Skip forward 5 seconds"
+              >
+                <span>5s</span>
+                <SkipForwardIcon size={13} />
+              </button>
+
+              <button
+                type="button"
+                className="beat-transport-btn"
+                onClick={handleNextBeat}
+                aria-label="Next beat"
+                title="Next Beat"
+              >
+                <NextTrackIcon size={18} />
+              </button>
+
+              <button
+                type="button"
+                className={`beat-transport-btn ${
+                  repeatMode !== "none" ? "is-active" : ""
+                }`}
+                onClick={cycleRepeatMode}
+                aria-label={
+                  repeatMode === "one"
+                    ? "Repeat mode: One"
+                    : repeatMode === "all"
+                    ? "Repeat mode: All"
+                    : "Repeat mode: Off"
+                }
+                title={
+                  repeatMode === "one"
+                    ? "Repeat: One"
+                    : repeatMode === "all"
+                    ? "Repeat: All (Auto-advance)"
+                    : "Repeat: Off"
+                }
+              >
+                {repeatMode === "one" ? (
+                  <RepeatOneIcon size={16} />
+                ) : (
+                  <RepeatIcon size={16} />
+                )}
+              </button>
             </div>
           </div>
 
@@ -402,7 +823,9 @@ export default function BeatDetailPage() {
           <div className="beat-specs-bar">
             <span className="spec-badge">BPM: {beat.bpm || "125 BPM"}</span>
             <span className="spec-badge">Key: {beat.key || "C Minor"}</span>
-            <span className="spec-badge">Genre: {beat.genre || "Afro-Fusion"}</span>
+            <span className="spec-badge">
+              Genre: {beat.genre || "Afro-Fusion"}
+            </span>
             <span className="spec-badge">Audio: 24-bit / 44.1kHz</span>
             <span className="spec-badge">Stems: Available on Request</span>
           </div>
@@ -422,24 +845,61 @@ export default function BeatDetailPage() {
             Source: {getBeatSource(beat)}
           </p>
 
-          <p style={{ color: "var(--gold)", fontSize: "15px", fontWeight: 700, margin: "10px 0 20px" }}>
+          <p
+            style={{
+              color: "var(--gold)",
+              fontSize: "15px",
+              fontWeight: 700,
+              margin: "10px 0 20px",
+            }}
+          >
             Studio Production × Custom Licensing
           </p>
 
           <ShareLinkBox url={absoluteUrl(`/beats/${beat.id}`)} />
 
-          <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: "1.7", marginBottom: "30px" }}>
-            Original studio production composed and engineered by <strong>silachomka</strong> under chomkaMUSIC™. Suitable for commercial release, sync licensing, broadcast, and artist collaborations.
+          <p
+            style={{
+              color: "var(--text-secondary)",
+              fontSize: "14px",
+              lineHeight: "1.7",
+              marginBottom: "30px",
+            }}
+          >
+            Original studio production composed and engineered by{" "}
+            <strong>silachomka</strong> under chomkaMUSIC™. Suitable for
+            commercial release, sync licensing, broadcast, and artist
+            collaborations.
           </p>
 
           {/* ===============================================
-              DYNAMIC LICENSING SELECTOR ENGINE
+              DYNAMIC LICENSING SELECTOR ENGINE (Req #5)
               =============================================== */}
           <div className="licensing-selector-container">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
-              <div className="platform-section-title" style={{ margin: 0 }}>Licensing Options</div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "16px",
+                flexWrap: "wrap",
+                gap: "12px",
+              }}
+            >
+              <div className="platform-section-title" style={{ margin: 0 }}>
+                Licensing Options
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Currency:</span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: "1px",
+                  }}
+                >
+                  Currency:
+                </span>
                 <select
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
@@ -452,20 +912,24 @@ export default function BeatDetailPage() {
                     fontSize: "12px",
                     fontWeight: "600",
                     cursor: "pointer",
-                    outline: "none"
+                    outline: "none",
                   }}
                   aria-label="Select license currency"
                 >
                   {supportedCurrencies.map((c) => (
-                    <option key={c.code} value={c.code} style={{ background: "#111", color: "#fff" }}>
+                    <option
+                      key={c.code}
+                      value={c.code}
+                      style={{ background: "#111", color: "#fff" }}
+                    >
                       {c.code} ({c.symbol})
                     </option>
                   ))}
                 </select>
               </div>
             </div>
-            
-            {/* Tabs */}
+
+            {/* Responsive 4-Tier License Selector Tabs */}
             <div className="license-tabs" role="tablist">
               {Object.keys(LICENSES).map((key) => (
                 <button
@@ -473,45 +937,60 @@ export default function BeatDetailPage() {
                   type="button"
                   role="tab"
                   aria-selected={selectedLicense === key}
-                  className={`license-tab ${selectedLicense === key ? "is-active" : ""}`}
+                  className={`license-tab ${
+                    selectedLicense === key ? "is-active" : ""
+                  }`}
                   onClick={() => setSelectedLicense(key)}
                 >
-                  {LICENSES[key].short}
+                  <span className="license-tab-name">{LICENSES[key].short}</span>
+                  {key !== "exclusive" && (
+                    <span className="license-tab-price">
+                      {LICENSES[key].price}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
 
             {/* Dynamic Content */}
-            <div className="license-details" key={selectedLicense} role="tabpanel">
+            <div
+              className="license-details"
+              key={selectedLicense}
+              role="tabpanel"
+            >
               <h3 className="license-type-name">{activeLicenseData.name}</h3>
-              
+
               <div className="license-price-row">
-                <span className="license-price-value">{activeLicenseData.price}</span>
-                <span className="license-status-badge">{activeLicenseData.priceStatus}</span>
+                <span className="license-price-value">
+                  {activeLicenseData.price}
+                </span>
+                <span className="license-status-badge">
+                  {activeLicenseData.priceStatus}
+                </span>
               </div>
-              
+
               <ul className="license-perks-list">
                 {activeLicenseData.perks.map((perk, index) => (
                   <li key={index}>{perk}</li>
                 ))}
               </ul>
 
-              {activeLicenseData.url && activeLicenseData.url.startsWith("http") ? (
-                <a 
-                  href={activeLicenseData.url} 
+              {activeLicenseData.url &&
+              activeLicenseData.url.startsWith("http") ? (
+                <a
+                  href={activeLicenseData.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="license-buy-btn"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {activeLicenseData.btnText} <UpRightArrowIcon size={16} />
+                  <span>{activeLicenseData.btnText}</span>
+                  <UpRightArrowIcon size={16} />
                 </a>
               ) : (
-                <a 
-                  href="#offer-form" 
-                  className="license-buy-btn"
-                >
-                  {activeLicenseData.btnText} <RightArrowIcon />
+                <a href="#offer-form" className="license-buy-btn">
+                  <span>{activeLicenseData.btnText}</span>
+                  <RightArrowIcon />
                 </a>
               )}
             </div>
@@ -531,11 +1010,30 @@ export default function BeatDetailPage() {
             }}
           >
             <p className="eyebrow">Exclusive Buyout Inquiry</p>
-            <h2 style={{ margin: "0 0 12px", fontSize: "26px", color: "var(--text)", fontFamily: "var(--font-display)" }}>
+            <h2
+              style={{
+                margin: "0 0 12px",
+                fontSize: "26px",
+                color: "var(--text)",
+                fontFamily: "var(--font-display)",
+              }}
+            >
               Exclusive Acquisition
             </h2>
-            <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: "1.6", marginBottom: "25px" }}>
-              Standard, Premium, and Trackout licenses for <strong>{beat.title}</strong> can be purchased instantly above with direct delivery on Selar. Use this form exclusively to negotiate an <strong style={{ color: "var(--text)" }}>Exclusive Buyout</strong> — full ownership transfer, custom terms, and stem delivery.
+            <p
+              style={{
+                color: "var(--muted)",
+                fontSize: "13px",
+                lineHeight: "1.6",
+                marginBottom: "25px",
+              }}
+            >
+              Standard, Premium, and Trackout licenses for{" "}
+              <strong>{beat.title}</strong> can be purchased instantly above
+              with direct delivery on Selar. Use this form exclusively to
+              negotiate an{" "}
+              <strong style={{ color: "var(--text)" }}>Exclusive Buyout</strong>{" "}
+              — full ownership transfer, custom terms, and stem delivery.
             </p>
 
             <form
@@ -546,7 +1044,10 @@ export default function BeatDetailPage() {
                 try {
                   const res = await fetch("https://formspree.io/f/xljerwko", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    headers: {
+                      "Content-Type": "application/json",
+                      Accept: "application/json",
+                    },
                     body: JSON.stringify({
                       name: offerName,
                       email: offerEmail,
@@ -560,10 +1061,14 @@ export default function BeatDetailPage() {
                     setOfferSubmitted(true);
                   } else {
                     const data = await res.json().catch(() => ({}));
-                    setOfferError(data?.error || "Submission failed. Please try again.");
+                    setOfferError(
+                      data?.error || "Submission failed. Please try again."
+                    );
                   }
                 } catch {
-                  setOfferError("Network error. Check your connection and try again.");
+                  setOfferError(
+                    "Network error. Check your connection and try again."
+                  );
                 } finally {
                   setOfferSubmitting(false);
                 }
@@ -571,17 +1076,43 @@ export default function BeatDetailPage() {
               className="negotiation-form"
             >
               {offerSubmitted ? (
-                <div style={{
-                  padding: "28px 24px",
-                  background: "rgba(212, 175, 55, 0.08)",
-                  border: "1px solid var(--line-gold)",
-                  borderRadius: "6px",
-                  textAlign: "center",
-                }}>
-                  <p style={{ fontSize: "22px", margin: "0 0 8px", color: "var(--gold)" }}>✓ Inquiry Sent</p>
-                  <p style={{ color: "var(--muted)", fontSize: "13px", margin: 0, lineHeight: "1.6" }}>
-                    Your licensing inquiry for <strong style={{ color: "var(--text)" }}>{beat.title}</strong> has been received.
-                    chomkaMUSIC™ Studio will be in touch at <strong style={{ color: "var(--text)" }}>{offerEmail}</strong>.
+                <div
+                  style={{
+                    padding: "28px 24px",
+                    background: "rgba(212, 175, 55, 0.08)",
+                    border: "1px solid var(--line-gold)",
+                    borderRadius: "6px",
+                    textAlign: "center",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "22px",
+                      margin: "0 0 8px",
+                      color: "var(--gold)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Inquiry Sent
+                  </p>
+                  <p
+                    style={{
+                      color: "var(--muted)",
+                      fontSize: "13px",
+                      margin: 0,
+                      lineHeight: "1.6",
+                    }}
+                  >
+                    Your licensing inquiry for{" "}
+                    <strong style={{ color: "var(--text)" }}>{beat.title}</strong>{" "}
+                    has been received. chomkaMUSIC™ Studio will be in touch at{" "}
+                    <strong style={{ color: "var(--text)" }}>{offerEmail}</strong>
+                    .
                   </p>
                 </div>
               ) : (
@@ -613,26 +1144,39 @@ export default function BeatDetailPage() {
                   />
 
                   {offerError && (
-                    <p style={{
-                      color: "#e05c5c",
-                      fontSize: "13px",
-                      margin: "0 0 10px",
-                      padding: "10px 14px",
-                      background: "rgba(224, 92, 92, 0.08)",
-                      border: "1px solid rgba(224, 92, 92, 0.3)",
-                      borderRadius: "4px",
-                    }}>
-                      ⚠ {offerError}
+                    <p
+                      style={{
+                        color: "#e05c5c",
+                        fontSize: "13px",
+                        margin: "0 0 10px",
+                        padding: "10px 14px",
+                        background: "rgba(224, 92, 92, 0.08)",
+                        border: "1px solid rgba(224, 92, 92, 0.3)",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      {offerError}
                     </p>
                   )}
 
                   <button
                     type="submit"
                     className="primary-button"
-                    style={{ width: "100%", marginTop: "10px", opacity: offerSubmitting ? 0.6 : 1 }}
+                    style={{
+                      width: "100%",
+                      marginTop: "10px",
+                      opacity: offerSubmitting ? 0.6 : 1,
+                    }}
                     disabled={offerSubmitting}
                   >
-                    {offerSubmitting ? "Sending…" : <><span>Draft Studio Licensing Inquiry</span> <RightArrowIcon size={14} /></>}
+                    {offerSubmitting ? (
+                      "Sending…"
+                    ) : (
+                      <>
+                        <span>Draft Studio Licensing Inquiry</span>{" "}
+                        <RightArrowIcon size={14} />
+                      </>
+                    )}
                   </button>
                 </>
               )}
