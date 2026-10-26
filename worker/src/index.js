@@ -337,74 +337,7 @@ app.get('/api/releases', async (c) => {
         (
           SELECT json_agg(json_build_object(
             'id', t.id,
-            'title', t.title,
-            'track_number', t.track_number,
-            'preview_audio_url', CASE WHEN tp.file_data IS NOT NULL THEN '/api/media/asset/' || tp.id
-                                      WHEN tp.r2_key IS NOT NULL THEN '/' || tp.r2_key
-                                      ELSE NULL END,
-            'platforms', CASE WHEN r.release_date > NOW() THEN '{}'::jsonb ELSE t.platforms END,
-            'featuring', (
-              SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
-              FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'FEATURING'
-            ),
-            'producers', (
-              SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
-              FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'PRODUCER'
-            )
-          ) ORDER BY t.track_number)
-          FROM tracks t 
-          LEFT JOIN media_assets tp ON t.preview_asset_id = tp.id
-          WHERE t.release_id = r.id AND t.deleted_at IS NULL
-        ),
-        '[]'::json
-      ) as tracks,
-      COALESCE(
-        (
-          SELECT json_agg(json_build_object(
-            'id', mv.slug,
-            'title', mv.title,
-            'subtitle', mv.subtitle,
-            'category', mv.category,
-            'youtubeId', mv.youtube_id,
-            'youtubeUrl', mv.youtube_url,
-            'aspectRatio', mv.aspect_ratio,
-            'links', mv.platforms
-          ))
-          FROM music_videos mv 
-          WHERE mv.related_release_id = r.id 
-            AND mv.deleted_at IS NULL 
-            AND (mv.status = 'PUBLISHED' OR (mv.status = 'SCHEDULED' AND mv.scheduled_at <= NOW()))
-        ),
-        '[]'::json
-      ) as videos
-    FROM releases r
-    LEFT JOIN media_assets m ON r.cover_asset_id = m.id
-    LEFT JOIN media_assets mp ON r.preview_asset_id = mp.id
-    WHERE r.deleted_at IS NULL 
-      AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
-    ORDER BY r.release_date DESC
-  `
-  return c.json(releases.map(enrichReleasePreviews))
-})
-
-app.get('/api/releases/:slug', async (c) => {
-  const sql = c.get('sql')
-  const slug = c.req.param('slug')
-  
-  const releases = await sql`
-    SELECT 
-      r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.release_date as "release_date", r.display_date as "displayDate", r.type, 
-      r.primary_artist as artist, r.feats_silachomka as "featssilachomka", r.produced_by_silachomka as "producedBysilachomka", 
-      r.description, r.sources, r.platforms, r.status,
-      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as cover,
-      CASE WHEN mp.file_data IS NOT NULL THEN '/api/media/asset/' || mp.id 
-           WHEN mp.r2_key IS NOT NULL THEN '/' || mp.r2_key 
-           ELSE NULL END as preview_audio_url,
-      COALESCE(
-        (
-          SELECT json_agg(json_build_object(
-            'id', t.id,
-            'title', t.title,
+            'title', CASE WHEN r.release_date > NOW() THEN 'Track ' || LPAD(t.track_number::text, 2, '0') ELSE t.title END,
             'track_number', t.track_number,
             'preview_audio_url', CASE WHEN tp.file_data IS NOT NULL THEN '/api/media/asset/' || tp.id
                                       WHEN tp.r2_key IS NOT NULL THEN '/' || tp.r2_key
@@ -487,7 +420,114 @@ app.get('/api/releases/:slug', async (c) => {
     FROM releases r
     LEFT JOIN media_assets m ON r.cover_asset_id = m.id
     LEFT JOIN media_assets mp ON r.preview_asset_id = mp.id
-    WHERE r.slug = ${slug} 
+    WHERE r.deleted_at IS NULL 
+      AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
+    ORDER BY r.release_date DESC
+  `
+  return c.json(releases.map(enrichReleasePreviews))
+})
+
+app.get('/api/releases/:slug', async (c) => {
+  const sql = c.get('sql')
+  const slug = c.req.param('slug')
+  
+  const releases = await sql`
+    SELECT 
+      r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.release_date as "release_date", r.display_date as "displayDate", r.type, 
+      r.primary_artist as artist, r.feats_silachomka as "featssilachomka", r.produced_by_silachomka as "producedBysilachomka", 
+      r.description, r.sources, r.platforms, r.status,
+      CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as cover,
+      CASE WHEN mp.file_data IS NOT NULL THEN '/api/media/asset/' || mp.id 
+           WHEN mp.r2_key IS NOT NULL THEN '/' || mp.r2_key 
+           ELSE NULL END as preview_audio_url,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object(
+            'id', t.id,
+            'title', CASE WHEN r.release_date > NOW() THEN 'Track ' || LPAD(t.track_number::text, 2, '0') ELSE t.title END,
+            'track_number', t.track_number,
+            'preview_audio_url', CASE WHEN tp.file_data IS NOT NULL THEN '/api/media/asset/' || tp.id
+                                      WHEN tp.r2_key IS NOT NULL THEN '/' || tp.r2_key
+                                      ELSE NULL END,
+            'platforms', CASE WHEN r.release_date > NOW() THEN '{}'::jsonb ELSE t.platforms END,
+            'featuring', (
+              SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
+              FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'FEATURING'
+            ),
+            'producers', (
+              SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
+              FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'PRODUCER'
+            )
+          ) ORDER BY t.track_number)
+          FROM tracks t 
+          LEFT JOIN media_assets tp ON t.preview_asset_id = tp.id
+          WHERE t.release_id = r.id AND t.deleted_at IS NULL
+        ),
+        '[]'::json
+      ) as tracks,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object(
+            'id', mv.slug,
+            'title', mv.title,
+            'subtitle', mv.subtitle,
+            'category', mv.category,
+            'youtubeId', mv.youtube_id,
+            'youtubeUrl', mv.youtube_url,
+            'aspectRatio', mv.aspect_ratio,
+            'links', mv.platforms
+          ))
+          FROM music_videos mv 
+          WHERE mv.related_release_id = r.id 
+            AND mv.deleted_at IS NULL 
+            AND (mv.status = 'PUBLISHED' OR (mv.status = 'SCHEDULED' AND mv.scheduled_at <= NOW()))
+        ),
+        '[]'::json
+      ) as videos,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object(
+            'id', gp.slug,
+            'title', gp.title,
+            'caption', gp.caption,
+            'category', gp.category,
+            'type', gp.post_type,
+            'date', gp.post_date,
+            'displayDate', gp.display_date,
+            'asset', CASE WHEN gpm.file_data IS NOT NULL THEN '/api/media/asset/' || gpm.id ELSE '/' || gpm.r2_key END,
+            'src', CASE WHEN gpm.file_data IS NOT NULL THEN '/api/media/asset/' || gpm.id ELSE '/' || gpm.r2_key END,
+            'mimeType', gpm.mime_type,
+            'assetType', gpm.asset_type,
+            'externalSocialUrl', gp.external_social_url,
+            'externalSocialPlatform', gp.external_social_platform,
+            'link', gp.legacy_link,
+            'slides', (
+              SELECT COALESCE(json_agg(json_build_object(
+                'id', gs.id,
+                'sortOrder', gs.sort_order,
+                'slideType', gs.slide_type,
+                'asset', CASE WHEN gsm.file_data IS NOT NULL THEN '/api/media/asset/' || gsm.id ELSE '/' || gsm.r2_key END,
+                'src', CASE WHEN gsm.file_data IS NOT NULL THEN '/api/media/asset/' || gsm.id ELSE '/' || gsm.r2_key END,
+                'mimeType', gsm.mime_type,
+                'assetType', gsm.asset_type
+              ) ORDER BY gs.sort_order ASC), '[]'::json)
+              FROM gallery_slides gs
+              LEFT JOIN media_assets gsm ON gs.asset_id = gsm.id
+              WHERE gs.post_id = gp.id
+            )
+          ))
+          FROM gallery_posts gp
+          LEFT JOIN media_assets gpm ON gp.primary_asset_id = gpm.id
+          WHERE gp.related_release_id = r.id 
+            AND gp.deleted_at IS NULL 
+            AND (gp.status = 'PUBLISHED' OR (gp.status = 'SCHEDULED' AND gp.scheduled_at <= NOW()))
+        ),
+        '[]'::json
+      ) as "associatedGallery"
+    FROM releases r
+    LEFT JOIN media_assets m ON r.cover_asset_id = m.id
+    LEFT JOIN media_assets mp ON r.preview_asset_id = mp.id
+    WHERE (r.slug = ${slug} OR COALESCE(r.previous_slugs, '[]'::jsonb) @> to_jsonb(${slug}::text))
       AND r.deleted_at IS NULL 
       AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
   `
@@ -987,7 +1027,8 @@ app.get('/api/share/:type/:slug', async (c) => {
                   ELSE NULL END as cover
       FROM releases r
       LEFT JOIN media_assets m ON r.cover_asset_id = m.id
-      WHERE r.slug = ${slug} AND r.deleted_at IS NULL
+      WHERE (r.slug = ${slug} OR COALESCE(r.previous_slugs, '[]'::jsonb) @> to_jsonb(${slug}::text))
+        AND r.deleted_at IS NULL
         AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
     `
     if (rows.length > 0) {

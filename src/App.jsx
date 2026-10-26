@@ -1232,11 +1232,14 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
                   <div>
                     {tracksToShow.map((track, trackIndex) => {
                       const key = `${release.slug}-${trackIndex}`;
+                      const isUnreleased =
+                        new Date(release.release_date || release.date || 0).getTime() > Date.now();
                       return (
                         <TrackRow
                           key={key}
                           track={track}
                           index={trackIndex}
+                          isUnreleased={isUnreleased}
                           isExpanded={expandedTrackKey === key}
                           onToggle={() => setExpandedTrackKey(expandedTrackKey === key ? null : key)}
                         />

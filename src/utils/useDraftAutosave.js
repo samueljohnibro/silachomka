@@ -30,6 +30,42 @@ export function useDraftAutosave({
   const [recoverableDraft, setRecoverableDraft] = useState(null);
   const timerRef = useRef(null);
   const initialJsonRef = useRef(null);
+  const currentDataRef = useRef(currentData);
+  const isDirtyRef = useRef(false);
+
+  useEffect(() => {
+    currentDataRef.current = currentData;
+  }, [currentData]);
+
+  // Synchronous flush handler
+  const flushDraft = useCallback(() => {
+    if (!active || !isDirtyRef.current || !currentDataRef.current) return;
+    try {
+      const nowIso = new Date().toISOString();
+      const payload = {
+        entityKey,
+        savedAt: nowIso,
+        data: {
+          ...currentDataRef.current,
+          _draftStatus: currentDataRef.current.status || 'DRAFT',
+        },
+      };
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch {}
+  }, [active, entityKey, storageKey]);
+
+  // Flush dirty draft on beforeunload and unmount
+  useEffect(() => {
+    if (!active) return;
+    const handleBeforeUnload = () => {
+      flushDraft();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushDraft();
+    };
+  }, [active, flushDraft]);
 
   // Check for existing stored draft when entering CREATE or EDIT mode
   useEffect(() => {
@@ -75,6 +111,7 @@ export function useDraftAutosave({
     // Do not overwrite an existing recoverable draft before user has edited anything
     if (serialized === initialJsonRef.current) return;
 
+    isDirtyRef.current = true;
     setAutosaveStatus('SAVING');
     if (timerRef.current) clearTimeout(timerRef.current);
 
@@ -117,6 +154,7 @@ export function useDraftAutosave({
   }, [recoverableDraft, restoreCallback]);
 
   const clearDraft = useCallback(() => {
+    isDirtyRef.current = false;
     if (timerRef.current) clearTimeout(timerRef.current);
     try {
       localStorage.removeItem(storageKey);
@@ -302,5 +340,154 @@ export function DraftAutosaveBanner({
     { className: 'cms-draft-autosave-bar', style: { marginBottom: '16px' } },
     recoveryChildren,
     statusRow
+  );
+}
+
+/**
+ * Hook to inspect existing draft for an entityKey without activating form autosave.
+ * Perfect for LIST views to show a resume banner!
+ */
+export function useExistingDraft(entityKey) {
+  const storageKey = `chomka_cms_draft_${entityKey}`;
+  const [draft, setDraft] = useState(null);
+
+  const check = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.data && parsed?.savedAt) {
+          setDraft(parsed);
+          return;
+        }
+      }
+      setDraft(null);
+    } catch {
+      setDraft(null);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    check();
+  }, [check]);
+
+  const discard = useCallback(() => {
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {}
+    setDraft(null);
+  }, [storageKey]);
+
+  return {
+    draft,
+    hasDraft: Boolean(draft),
+    checkDraft: check,
+    discardDraft: discard,
+  };
+}
+
+/**
+ * List-View Resume Draft Banner (Stage 28 Req)
+ * Prominently surfaces unfinished drafts on the admin index page so clicking it immediately
+ * transitions into CREATE/EDIT view and restores all working fields and media.
+ */
+export function DraftListResumeBanner({
+  entityKey,
+  entityLabel = "draft",
+  onResume,
+  onDiscard,
+}) {
+  const { draft, hasDraft, discardDraft } = useExistingDraft(entityKey);
+
+  if (!hasDraft || !draft) return null;
+
+  const handleDiscard = (e) => {
+    if (e) e.stopPropagation();
+    discardDraft();
+    if (onDiscard) onDiscard();
+  };
+
+  const handleResume = (e) => {
+    if (e) e.stopPropagation();
+    if (onResume) onResume(draft.data);
+  };
+
+  const dateStr = draft?.savedAt ? new Date(draft.savedAt).toLocaleString() : "";
+
+  return React.createElement(
+    'div',
+    {
+      role: 'region',
+      'aria-label': 'Unfinished draft notification',
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '12px',
+        padding: '12px 18px',
+        background: 'rgba(223, 194, 125, 0.1)',
+        border: '1px solid rgba(223, 194, 125, 0.4)',
+        borderRadius: '8px',
+        marginBottom: '20px',
+      },
+    },
+    React.createElement(
+      'div',
+      { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+      React.createElement('span', { style: { fontSize: '18px' } }, '📝'),
+      React.createElement(
+        'div',
+        null,
+        React.createElement(
+          'strong',
+          { style: { color: 'var(--gold)', fontSize: '13px' } },
+          `Unfinished ${entityLabel} draft available`
+        ),
+        dateStr
+          ? React.createElement(
+              'span',
+              { style: { color: 'var(--muted)', fontSize: '12px', marginLeft: '8px' } },
+              `(saved ${dateStr})`
+            )
+          : null
+      )
+    ),
+    React.createElement(
+      'div',
+      { style: { display: 'flex', gap: '10px' } },
+      React.createElement(
+        'button',
+        {
+          type: 'button',
+          onClick: handleResume,
+          className: 'studio-pill-btn',
+          style: {
+            padding: '5px 14px',
+            fontSize: '12px',
+            background: 'var(--gold)',
+            color: '#050507',
+            borderColor: 'var(--gold)',
+            fontWeight: 700,
+          },
+        },
+        'Resume Draft'
+      ),
+      React.createElement(
+        'button',
+        {
+          type: 'button',
+          onClick: handleDiscard,
+          className: 'studio-pill-btn',
+          style: {
+            padding: '5px 12px',
+            fontSize: '12px',
+            background: 'transparent',
+            color: 'var(--muted)',
+          },
+        },
+        'Discard'
+      )
+    )
   );
 }

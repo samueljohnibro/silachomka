@@ -905,4 +905,13 @@ ADD COLUMN IF NOT EXISTS preview_asset_id UUID REFERENCES media_assets(id);
 ALTER TABLE social_links 
 ADD COLUMN IF NOT EXISTS show_on_gallery_posts BOOLEAN DEFAULT false;
 
+-- ============================================================================
+-- STAGE 27 & 28 MIGRATION: TRACK PREVIEW AUDIO & LEGACY SLUG ALIASES
+-- ============================================================================
+ALTER TABLE tracks
+ADD COLUMN IF NOT EXISTS preview_asset_id UUID REFERENCES media_assets(id) ON DELETE SET NULL;
+
+ALTER TABLE releases
+ADD COLUMN IF NOT EXISTS previous_slugs JSONB DEFAULT '[]'::jsonb;
+
 COMMIT;

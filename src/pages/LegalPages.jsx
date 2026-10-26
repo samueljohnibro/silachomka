@@ -25,29 +25,32 @@ export function PrivacyPolicyPage() {
         <h2>2. Information We Collect</h2>
         <ul>
           <li>
-            <strong>Newsletter &amp; Fan Updates:</strong> When you voluntarily subscribe via our newsletter form, we store your email address, optional name, and subscription timestamp to send official release announcements.
+            <strong>Newsletter &amp; Fan Updates:</strong> When you voluntarily subscribe via our newsletter form, we store your email address, optional name, and subscription timestamp in our database to queue official release and catalogue notifications.
           </li>
           <li>
-            <strong>Local Browser Preferences:</strong> We store your cookie consent choices and selected display currency (e.g., NGN, USD, GBP, EUR) in your browser&apos;s localStorage.
+            <strong>Exclusive Beat Negotiation Inquiries:</strong> When you submit an exclusive beat buyout offer, your name, email address, selected beat, and offer message are transmitted to our studio booking inbox.
           </li>
           <li>
-            <strong>Beat Licensing &amp; Checkout:</strong> Beat purchases are processed securely on our official Selar storefront. Payment details are handled directly by Selar under their security and privacy standards.
+            <strong>Local Browser Preferences:</strong> We store your cookie consent choices (<code>silachomka_cookie_consent_v1</code>), selected display currency (<code>chomka_preferred_currency</code>), and beat preview mode (<code>chomka_beat_playback_mode</code>) in your browser&apos;s <code>localStorage</code>.
+          </li>
+          <li>
+            <strong>Beat Licensing &amp; Checkout:</strong> Non-exclusive beat purchases (Basic, Premium WAV, Trackout Stems) are processed on our official Selar storefront (<code>selar.com/m/chomkamusicstudio</code>). Payment details are handled directly by Selar under their privacy and security standards.
           </li>
         </ul>
 
         <h2>3. How We Use Information</h2>
         <p>
-          We use collected data strictly to operate the catalogue, deliver audio/video streams, remember your currency and playback settings, and send opt-in release updates. We never sell personal data to third parties.
+          We use collected data strictly to operate the catalogue, deliver audio/video streams, remember your currency and playback settings, respond to licensing inquiries, and queue opt-in release updates. We do not run third-party advertising trackers or sell personal data.
         </p>
 
         <h2>4. Embedded Third-Party Content</h2>
         <p>
-          Release pages, music videos, and gallery posts may include embedded players or links from Spotify, Apple Music, YouTube, Audiomack, SoundCloud, Instagram, or X. Interacting with third-party embeds is subject to each platform&apos;s respective privacy policy.
+          Release pages, music videos, and gallery posts may include embedded players or links from Spotify, YouTube, Instagram, or X. If you reject optional embedded media in your Cookie Settings, third-party player iframes on release and social post cards remain paused until you enable them.
         </p>
 
-        <h2>5. Your Rights &amp; Controls</h2>
+        <h2>5. Operator &amp; Contact Information</h2>
         <p>
-          You can update your cookie and storage preferences at any time or unsubscribe from email updates upon request.
+          This platform is operated for artist identity <strong>silachomka</strong> (Samuel John-Ibro) under <strong>chomkaMUSIC™</strong> and <strong>Chomka Nation</strong>. No separate corporate registration number, physical postal address, or external Data Protection Officer has been designated in this automated technical notice; formal entity registration or postal notice details must be supplied directly by the platform owner if required by local jurisdiction.
         </p>
 
         <div style={{ display: "flex", gap: 12, marginTop: 28, flexWrap: "wrap" }}>
@@ -89,16 +92,16 @@ export function CookiePolicyPage() {
         <h2>2. Categories of Storage</h2>
         <ul>
           <li>
-            <strong>Essential (Strictly Necessary):</strong> Stores your cookie consent decision (`silachomka_cookie_consent_v1`) and protects administrative studio routes.
+            <strong>Essential (Strictly Necessary):</strong> Stores your cookie consent decision (<code>silachomka_cookie_consent_v1</code>), local catalogue cache keys (<code>silachomka_store_*</code>), and for authenticated studio administrators only, an HttpOnly session cookie (<code>silachomka_admin_session</code>) and CMS draft recovery keys (<code>chomka_cms_draft_*</code>).
           </li>
           <li>
-            <strong>Functional Preferences:</strong> Remembers your preferred display currency (`chomka_currency_pref`) and audio player state across pages.
+            <strong>Functional Preferences:</strong> Remembers your preferred display currency (<code>chomka_preferred_currency</code>) and beat preview length preference (<code>chomka_beat_playback_mode</code>).
           </li>
           <li>
-            <strong>Embedded Media:</strong> Enables interactive embeds from YouTube, Instagram, and X when viewing official videos or social gallery posts.
+            <strong>Embedded Media:</strong> Controls whether third-party iframes from Spotify, YouTube, Instagram, and X load automatically on release and gallery views.
           </li>
           <li>
-            <strong>Analytics (Opt-In Only):</strong> Optional aggregate traffic measurement, disabled by default unless you explicitly opt in.
+            <strong>Analytics (Opt-In Only):</strong> Optional aggregate traffic measurement, disabled by default unless you explicitly opt in. No third-party marketing pixels are loaded by default.
           </li>
         </ul>
 

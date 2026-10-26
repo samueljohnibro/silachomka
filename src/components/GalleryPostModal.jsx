@@ -454,12 +454,22 @@ export default function GalleryPostModal({
   if (embedded) {
     return (
       <div className="gallery-embedded-shell">
-        {ambientImageSrc && (
+        {(ambientImageSrc || (currentIsVideo && currentSlideSrc)) && (
           <div className="product-ambient-backdrop" aria-hidden="true">
-            <div
-              className="ambient-image-layer"
-              style={{ backgroundImage: `url(${ambientImageSrc})` }}
-            />
+            {ambientImageSrc ? (
+              <div
+                className="ambient-image-layer"
+                style={{ backgroundImage: `url(${ambientImageSrc})` }}
+              />
+            ) : (
+              <video
+                className="ambient-video-layer"
+                src={currentSlideSrc}
+                muted
+                playsInline
+                preload="metadata"
+              />
+            )}
             <div className="ambient-gradient-overlay" />
           </div>
         )}

@@ -21,6 +21,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
+import { normalizeBeat } from "../data/api";
 import { useCurrency } from "../data/CurrencyContext";
 import BeatArtwork from "../components/BeatArtwork";
 import SeoHead from "../components/SeoHead";
@@ -69,7 +70,7 @@ export default function BeatDetailPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled && data && data.id) {
-          setFetchedBeat({ ...data, showVisualTitle: true });
+          setFetchedBeat(normalizeBeat({ ...data, showVisualTitle: true }));
         }
       })
       .catch(() => {})
@@ -216,33 +217,7 @@ export default function BeatDetailPage() {
     handleNextBeatRef.current = handleNextBeat;
   }, [handleNextBeat]);
 
-  /* Synchronize window when playbackMode toggles between 1min and full */
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
-    if (playbackMode === "full") {
-      previewStartRef.current = 0;
-      previewDurationRef.current = audio.duration;
-      setDurationTime(formatTime(audio.duration));
-      setCurrentTime(formatTime(audio.currentTime));
-      setProgress(Math.max(0, Math.min(audio.currentTime / audio.duration, 1)));
-    } else {
-      const dur = Math.min(PREVIEW_LENGTH, audio.duration);
-      previewDurationRef.current = dur;
-      if (
-        audio.currentTime < previewStartRef.current ||
-        audio.currentTime >= previewStartRef.current + dur
-      ) {
-        previewStartRef.current = 0;
-      }
-      setDurationTime(formatTime(dur));
-      const elapsed = Math.max(0, audio.currentTime - previewStartRef.current);
-      setCurrentTime(formatTime(elapsed));
-      setProgress(Math.max(0, Math.min(elapsed / dur, 1)));
-    }
-  }, [playbackMode, formatTime]);
-
-  /* Initialize & Play Current Beat Audio */
+  /* Initialize & Play Current Beat Audio (Full Track Experience) */
   const startBeatPlayback = useCallback(
     (targetBeat) => {
       if (!targetBeat?.audio) return;
@@ -267,6 +242,34 @@ export default function BeatDetailPage() {
       }
 
       setIsLoading(true);
+      let completionHandled = false;
+
+      const handleTrackFinish = () => {
+        if (audioRef.current !== audio || completionHandled) return;
+        completionHandled = true;
+        audio.pause();
+        const mode = repeatModeRef.current;
+        if (mode === "one") {
+          try {
+            audio.currentTime = previewStartRef.current;
+          } catch {}
+          setProgress(0);
+          setCurrentTime("0:00");
+          completionHandled = false;
+          audio
+            .play()
+            .then(() => setIsPlaying(true))
+            .catch(() => setIsPlaying(false));
+        } else if (mode === "all" && handleNextBeatRef.current) {
+          setIsPlaying(false);
+          handleNextBeatRef.current();
+        } else {
+          // repeat-off ('none'): stop playback cleanly at end of track
+          setIsPlaying(false);
+          setProgress(0);
+          setCurrentTime("0:00");
+        }
+      };
 
       const onLoadedMetadata = () => {
         if (audioRef.current !== audio) return;
@@ -290,6 +293,13 @@ export default function BeatDetailPage() {
           });
       };
 
+      const onSeeked = () => {
+        if (audioRef.current !== audio || !audio.duration) return;
+        if (audio.currentTime < (previewDurationRef.current || audio.duration) - 0.15) {
+          completionHandled = false;
+        }
+      };
+
       const onTimeUpdate = () => {
         if (audioRef.current !== audio || !audio.duration) return;
         const start = previewStartRef.current;
@@ -300,44 +310,12 @@ export default function BeatDetailPage() {
         setCurrentTime(formatTime(Math.min(elapsed, winDur)));
 
         if (elapsed >= winDur || audio.ended) {
-          audio.pause();
-          const mode = repeatModeRef.current;
-          if (mode === "one") {
-            try {
-              audio.currentTime = previewStartRef.current;
-            } catch {}
-            setProgress(0);
-            setCurrentTime("0:00");
-            audio.play().catch(() => setIsPlaying(false));
-          } else if (mode === "all" && handleNextBeatRef.current) {
-            setIsPlaying(false);
-            handleNextBeatRef.current();
-          } else {
-            setIsPlaying(false);
-            setProgress(0);
-            setCurrentTime("0:00");
-          }
+          handleTrackFinish();
         }
       };
 
       const onEnded = () => {
-        if (audioRef.current !== audio) return;
-        const mode = repeatModeRef.current;
-        if (mode === "one") {
-          try {
-            audio.currentTime = previewStartRef.current;
-          } catch {}
-          setProgress(0);
-          setCurrentTime("0:00");
-          audio.play().catch(() => setIsPlaying(false));
-        } else if (mode === "all" && handleNextBeatRef.current) {
-          setIsPlaying(false);
-          handleNextBeatRef.current();
-        } else {
-          setIsPlaying(false);
-          setProgress(0);
-          setCurrentTime("0:00");
-        }
+        handleTrackFinish();
       };
 
       const onError = () => {
@@ -348,12 +326,14 @@ export default function BeatDetailPage() {
 
       audioCleanupRef.current = () => {
         audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+        audio.removeEventListener("seeked", onSeeked);
         audio.removeEventListener("timeupdate", onTimeUpdate);
         audio.removeEventListener("ended", onEnded);
         audio.removeEventListener("error", onError);
       };
 
       audio.addEventListener("loadedmetadata", onLoadedMetadata);
+      audio.addEventListener("seeked", onSeeked);
       audio.addEventListener("timeupdate", onTimeUpdate);
       audio.addEventListener("ended", onEnded);
       audio.addEventListener("error", onError);
@@ -628,6 +608,11 @@ export default function BeatDetailPage() {
     beat.cover ||
     "/beats-image.png";
 
+  const ambientArtworkUrl =
+    beat.image ||
+    (beat.video && /\.gif(\?.*)?$/i.test(beat.video) ? beat.video : null) ||
+    shareImage;
+
   return (
     <main className="beat-detail-view">
       <SeoHead
@@ -642,11 +627,11 @@ export default function BeatDetailPage() {
       />
 
       {/* Req #7: Atmospheric Blurred Product Artwork Background */}
-      {beat.image && (
+      {ambientArtworkUrl && (
         <div className="product-ambient-backdrop" aria-hidden="true">
           <div
             className="ambient-image-layer"
-            style={{ backgroundImage: `url(${beat.image})` }}
+            style={{ backgroundImage: `url(${ambientArtworkUrl})` }}
           />
           <div className="ambient-gradient-overlay" />
         </div>

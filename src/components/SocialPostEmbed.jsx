@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { UpRightArrowIcon } from "./Icons";
+import { useCookieConsent } from "../data/CookieConsentContext";
 
 function parseSocialEmbedInfo(rawUrl, explicitPlatform) {
   if (!rawUrl || typeof rawUrl !== "string") return null;
@@ -82,9 +83,12 @@ export default function SocialPostEmbed({
 }) {
   const [showLiveEmbed, setShowLiveEmbed] = useState(false);
   const [embedError, setEmbedError] = useState(false);
+  const { preferences: cookiePrefs, saveCustomPreferences } = useCookieConsent();
 
   const info = parseSocialEmbedInfo(url, platform);
   if (!info) return null;
+
+  const canRenderIframe = cookiePrefs?.embeddedMedia !== false;
 
   return (
     <div className="social-post-embed-card">
@@ -119,16 +123,47 @@ export default function SocialPostEmbed({
       </div>
 
       {showLiveEmbed && info.canEmbed && info.embedUrl && !embedError ? (
-        <div className="social-post-iframe-wrap">
-          <iframe
-            src={info.embedUrl}
-            title={`${title || info.platform} embedded post`}
-            className="social-post-iframe"
-            loading="lazy"
-            sandbox="allow-scripts allow-same-origin allow-popups"
-            onError={() => setEmbedError(true)}
-          />
-        </div>
+        canRenderIframe ? (
+          <div className="social-post-iframe-wrap">
+            <iframe
+              src={info.embedUrl}
+              title={`${title || info.platform} embedded post`}
+              className="social-post-iframe"
+              loading="lazy"
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              onError={() => setEmbedError(true)}
+            />
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: "16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+              flexWrap: "wrap",
+              fontSize: "12px",
+              color: "var(--muted)",
+            }}
+          >
+            <span>
+              Interactive {info.platform} embed is paused by your cookie preferences.
+            </span>
+            <button
+              type="button"
+              className="cookie-btn cookie-btn-accept"
+              onClick={() =>
+                saveCustomPreferences({
+                  ...cookiePrefs,
+                  embeddedMedia: true,
+                })
+              }
+            >
+              Enable Embedded Media
+            </button>
+          </div>
+        )
       ) : (
         <a
           href={info.url}

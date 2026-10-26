@@ -2,11 +2,12 @@ import { UpRightArrowIcon, RightArrowIcon, LoadingSpinner } from "../components/
 // src/components/ReleasePage.jsx
 
 import { useState, useMemo, useEffect } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
 import RandomPreviewPlayer from "./RandomPreviewPlayer";
 import { useChomkaStore } from "../data/store";
+import { useCookieConsent } from "../data/CookieConsentContext";
 import { normalizeGalleryPost } from "../data/api";
 import { formatGalleryDate } from "../utils/dateFormatter";
 import {
@@ -89,9 +90,9 @@ function getSpotifyEmbedUrl(url) {
    TRACK ROW COMPONENT (EXPANDABLE WITH PRODUCER CREDIT)
    ========================================================= */
 
-export function TrackRow({ track, index, isExpanded, onToggle }) {
+export function TrackRow({ track, index, isExpanded, onToggle, isUnreleased = false }) {
   const [localExpanded, setLocalExpanded] = useState(false);
-  const trackPlatforms = track.platforms || {};
+  const trackPlatforms = isUnreleased ? {} : track.platforms || {};
 
   const expanded = isExpanded !== undefined ? isExpanded : localExpanded;
 
@@ -101,7 +102,10 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
   };
 
   const availablePlatforms = getPlatformEntries(trackPlatforms);
-  const hasLinks = availablePlatforms.length > 0;
+  const hasLinks = !isUnreleased && availablePlatforms.length > 0;
+  const displayTitle = isUnreleased
+    ? `Track ${String(index + 1).padStart(2, "0")}`
+    : track.title;
 
   return (
     <div className={`track-item-row ${expanded ? "is-expanded" : ""}`}>
@@ -112,12 +116,12 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
         tabIndex={0}
         onKeyDown={(e) => e.key === "Enter" && hasLinks && handleToggle()}
         aria-expanded={expanded}
-        aria-label={`${track.title} stream links`}
+        aria-label={`${displayTitle} stream links`}
       >
         <div className="track-title-left">
           <span className="track-idx">{String(index + 1).padStart(2, "0")}</span>
           <span className="track-name-stack">
-            <span className="track-name-text">{track.title}</span>
+            <span className="track-name-text">{displayTitle}</span>
           </span>
         </div>
 
@@ -170,8 +174,10 @@ export function TrackRow({ track, index, isExpanded, onToggle }) {
 
 export default function ReleasePage({ release: propRelease }) {
   const params = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const activeFilter = searchParams.get("filter") || "all";
+  const { preferences: cookiePrefs, saveCustomPreferences } = useCookieConsent();
   const {
     releases: storeReleases,
     videos: storeVideos,
@@ -207,6 +213,9 @@ export default function ReleasePage({ release: propRelease }) {
               ? data.associatedGallery.map(normalizeGalleryPost)
               : [],
           });
+          if (params?.slug && data.slug !== params.slug) {
+            navigate(`/release/${data.slug}`, { replace: true });
+          }
         }
       })
       .catch(() => {})
@@ -216,7 +225,7 @@ export default function ReleasePage({ release: propRelease }) {
     return () => {
       cancelled = true;
     };
-  }, [routeSlug, propRelease?.slug]);
+  }, [routeSlug, propRelease?.slug, params?.slug, navigate]);
 
   const release = fetchedRelease || storeMatchedRelease;
 
@@ -650,21 +659,52 @@ export default function ReleasePage({ release: propRelease }) {
               {/* EMBEDDED AUDIO PLAYER */}
               {spotifyEmbedUrl && (
                 <div className="spotify-embed-container">
-                  <iframe
-                    src={spotifyEmbedUrl}
-                    width="100%"
-                    height={trackCount > 1 ? "352" : "152"}
-                    style={{
-                      borderRadius: "12px",
-                      border: "none",
-                      display: "block",
-                      minHeight: trackCount > 1 ? "352px" : "152px",
-                      width: "100%",
-                    }}
-                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                    allowFullScreen
-                    title={`${release.title} Spotify Player`}
-                  />
+                  {cookiePrefs?.embeddedMedia !== false ? (
+                    <iframe
+                      src={spotifyEmbedUrl}
+                      width="100%"
+                      height={trackCount > 1 ? "352" : "152"}
+                      style={{
+                        borderRadius: "12px",
+                        border: "none",
+                        display: "block",
+                        minHeight: trackCount > 1 ? "352px" : "152px",
+                        width: "100%",
+                      }}
+                      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                      allowFullScreen
+                      title={`${release.title} Spotify Player`}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        padding: "20px 24px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: "12px",
+                        fontSize: "13px",
+                        color: "var(--muted)",
+                      }}
+                    >
+                      <span>
+                        Third-party Spotify embed is paused by your cookie preferences.
+                      </span>
+                      <button
+                        type="button"
+                        className="cookie-btn cookie-btn-accept"
+                        onClick={() =>
+                          saveCustomPreferences({
+                            ...cookiePrefs,
+                            embeddedMedia: true,
+                          })
+                        }
+                      >
+                        Enable Embedded Media
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -732,6 +772,7 @@ export default function ReleasePage({ release: propRelease }) {
                   key={`${track.title}-${index}`}
                   track={track}
                   index={index}
+                  isUnreleased={isFuture}
                   isExpanded={expandedTrackIdx === index}
                   onToggle={() =>
                     setExpandedTrackIdx(

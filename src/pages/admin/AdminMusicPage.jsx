@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
 import { refreshCatalogue } from "../../data/store";
-import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
+import { useDraftAutosave, DraftAutosaveBanner, DraftListResumeBanner } from "../../utils/useDraftAutosave";
 import MediaAssetPicker from "../../components/admin/MediaAssetPicker";
 import PlatformLinksEditor from "../../components/admin/PlatformLinksEditor";
 import AdminSortControl from "../../components/admin/AdminSortControl";
@@ -310,8 +310,8 @@ const AdminMusicPage = () => {
     });
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
+  const handleSave = async (e, asDraft = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     setError(null);
     
     if (!currentRelease.title || !currentRelease.title.trim()) {
@@ -339,12 +339,13 @@ const AdminMusicPage = () => {
     const isFuture =
       (!isNaN(relDate.getTime()) && relDate > new Date()) ||
       (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date());
-    const targetStatus = isFuture ? "SCHEDULED" : "PUBLISHED";
+    const targetStatus = asDraft ? "DRAFT" : (isFuture ? "SCHEDULED" : "PUBLISHED");
 
     try {
       const payload = {
         ...currentRelease,
         status: targetStatus,
+        is_draft: asDraft,
         slug,
         display_date: canonicalDisplayDate,
         preview_asset_id: currentRelease.preview_asset_id || null
@@ -863,7 +864,16 @@ const AdminMusicPage = () => {
             />
           </div>
 
-          <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+            <button
+              type="button"
+              className="studio-pill-btn"
+              onClick={(e) => handleSave(e, true)}
+              disabled={isSaving}
+              style={{ background: "rgba(223, 194, 125, 0.08)", borderColor: "rgba(223, 194, 125, 0.4)", color: "var(--gold)" }}
+            >
+              Save as Draft
+            </button>
             <button type="submit" className="primary-button" disabled={isSaving}>
               {saveState === "SAVING" ? "Saving…" : saveState === "SAVED" ? "Saved" : "Save Project Metadata"}
             </button>
@@ -1214,6 +1224,22 @@ const AdminMusicPage = () => {
       </div>
 
       {error && <div className="admin-login-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      <DraftListResumeBanner
+        entityKey="release_new"
+        entityLabel="Release Project"
+        onResume={(draftData) => {
+          setCurrentRelease(draftData);
+          if (draftData.release_date) {
+            const d = new Date(draftData.release_date);
+            if (!isNaN(d.getTime())) {
+              setReleaseDatePart(d.toISOString().split("T")[0]);
+              setReleaseTimePart(d.toISOString().split("T")[1]?.slice(0, 5) || "00:00");
+            }
+          }
+          setView("CREATE");
+        }}
+      />
 
       {sortedReleases.length === 0 ? (
         <div className="admin-placeholder">

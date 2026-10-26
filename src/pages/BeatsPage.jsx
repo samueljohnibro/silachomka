@@ -986,7 +986,14 @@ export default function BeatsPage() {
     if (activeFilter === "all") {
       return beats;
     }
-    return beats.filter((beat) => beat.categories?.includes(activeFilter));
+    return beats.filter((beat) => {
+      if (beat.categories?.includes(activeFilter)) return true;
+      const g = String(beat.genre || beat.shortGenre || "").toLowerCase();
+      if (activeFilter === "afro") return g.includes("afro");
+      if (activeFilter === "trap") return g.includes("trap") || g.includes("rap") || g.includes("hip");
+      if (activeFilter === "rnb") return g.includes("r&b") || g.includes("rnb") || g.includes("soul") || g.includes("alt");
+      return false;
+    });
   }, [activeFilter, beats]);
 
   const cancelProgressAnimation = useCallback(() => {
@@ -1258,10 +1265,37 @@ export default function BeatsPage() {
 
       const handleEnded = () => {
         if (!isCurrentAudio()) return;
+        audio.pause();
         isPlayingRef.current = false;
         setProgress(1);
         setIsPlaying(false);
         cancelProgressAnimation();
+        clearAutoAdvanceTimer();
+
+        const mode = repeatModeRef.current;
+        if (mode === "one") {
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            if (isCurrentAudio() && activeBeatRef.current) {
+              try {
+                audio.currentTime = previewStartRef.current;
+              } catch {}
+              setProgress(0);
+              audio
+                .play()
+                .then(() => {
+                  isPlayingRef.current = true;
+                  setIsPlaying(true);
+                })
+                .catch(() => {});
+            }
+          }, 150);
+        } else if (mode === "all" && handleNextReelRef.current) {
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            if (handleNextReelRef.current) {
+              handleNextReelRef.current();
+            }
+          }, 250);
+        }
       };
 
       const startPreview = async () => {

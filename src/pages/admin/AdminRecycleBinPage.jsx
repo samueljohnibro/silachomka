@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
+import { refreshCatalogue } from "../../data/store";
 import { TrashIcon, RestoreIcon } from "../../components/Icons";
 import "./admin.css";
 
@@ -60,6 +61,7 @@ export default function AdminRecycleBinPage() {
       await adminApi.restoreItem(item.table_name, item.id);
       setSuccessMsg(`Successfully restored "${item.title || item.id}" to active catalog.`);
       await fetchItems();
+      refreshCatalogue();
     } catch (err) {
       setError(err.message || "Failed to restore item.");
     } finally {
@@ -76,6 +78,7 @@ export default function AdminRecycleBinPage() {
       setSuccessMsg(`Permanently deleted "${item.title || item.id}".`);
       setConfirmPermanentId(null);
       await fetchItems();
+      refreshCatalogue();
     } catch (err) {
       setError(err.message || "Failed to permanently delete item.");
     } finally {
@@ -94,6 +97,7 @@ export default function AdminRecycleBinPage() {
       const res = await adminApi.purgeExpired();
       setSuccessMsg(`Purged ${res.count || 0} expired item(s) older than 60 days.`);
       await fetchItems();
+      refreshCatalogue();
     } catch (err) {
       setError(err.message || "Failed to purge expired items.");
     } finally {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { adminApi } from "../../data/adminApi";
 import { refreshCatalogue } from "../../data/store";
-import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
+import { useDraftAutosave, DraftAutosaveBanner, DraftListResumeBanner } from "../../utils/useDraftAutosave";
 import AdminSortControl from "../../components/admin/AdminSortControl";
 import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import { formatGalleryDate } from "../../utils/dateFormatter";
@@ -28,6 +28,7 @@ const AdminGalleryPage = () => {
 
   const [currentPost, setCurrentPost] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveState, setSaveState] = useState("IDLE"); // 'IDLE' | 'SAVING' | 'SAVED'
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -318,8 +319,8 @@ const AdminGalleryPage = () => {
     }));
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
+  const handleSave = async (e, asDraft = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     setError(null);
 
     if (!currentPost.post_date) {
@@ -348,15 +349,17 @@ const AdminGalleryPage = () => {
     const isFuture =
       (schedDate && !isNaN(schedDate.getTime()) && schedDate > now) ||
       (postDateObj && !isNaN(postDateObj.getTime()) && postDateObj > todayUtc && postDateObj > now);
-    const targetStatus = isFuture ? "SCHEDULED" : "PUBLISHED";
+    const targetStatus = asDraft ? "DRAFT" : (isFuture ? "SCHEDULED" : "PUBLISHED");
 
     try {
       setIsSaving(true);
+      setSaveState("SAVING");
 
       const payload = {
         ...currentPost,
         slug,
         status: targetStatus,
+        is_draft: asDraft,
         title: currentPost.title && currentPost.title.trim() ? currentPost.title.trim() : null,
         caption: currentPost.caption && currentPost.caption.trim() ? currentPost.caption.trim() : null,
         category: currentPost.category && currentPost.category.trim() ? currentPost.category.trim() : "Portraits & Style",
@@ -371,20 +374,26 @@ const AdminGalleryPage = () => {
       };
 
       if (view === "CREATE") {
-        await adminApi.createGalleryPost(payload);
+        const created = await adminApi.createGalleryPost(payload);
+        clearDraft();
+        await fetchData();
+        refreshCatalogue();
+        setCurrentPost(created);
+        setView("EDIT");
       } else {
-        await adminApi.updateGalleryPost(currentPost.id, payload);
+        const updated = await adminApi.updateGalleryPost(currentPost.id, payload);
+        clearDraft();
+        await fetchData();
+        refreshCatalogue();
+        setCurrentPost(updated);
       }
 
-      clearDraft();
-      await fetchData();
-      refreshCatalogue();
-      setView("LIST");
-      setCurrentPost(null);
       setSaveSuccess(true);
+      setSaveState("SAVED");
       setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
       setError(err.message || "Failed to save gallery post.");
+      setSaveState("IDLE");
     } finally {
       setIsSaving(false);
     }
@@ -1159,12 +1168,21 @@ const AdminGalleryPage = () => {
             </div>
           </div>
 
-          <div style={{ marginTop: "8px", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+          <div style={{ marginTop: "8px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
             <button type="button" onClick={handleCancelForm} className="studio-pill-btn" disabled={isSaving}>
-              Cancel
+              Back to Gallery
+            </button>
+            <button
+              type="button"
+              className="studio-pill-btn"
+              onClick={(e) => handleSave(e, true)}
+              disabled={isSaving || isUploadingMedia}
+              style={{ background: "rgba(223, 194, 125, 0.08)", borderColor: "rgba(223, 194, 125, 0.4)", color: "var(--gold)" }}
+            >
+              Save as Draft
             </button>
             <button type="submit" className="primary-button" disabled={isSaving || isUploadingMedia}>
-              {isSaving ? "Saving Post..." : "Save Gallery Post"}
+              {saveState === "SAVING" ? "Saving…" : saveState === "SAVED" ? "Saved" : "Save Gallery Post"}
             </button>
           </div>
         </form>
@@ -1375,6 +1393,15 @@ const AdminGalleryPage = () => {
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
+
+      <DraftListResumeBanner
+        entityKey="gallery_new"
+        entityLabel="Gallery Post"
+        onResume={(draftData) => {
+          setCurrentPost(draftData);
+          setView("CREATE");
+        }}
+      />
 
       {sortedPosts.length === 0 ? (
         <div className="admin-placeholder">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { adminApi } from '../../data/adminApi';
 import { refreshCatalogue } from '../../data/store';
-import { useDraftAutosave, DraftAutosaveBanner } from '../../utils/useDraftAutosave';
+import { useDraftAutosave, DraftAutosaveBanner, DraftListResumeBanner } from '../../utils/useDraftAutosave';
 import MediaAssetPicker from '../../components/admin/MediaAssetPicker';
 import AdminSortControl from '../../components/admin/AdminSortControl';
 import AdminViewToggle from '../../components/admin/AdminViewToggle';
@@ -171,8 +171,8 @@ const AdminBeatsPage = () => {
     }
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
+  const handleSave = async (e, asDraft = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!currentBeat.title || !currentBeat.title.trim()) {
       setError('Title is required.');
       return;
@@ -193,7 +193,7 @@ const AdminBeatsPage = () => {
     const isFuture =
       (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date()) ||
       (createdDate && !isNaN(createdDate.getTime()) && createdDate > new Date());
-    const targetStatus = isFuture ? 'SCHEDULED' : 'PUBLISHED';
+    const targetStatus = asDraft ? 'DRAFT' : (isFuture ? 'SCHEDULED' : 'PUBLISHED');
 
     try {
       setIsSaving(true);
@@ -202,6 +202,7 @@ const AdminBeatsPage = () => {
         ...currentBeat,
         slug,
         status: targetStatus,
+        is_draft: asDraft,
         genre: finalGenre,
         short_genre: finalShortGenre,
       };
@@ -217,16 +218,20 @@ const AdminBeatsPage = () => {
       });
 
       if (view === 'CREATE') {
-        await adminApi.createBeat(payload);
+        const created = await adminApi.createBeat(payload);
+        clearDraft();
+        await fetchBeats();
+        refreshCatalogue();
+        setCurrentBeat(created);
+        setView('EDIT');
       } else {
-        await adminApi.updateBeat(payload.id, payload);
+        const updated = await adminApi.updateBeat(payload.id, payload);
+        clearDraft();
+        await fetchBeats();
+        refreshCatalogue();
+        setCurrentBeat(updated);
       }
 
-      clearDraft();
-      await fetchBeats();
-      refreshCatalogue();
-      setView('LIST');
-      setCurrentBeat(null);
       setSaveSuccess(true);
       setSaveState('SAVED');
       setTimeout(() => setSaveSuccess(false), 4000);
@@ -561,7 +566,16 @@ const AdminBeatsPage = () => {
             </div>
           </div>
 
-          <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button
+              type="button"
+              className="studio-pill-btn"
+              onClick={(e) => handleSave(e, true)}
+              disabled={isSaving}
+              style={{ background: "rgba(223, 194, 125, 0.08)", borderColor: "rgba(223, 194, 125, 0.4)", color: "var(--gold)" }}
+            >
+              Save as Draft
+            </button>
             <button type="submit" className="primary-button" disabled={isSaving}>
               {saveState === 'SAVING' ? 'Saving…' : saveState === 'SAVED' ? 'Saved' : 'Save Beat'}
             </button>
@@ -608,6 +622,15 @@ const AdminBeatsPage = () => {
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
+
+      <DraftListResumeBanner
+        entityKey="beat_new"
+        entityLabel="Beat"
+        onResume={(draftData) => {
+          setCurrentBeat(draftData);
+          setView('CREATE');
+        }}
+      />
 
       {sortedBeats.length === 0 ? (
         <div className="admin-placeholder">

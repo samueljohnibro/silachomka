@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { adminApi } from "../../data/adminApi";
 import { refreshCatalogue } from "../../data/store";
-import { useDraftAutosave, DraftAutosaveBanner } from "../../utils/useDraftAutosave";
+import { useDraftAutosave, DraftAutosaveBanner, DraftListResumeBanner } from "../../utils/useDraftAutosave";
 import PlatformLinksEditor from "../../components/admin/PlatformLinksEditor";
 import AdminSortControl from "../../components/admin/AdminSortControl";
 import AdminViewToggle from "../../components/admin/AdminViewToggle";
@@ -38,6 +38,7 @@ const AdminVideosPage = () => {
 
   const [currentVideo, setCurrentVideo] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveState, setSaveState] = useState("IDLE"); // 'IDLE' | 'SAVING' | 'SAVED'
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -157,8 +158,8 @@ const AdminVideosPage = () => {
     }));
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
+  const handleSave = async (e, asDraft = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     setError(null);
 
     if (!currentVideo.title || !currentVideo.title.trim()) {
@@ -187,12 +188,13 @@ const AdminVideosPage = () => {
       const isFuture =
         (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date()) ||
         (createdDate && !isNaN(createdDate.getTime()) && createdDate > new Date());
-      const targetStatus = isFuture ? "SCHEDULED" : "PUBLISHED";
+      const targetStatus = asDraft ? "DRAFT" : (isFuture ? "SCHEDULED" : "PUBLISHED");
 
       const payload = {
         ...currentVideo,
         slug,
         status: targetStatus,
+        is_draft: asDraft,
       };
       const nullableFields = ["subtitle", "category", "aspect_ratio", "related_release_id", "related_track_id"];
       nullableFields.forEach((field) => {
@@ -206,21 +208,28 @@ const AdminVideosPage = () => {
       }
 
       setIsSaving(true);
+      setSaveState("SAVING");
       if (view === "CREATE") {
-        await adminApi.createVideo(payload);
+        const created = await adminApi.createVideo(payload);
+        clearDraft();
+        await fetchData();
+        refreshCatalogue();
+        setCurrentVideo(created);
+        setView("EDIT");
       } else {
-        await adminApi.updateVideo(payload.id, payload);
+        const updated = await adminApi.updateVideo(payload.id, payload);
+        clearDraft();
+        await fetchData();
+        refreshCatalogue();
+        setCurrentVideo(updated);
       }
 
-      clearDraft();
-      await fetchData();
-      refreshCatalogue();
-      setView("LIST");
-      setCurrentVideo(null);
       setSaveSuccess(true);
+      setSaveState("SAVED");
       setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
       setError(err.message || "Failed to save music video.");
+      setSaveState("IDLE");
     } finally {
       setIsSaving(false);
     }
@@ -532,9 +541,18 @@ const AdminVideosPage = () => {
             disabled={isSaving}
           />
 
-          <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+            <button
+              type="button"
+              className="studio-pill-btn"
+              onClick={(e) => handleSave(e, true)}
+              disabled={isSaving}
+              style={{ background: "rgba(223, 194, 125, 0.08)", borderColor: "rgba(223, 194, 125, 0.4)", color: "var(--gold)" }}
+            >
+              Save as Draft
+            </button>
             <button type="submit" className="primary-button" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Music Video"}
+              {saveState === "SAVING" ? "Saving…" : saveState === "SAVED" ? "Saved" : "Save Music Video"}
             </button>
           </div>
         </form>
@@ -658,6 +676,15 @@ const AdminVideosPage = () => {
       </div>
 
       {error && <div className="admin-login-error">{error}</div>}
+
+      <DraftListResumeBanner
+        entityKey="video_new"
+        entityLabel="Music Video"
+        onResume={(draftData) => {
+          setCurrentVideo(draftData);
+          setView("CREATE");
+        }}
+      />
 
       {sortedVideos.length === 0 ? (
         <div className="admin-placeholder">

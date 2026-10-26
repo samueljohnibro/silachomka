@@ -12,11 +12,37 @@ const normalizeRelease = (r) => {
   };
 };
 
+// Normalize Beat Genre to uppercase words, lowercase 'x' separator, and 'TYPE BEAT' suffix
+export const formatBeatGenrePair = (rawInput) => {
+  const raw = String(rawInput || "").trim();
+  if (!raw) return { genre: "TYPE BEAT", shortGenre: "" };
+  const withoutSuffix = raw.replace(/\s+type\s+beat$/i, "").trim();
+  const parts = withoutSuffix
+    .split(/\s+[xX×]\s+/)
+    .map((part) => part.trim().toUpperCase())
+    .filter(Boolean);
+  const shortGenre = parts.join(" x ");
+  const fullGenre = shortGenre ? `${shortGenre} TYPE BEAT` : "TYPE BEAT";
+  return { genre: fullGenre, shortGenre };
+};
+
 // Normalize Beats
-const normalizeBeat = (b) => {
+export const normalizeBeat = (b) => {
   if (!b) return null;
+  const rawGenre = b.shortGenre || b.short_genre || b.genre || "";
+  const { genre, shortGenre } = formatBeatGenrePair(rawGenre);
+  const rawCats = Array.isArray(b.categories) ? b.categories : [];
+  const catSet = new Set(rawCats);
+  const lower = shortGenre.toLowerCase();
+  if (lower.includes("afro")) catSet.add("afro");
+  if (lower.includes("trap") || lower.includes("rap") || lower.includes("hip")) catSet.add("trap");
+  if (lower.includes("r&b") || lower.includes("rnb") || lower.includes("soul") || lower.includes("alt")) catSet.add("rnb");
   return {
     ...b,
+    genre,
+    shortGenre,
+    short_genre: shortGenre,
+    categories: Array.from(catSet),
     showVisualTitle: true, // Frontend expects this to trigger the visual title overlay
   };
 };

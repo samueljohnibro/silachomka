@@ -403,6 +403,30 @@ async function generateSocialPages() {
         withSocialMetadata(homeHtml, createReleaseMetadata(release))
       )
     ),
+    ...canonicalReleases.flatMap((rel) =>
+      Array.isArray(rel.previous_slugs)
+        ? rel.previous_slugs
+            .filter((oldSlug) => oldSlug && oldSlug !== rel.slug)
+            .map((oldSlug) =>
+              writePage(
+                ["release", encodeURIComponent(oldSlug.trim())],
+                `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Redirecting to ${escapeHtml(rel.title)} | silachomka</title>
+    <link rel="canonical" href="${siteUrl}/release/${encodeURIComponent(rel.slug.trim())}" />
+    <meta http-equiv="refresh" content="0; url=/release/${encodeURIComponent(rel.slug.trim())}" />
+  </head>
+  <body>
+    <p>Redirecting to <a href="/release/${encodeURIComponent(rel.slug.trim())}">/release/${encodeURIComponent(rel.slug.trim())}</a>...</p>
+    <script>window.location.replace('/release/${encodeURIComponent(rel.slug.trim())}');</script>
+  </body>
+</html>`
+              )
+            )
+        : []
+    ),
   ]);
 
   console.log(

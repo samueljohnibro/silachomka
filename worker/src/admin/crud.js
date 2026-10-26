@@ -130,11 +130,11 @@ adminApp.post('/releases', async (c) => {
 
   const uniqueSlug = await resolveUniqueReleaseSlug(sql, rawSlug)
 
-  // Automatic status determination from release_date / scheduled_at
+  // Automatic status determination from release_date / scheduled_at (preserving explicit DRAFT / ARCHIVED)
   const relDate = new Date(body.release_date)
   const schedDate = body.scheduled_at ? new Date(body.scheduled_at) : null
   const isFuture = (!isNaN(relDate.getTime()) && relDate > new Date()) || (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date())
-  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const status = (body.is_draft === true || body.status === 'DRAFT') ? 'DRAFT' : (body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED'))
   const scheduledAt = isFuture ? (schedDate && !isNaN(schedDate.getTime()) ? schedDate.toISOString() : relDate.toISOString()) : (body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null)
 
   try {
@@ -180,13 +180,19 @@ adminApp.put('/releases/:id', async (c) => {
   const relDate = new Date(up.release_date)
   const schedDate = up.scheduled_at ? new Date(up.scheduled_at) : null
   const isFuture = (!isNaN(relDate.getTime()) && relDate > new Date()) || (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date())
-  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const status = (body.is_draft === true || body.status === 'DRAFT') ? 'DRAFT' : (body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED'))
   const scheduledAt = isFuture ? (schedDate && !isNaN(schedDate.getTime()) ? schedDate.toISOString() : relDate.toISOString()) : (up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null)
+
+  const prevSlugsList = Array.isArray(e.previous_slugs) ? [...e.previous_slugs] : []
+  if (e.slug && up.slug && up.slug !== e.slug && !prevSlugsList.includes(e.slug)) {
+    prevSlugsList.push(e.slug)
+  }
 
   try {
     const rows = await sql`
       UPDATE releases SET
         slug = ${up.slug},
+        previous_slugs = ${JSON.stringify(prevSlugsList)}::jsonb,
         number = ${up.number},
         title = ${up.title},
         edition = ${up.edition},
@@ -368,10 +374,19 @@ adminApp.post('/beats', async (c) => {
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
   const normGenre = normalizeBeatGenre(body.genre || body.short_genre)
+  const deriveBeatCategories = (shortGenre, existingCats) => {
+    const cats = new Set(Array.isArray(existingCats) ? existingCats : [])
+    const lower = String(shortGenre || '').toLowerCase()
+    if (lower.includes('afro')) cats.add('afro')
+    if (lower.includes('trap') || lower.includes('rap') || lower.includes('hip')) cats.add('trap')
+    if (lower.includes('r&b') || lower.includes('rnb') || lower.includes('soul') || lower.includes('alt')) cats.add('rnb')
+    return Array.from(cats)
+  }
+  const resolvedCategories = deriveBeatCategories(normGenre.short_genre, body.categories)
   const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
   const isFuture = (scheduledAt && new Date(scheduledAt) > new Date()) || (createdAt && new Date(createdAt) > new Date())
-  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const status = (body.is_draft === true || body.status === 'DRAFT') ? 'DRAFT' : (body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED'))
 
   try {
     const priceBasic = body.price_basic !== undefined && body.price_basic !== '' && body.price_basic !== null ? Number(body.price_basic) : 15000.00
@@ -380,7 +395,7 @@ adminApp.post('/beats', async (c) => {
 
     const rows = await sql`
       INSERT INTO beats (slug, title, genre, short_genre, categories, bpm, beat_key, description, mood, producer, audio_asset_id, image_asset_id, video_asset_id, selar_basic_url, selar_premium_url, selar_ultimate_url, status, scheduled_at, created_at, price_basic, price_premium, price_exclusive)
-      VALUES (${body.slug}, ${body.title}, ${normGenre.genre}, ${normGenre.short_genre}, ${body.categories ? JSON.stringify(body.categories) : null}, ${body.bpm || null}, ${body.beat_key || null}, ${body.description || null}, ${body.mood || null}, ${body.producer || 'silachomka'}, ${body.audio_asset_id || null}, ${body.image_asset_id || null}, ${body.video_asset_id || null}, ${body.selar_basic_url || null}, ${body.selar_premium_url || null}, ${body.selar_ultimate_url || null}, ${status}, ${scheduledAt}, ${createdAt}, ${priceBasic}, ${pricePremium}, ${priceExclusive})
+      VALUES (${body.slug}, ${body.title}, ${normGenre.genre}, ${normGenre.short_genre}, ${JSON.stringify(resolvedCategories)}, ${body.bpm || null}, ${body.beat_key || null}, ${body.description || null}, ${body.mood || null}, ${body.producer || 'silachomka'}, ${body.audio_asset_id || null}, ${body.image_asset_id || null}, ${body.video_asset_id || null}, ${body.selar_basic_url || null}, ${body.selar_premium_url || null}, ${body.selar_ultimate_url || null}, ${status}, ${scheduledAt}, ${createdAt}, ${priceBasic}, ${pricePremium}, ${priceExclusive})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'beats', rows[0].id, null, rows[0])
@@ -414,7 +429,7 @@ adminApp.put('/beats/:id', async (c) => {
 
   const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
   const isFuture = (scheduledAt && new Date(scheduledAt) > new Date()) || (createdAt && new Date(createdAt) > new Date())
-  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const status = (body.is_draft === true || body.status === 'DRAFT') ? 'DRAFT' : (body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED'))
 
   try {
     const priceBasic = up.price_basic !== undefined && up.price_basic !== '' && up.price_basic !== null ? Number(up.price_basic) : (e.price_basic !== null ? e.price_basic : 15000.00)
@@ -488,7 +503,7 @@ adminApp.post('/music-videos', async (c) => {
   const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
   const isFuture = (scheduledAt && new Date(scheduledAt) > new Date()) || (createdAt && new Date(createdAt) > new Date())
-  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const status = (body.is_draft === true || body.status === 'DRAFT') ? 'DRAFT' : (body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED'))
 
   try {
     const rows = await sql`
@@ -522,7 +537,7 @@ adminApp.put('/music-videos/:id', async (c) => {
 
   const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
   const isFuture = (scheduledAt && new Date(scheduledAt) > new Date()) || (createdAt && new Date(createdAt) > new Date())
-  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const status = (body.is_draft === true || body.status === 'DRAFT') ? 'DRAFT' : (body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED'))
 
   try {
     const rows = await sql`
@@ -695,7 +710,7 @@ adminApp.post('/gallery-posts', async (c) => {
   const now = new Date()
   const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const isFuture = (scheduledAt && new Date(scheduledAt) > now) || (postDateObj && !isNaN(postDateObj.getTime()) && postDateObj > todayUtc && postDateObj > now)
-  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const status = (body.is_draft === true || body.status === 'DRAFT') ? 'DRAFT' : (body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED'))
 
   // Derive canonical display date automatically
   const canonicalDisplayDate = formatCanonicalDate(body.post_date) || body.display_date || null
@@ -766,7 +781,7 @@ adminApp.put('/gallery-posts/:id', async (c) => {
   const now = new Date()
   const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const isFuture = (scheduledAt && new Date(scheduledAt) > now) || (postDateObj && !isNaN(postDateObj.getTime()) && postDateObj > todayUtc && postDateObj > now)
-  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const status = (body.is_draft === true || body.status === 'DRAFT') ? 'DRAFT' : (body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED'))
 
   // Derive canonical display date automatically from post_date
   const canonicalDisplayDate = formatCanonicalDate(up.post_date) || up.display_date || null
