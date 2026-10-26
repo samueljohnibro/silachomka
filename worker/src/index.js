@@ -279,14 +279,17 @@ app.get('/api/releases', async (c) => {
     SELECT 
       r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.release_date as "release_date", r.display_date as "displayDate", r.type, 
       r.primary_artist as artist, r.feats_silachomka as "featssilachomka", r.produced_by_silachomka as "producedBysilachomka", 
-      r.description, r.sources, r.platforms,
+      r.description, r.sources, r.platforms, r.status,
       CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as cover,
+      CASE WHEN mp.file_data IS NOT NULL THEN '/api/media/asset/' || mp.id 
+           WHEN mp.r2_key IS NOT NULL THEN '/' || mp.r2_key 
+           ELSE NULL END as preview_audio_url,
       COALESCE(
         (
           SELECT json_agg(json_build_object(
             'id', t.id,
             'title', t.title,
-            'platforms', t.platforms,
+            'platforms', CASE WHEN r.release_date > NOW() THEN '{}'::jsonb ELSE t.platforms END,
             'featuring', (
               SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
               FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'FEATURING'
@@ -322,8 +325,9 @@ app.get('/api/releases', async (c) => {
       ) as videos
     FROM releases r
     LEFT JOIN media_assets m ON r.cover_asset_id = m.id
+    LEFT JOIN media_assets mp ON r.preview_asset_id = mp.id
     WHERE r.deleted_at IS NULL 
-      AND (r.status = 'PUBLISHED' OR (r.status = 'SCHEDULED' AND r.scheduled_at <= NOW()))
+      AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
     ORDER BY r.release_date DESC
   `
   return c.json(releases)
@@ -337,14 +341,17 @@ app.get('/api/releases/:slug', async (c) => {
     SELECT 
       r.id, r.slug, r.number, r.title, r.edition, r.release_date as "date", r.release_date as "release_date", r.display_date as "displayDate", r.type, 
       r.primary_artist as artist, r.feats_silachomka as "featssilachomka", r.produced_by_silachomka as "producedBysilachomka", 
-      r.description, r.sources, r.platforms,
+      r.description, r.sources, r.platforms, r.status,
       CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '/' || m.r2_key END as cover,
+      CASE WHEN mp.file_data IS NOT NULL THEN '/api/media/asset/' || mp.id 
+           WHEN mp.r2_key IS NOT NULL THEN '/' || mp.r2_key 
+           ELSE NULL END as preview_audio_url,
       COALESCE(
         (
           SELECT json_agg(json_build_object(
             'id', t.id,
             'title', t.title,
-            'platforms', t.platforms,
+            'platforms', CASE WHEN r.release_date > NOW() THEN '{}'::jsonb ELSE t.platforms END,
             'featuring', (
               SELECT COALESCE(json_agg(tc.credit_name), '[]'::json)
               FROM track_credits tc WHERE tc.track_id = t.id AND tc.role = 'FEATURING'
@@ -412,9 +419,10 @@ app.get('/api/releases/:slug', async (c) => {
       ) as "associatedGallery"
     FROM releases r
     LEFT JOIN media_assets m ON r.cover_asset_id = m.id
+    LEFT JOIN media_assets mp ON r.preview_asset_id = mp.id
     WHERE r.slug = ${slug} 
       AND r.deleted_at IS NULL 
-      AND (r.status = 'PUBLISHED' OR (r.status = 'SCHEDULED' AND r.scheduled_at <= NOW()))
+      AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
   `
   
   if (releases.length === 0) return c.json({ error: 'Not found' }, 404)
@@ -666,14 +674,15 @@ app.get('/api/music-videos/:slug', async (c) => {
 app.get('/api/social-links', async (c) => {
   const sql = c.get('sql')
   const links = await sql`
-    SELECT name, handle, url, platform, category, role, link_type
+    SELECT name, handle, url, platform, category, role, link_type, show_on_gallery_posts
     FROM social_links
     WHERE is_active = true AND deleted_at IS NULL
     ORDER BY sort_order ASC
   `
   return c.json({
     artist: links.filter(l => l.link_type === 'ARTIST'),
-    ecosystem: links.filter(l => l.link_type === 'ECOSYSTEM')
+    ecosystem: links.filter(l => l.link_type === 'ECOSYSTEM'),
+    galleryEligible: links.filter(l => l.show_on_gallery_posts === true)
   })
 })
 

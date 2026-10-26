@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
+import RandomPreviewPlayer from "./RandomPreviewPlayer";
 import { useChomkaStore } from "../data/store";
 import { formatGalleryDate } from "../utils/dateFormatter";
 import {
@@ -298,6 +299,18 @@ export default function ReleasePage({ release }) {
         image={release.cover || "/og-image.png"}
         imageAlt={`${release.title} official cover art`}
       />
+
+      {/* Atmospheric Product-Themed Ambient Backdrop */}
+      {release.cover && (
+        <div className="product-ambient-backdrop" aria-hidden="true">
+          <div
+            className="ambient-artwork"
+            style={{ backgroundImage: `url(${release.cover})` }}
+          />
+          <div className="ambient-gradient-overlay" />
+        </div>
+      )}
+
       {/* Breadcrumb Navigation */}
       <Link className="release-breadcrumb" to={`/?${activeFilter !== "all" ? "filter=" + activeFilter + "#music" : "#music"}`}>
         ← All Music
@@ -421,6 +434,16 @@ export default function ReleasePage({ release }) {
                   <span className="countdown-timer-unit">Seconds</span>
                 </div>
               </div>
+
+              {/* 30-Second Pre-Release Preview Player */}
+              {release.preview_audio_url && (
+                <div style={{ marginTop: "24px" }}>
+                  <RandomPreviewPlayer
+                    audioUrl={release.preview_audio_url}
+                    title={`${release.title} Pre-Release Snippet`}
+                  />
+                </div>
+              )}
 
               {getPlatformEntries(platforms).length > 0 && (
                 <div style={{ marginTop: "20px" }}>

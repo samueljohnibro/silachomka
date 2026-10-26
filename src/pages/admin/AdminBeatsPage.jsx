@@ -25,6 +25,7 @@ const AdminBeatsPage = () => {
   
   const [currentBeat, setCurrentBeat] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveState, setSaveState] = useState('IDLE'); // 'IDLE' | 'SAVING' | 'SAVED'
   const [saveSuccess, setSaveSuccess] = useState(false);
   
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -79,6 +80,7 @@ const AdminBeatsPage = () => {
     setView('EDIT');
     setError(null);
     setSaveSuccess(false);
+    setSaveState('IDLE');
   };
 
   const handleCreateClick = () => {
@@ -97,19 +99,21 @@ const AdminBeatsPage = () => {
       selar_basic_url: '',
       selar_premium_url: '',
       selar_ultimate_url: '',
-      status: 'PUBLISHED',
+      status: 'DRAFT',
       created_at: new Date().toISOString().split('T')[0],
       categories: []
     });
     setView('CREATE');
     setError(null);
     setSaveSuccess(false);
+    setSaveState('IDLE');
   };
 
   const handleCancelForm = () => {
     setCurrentBeat(null);
     setView('LIST');
     setError(null);
+    setSaveState('IDLE');
   };
 
   const handleDelete = async (id) => {
@@ -146,6 +150,7 @@ const AdminBeatsPage = () => {
 
     try {
       setIsSaving(true);
+      setSaveState('SAVING');
       const payload = {
         ...currentBeat,
         slug,
@@ -173,9 +178,11 @@ const AdminBeatsPage = () => {
       setView('LIST');
       setCurrentBeat(null);
       setSaveSuccess(true);
+      setSaveState('SAVED');
       setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
       setError(err.message || 'Failed to save beat.');
+      setSaveState('IDLE');
     } finally {
       setIsSaving(false);
     }
@@ -183,6 +190,7 @@ const AdminBeatsPage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    setSaveState('IDLE');
     setCurrentBeat(prev => ({ ...prev, [name]: value }));
   };
 
@@ -396,6 +404,7 @@ const AdminBeatsPage = () => {
               assetType="IMAGE"
               value={currentBeat.image_asset_id}
               onChange={(id, assetRecord) => {
+                setSaveState('IDLE');
                 setCurrentBeat(prev => ({ ...prev, image_asset_id: id }));
                 if (assetRecord) {
                   setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
@@ -409,6 +418,7 @@ const AdminBeatsPage = () => {
               assetType="AUDIO"
               value={currentBeat.audio_asset_id}
               onChange={(id, assetRecord) => {
+                setSaveState('IDLE');
                 setCurrentBeat(prev => ({ ...prev, audio_asset_id: id }));
                 if (assetRecord) {
                   setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
@@ -422,6 +432,7 @@ const AdminBeatsPage = () => {
               assetType="VIDEO"
               value={currentBeat.video_asset_id}
               onChange={(id, assetRecord) => {
+                setSaveState('IDLE');
                 setCurrentBeat(prev => ({ ...prev, video_asset_id: id }));
                 if (assetRecord) {
                   setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
@@ -450,7 +461,7 @@ const AdminBeatsPage = () => {
 
           <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
             <button type="submit" className="primary-button" disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save Beat'}
+              {saveState === 'SAVING' ? 'Saving…' : saveState === 'SAVED' ? 'Saved' : 'Save Beat'}
             </button>
           </div>
 

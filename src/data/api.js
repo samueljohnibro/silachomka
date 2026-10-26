@@ -56,6 +56,7 @@ export async function fetchAllCatalogue() {
     socials: {
       artist: normalizeSocials(socialsData.artist),
       ecosystem: normalizeSocials(socialsData.ecosystem),
+      galleryEligible: normalizeSocials(socialsData.galleryEligible || socialsData.artist),
     },
   };
 }

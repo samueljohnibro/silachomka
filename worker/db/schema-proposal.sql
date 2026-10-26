@@ -105,6 +105,7 @@ CREATE TABLE releases (
     produced_by_silachomka BOOLEAN DEFAULT false, -- Preserved from src/data
     description TEXT,
     cover_asset_id UUID REFERENCES media_assets(id) ON DELETE RESTRICT,
+    preview_asset_id UUID REFERENCES media_assets(id) ON DELETE RESTRICT,
     sources JSONB,
     platforms JSONB,
     status publish_status DEFAULT 'PUBLISHED',
@@ -253,6 +254,7 @@ CREATE TABLE social_links (
     link_type VARCHAR(50) DEFAULT 'ARTIST',
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
+    show_on_gallery_posts BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(name, link_type)

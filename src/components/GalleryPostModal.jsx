@@ -1,7 +1,7 @@
 import { UpRightArrowIcon, RightArrowIcon } from '../components/Icons';
 // src/components/GalleryPostModal.jsx
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import ShareLinkBox from "./ShareLinkBox";
 import { absoluteUrl, DEFAULT_SOURCE } from "../data/credits";
@@ -12,6 +12,28 @@ function isVideoSrc(src) {
   if (src.startsWith("data:video/")) return true;
   const ext = src.split("?")[0].split("#")[0].split(".").pop()?.toLowerCase();
   return ["mp4", "webm", "ogg", "mov", "m4v"].includes(ext);
+}
+
+const FALLBACK_GALLERY_SOCIALS = [
+  { name: "Instagram", url: "https://www.instagram.com/silachomka/?__pwa=1" },
+  { name: "X", url: "https://x.com/silachomka" },
+  { name: "Threads", url: "https://www.threads.net/@silachomka" },
+  { name: "TikTok", url: "https://www.tiktok.com/@silachomka" },
+  { name: "YouTube", url: "https://www.youtube.com/@silachomka" },
+];
+
+let cachedSocialLinks = null;
+let lastSelectedSocialUrl = null;
+
+function normalizePlatformName(name) {
+  if (!name) return "Instagram";
+  const str = String(name).trim();
+  if (/twitter/i.test(str) || str.toLowerCase() === "x") return "X";
+  if (/instagram/i.test(str)) return "Instagram";
+  if (/threads/i.test(str)) return "Threads";
+  if (/tiktok/i.test(str)) return "TikTok";
+  if (/youtube/i.test(str)) return "YouTube";
+  return str;
 }
 
 export default function GalleryPostModal({
@@ -25,11 +47,45 @@ export default function GalleryPostModal({
 }) {
   const [activeSlide, setActiveSlide] = useState(0);
   const [prevPostId, setPrevPostId] = useState(post?.id);
+  const [socialOptions, setSocialOptions] = useState(cachedSocialLinks || FALLBACK_GALLERY_SOCIALS);
 
   if (post?.id !== prevPostId) {
     setPrevPostId(post?.id);
     setActiveSlide(0);
   }
+
+  // Fetch gallery-eligible social links once and cache
+  useEffect(() => {
+    if (cachedSocialLinks) return;
+    fetch("/api/social-links")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const eligible = Array.isArray(data.galleryEligible) && data.galleryEligible.length > 0
+          ? data.galleryEligible
+          : Array.isArray(data.artist) && data.artist.length > 0
+            ? data.artist
+            : null;
+        if (eligible && eligible.length > 0) {
+          cachedSocialLinks = eligible;
+          setSocialOptions(eligible);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch gallery social links:", err);
+      });
+  }, []);
+
+  // Pick random social link with session anti-repeat logic
+  const selectedSocial = useMemo(() => {
+    const list = socialOptions.length > 0 ? socialOptions : FALLBACK_GALLERY_SOCIALS;
+    const candidates = list.length > 1
+      ? list.filter((s) => s.url !== lastSelectedSocialUrl)
+      : list;
+    const pick = candidates[Math.floor(Math.random() * candidates.length)] || list[0];
+    lastSelectedSocialUrl = pick.url;
+    return pick;
+  }, [post?.id, socialOptions]);
 
   /* Keyboard navigation (Escape, ArrowLeft, ArrowRight) */
   const handleKeyDown = useCallback(
@@ -80,7 +136,10 @@ export default function GalleryPostModal({
           onClick={onClose}
           aria-label="Close post viewer"
         >
-          ✕
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
         )}
 
@@ -201,7 +260,11 @@ export default function GalleryPostModal({
                 <div>
                   <div className="gallery-author-name">
                     <span>silachomka</span>
-                    <span className="gallery-verified-badge" title="Official Archive">✓</span>
+                    <span className="gallery-verified-badge" title="Official Archive" aria-label="Official Archive">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </span>
                   </div>
                   <span className="gallery-author-sub">
                     {post.category} · Source: {post.source || DEFAULT_SOURCE}
@@ -240,16 +303,17 @@ export default function GalleryPostModal({
                 <Link to={post.link} className="gallery-modal-cta-btn" onClick={onClose}>
                   Open Release Project <RightArrowIcon size={14} />
                 </Link>
-              ) : (
+              ) : selectedSocial ? (
                 <a
-                  href="https://www.instagram.com/silachomka/?__pwa=1"
+                  href={selectedSocial.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="gallery-modal-cta-btn"
+                  aria-label={`Follow silachomka on ${normalizePlatformName(selectedSocial.name || selectedSocial.platform)}`}
                 >
-                  Follow on Instagram <UpRightArrowIcon size={14} />
+                  Follow on {normalizePlatformName(selectedSocial.name || selectedSocial.platform)} <UpRightArrowIcon size={14} />
                 </a>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

@@ -63,6 +63,7 @@ const AdminMusicPage = () => {
   const [releaseTimePart, setReleaseTimePart] = useState("00:00");
   const [isCustomDescription, setIsCustomDescription] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveState, setSaveState] = useState("IDLE"); // 'IDLE' | 'SAVING' | 'SAVED'
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -122,12 +123,13 @@ const AdminMusicPage = () => {
       primary_artist: "silachomka",
       description: defaultDesc,
       cover_asset_id: null,
+      preview_asset_id: null,
       platforms: {},
       sources: defaultSources,
       edition: 1,
       feats_silachomka: false,
       produced_by_silachomka: true,
-      status: "PUBLISHED"
+      status: "DRAFT"
     });
     setReleaseDatePart(today);
     setReleaseTimePart("12:00");
@@ -136,6 +138,7 @@ const AdminMusicPage = () => {
     setView("CREATE");
     setError(null);
     setSaveSuccess(false);
+    setSaveState("IDLE");
   };
 
   const handleEditClick = (release) => {
@@ -158,6 +161,7 @@ const AdminMusicPage = () => {
 
     setCurrentRelease({
       ...release,
+      preview_asset_id: release.preview_asset_id || null,
       sources: currentSources,
       platforms: release.platforms && typeof release.platforms === "object" ? release.platforms : {},
       display_date: release.display_date || formatReleaseDisplayDate(release.release_date)
@@ -169,6 +173,7 @@ const AdminMusicPage = () => {
     setView("EDIT");
     setError(null);
     setSaveSuccess(false);
+    setSaveState("IDLE");
   };
 
   const handleCancelForm = (e) => {
@@ -176,10 +181,12 @@ const AdminMusicPage = () => {
     setView("LIST");
     setCurrentRelease(null);
     setError(null);
+    setSaveState("IDLE");
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    setSaveState("IDLE");
     setCurrentRelease(prev => ({ 
       ...prev, 
       [name]: type === "checkbox" ? checked : value 
@@ -187,6 +194,7 @@ const AdminMusicPage = () => {
   };
 
   const handleDateTimeChange = (newDatePart, newTimePart) => {
+    setSaveState("IDLE");
     setReleaseDatePart(newDatePart);
     setReleaseTimePart(newTimePart);
     if (newDatePart) {
@@ -202,6 +210,7 @@ const AdminMusicPage = () => {
   };
 
   const handleTitleOrArtistOrSourcesChange = (updatedFields) => {
+    setSaveState("IDLE");
     setCurrentRelease(prev => {
       const next = { ...prev, ...updatedFields };
       if (!isCustomDescription) {
@@ -217,6 +226,7 @@ const AdminMusicPage = () => {
 
   const handleRegenerateDescription = () => {
     if (!currentRelease) return;
+    setSaveState("IDLE");
     const desc = generateReleaseDescription({
       title: currentRelease.title,
       primary_artist: currentRelease.primary_artist,
@@ -230,6 +240,7 @@ const AdminMusicPage = () => {
   const handleAddSource = (e) => {
     e.preventDefault();
     if (!newSourceInput.trim()) return;
+    setSaveState("IDLE");
     const trimmed = newSourceInput.trim();
     setCurrentRelease(prev => {
       const currentSources = Array.isArray(prev.sources) ? prev.sources : [];
@@ -249,6 +260,7 @@ const AdminMusicPage = () => {
   };
 
   const handleRemoveSource = (sourceToRemove) => {
+    setSaveState("IDLE");
     setCurrentRelease(prev => {
       const currentSources = Array.isArray(prev.sources) ? prev.sources : [];
       const newSources = currentSources.filter(s => s !== sourceToRemove);
@@ -287,14 +299,24 @@ const AdminMusicPage = () => {
     // Canonical display date derived from release timestamp
     const canonicalDisplayDate = formatReleaseDisplayDate(currentRelease.release_date);
 
+    // Automatic Status Determination
+    const relDate = new Date(currentRelease.release_date);
+    const isFuture = !isNaN(relDate.getTime()) && relDate > new Date();
+    let targetStatus = currentRelease.status;
+    if (targetStatus !== "DRAFT" && targetStatus !== "ARCHIVED") {
+      targetStatus = isFuture ? "SCHEDULED" : "PUBLISHED";
+    }
+
     try {
       const payload = {
         ...currentRelease,
+        status: targetStatus,
         slug,
-        display_date: canonicalDisplayDate
+        display_date: canonicalDisplayDate,
+        preview_asset_id: currentRelease.preview_asset_id || null
       };
 
-      const nullableFields = ["number", "display_date", "description", "cover_asset_id"];
+      const nullableFields = ["number", "display_date", "description", "cover_asset_id", "preview_asset_id"];
       nullableFields.forEach(field => {
         if (payload[field] === "") {
           payload[field] = null;
@@ -312,6 +334,7 @@ const AdminMusicPage = () => {
       }
 
       setIsSaving(true);
+      setSaveState("SAVING");
       if (view === "CREATE") {
         const saved = await adminApi.createRelease(payload);
         await fetchData();
@@ -323,10 +346,11 @@ const AdminMusicPage = () => {
         setCurrentRelease(updated);
       }
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 4000);
+      setSaveState("SAVED");
       setError(null);
     } catch (err) {
       setError(err.message || "Failed to save release.");
+      setSaveState("IDLE");
     } finally {
       setIsSaving(false);
     }
@@ -717,6 +741,7 @@ const AdminMusicPage = () => {
               assetType="IMAGE"
               value={currentRelease.cover_asset_id}
               onChange={(id, assetRecord) => {
+                setSaveState("IDLE");
                 setCurrentRelease(prev => ({ ...prev, cover_asset_id: id }));
                 if (assetRecord) {
                   setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
@@ -727,20 +752,45 @@ const AdminMusicPage = () => {
             />
           </div>
 
+          {/* PREVIEW AUDIO (MP3) PICKER */}
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
+            <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>4. Preview Audio (Optional Pre-Release Snippet)</h3>
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 12px 0" }}>
+              Upload an MP3 for pre-release listening (plays a 30-second random preview on coming-soon release pages and the homepage). This is strictly separate from the final release tracks.
+            </p>
+            <MediaAssetPicker
+              label="Preview Audio (MP3)"
+              assetType="AUDIO"
+              value={currentRelease.preview_asset_id}
+              onChange={(id, assetRecord) => {
+                setSaveState("IDLE");
+                setCurrentRelease(prev => ({ ...prev, preview_asset_id: id }));
+                if (assetRecord) {
+                  setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
+                }
+              }}
+              disabled={isSaving}
+              hint="Select or upload an MP3 audio snippet for pre-release playback."
+            />
+          </div>
+
           {/* PROJECT STREAMING LINKS */}
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
-            <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>4. Project Streaming Links</h3>
+            <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>5. Project Streaming Links</h3>
             <PlatformLinksEditor
               label="Release Streaming Links (Spotify, Apple Music, YouTube Music, etc.)"
               value={currentRelease.platforms}
-              onChange={(platforms) => setCurrentRelease(prev => ({ ...prev, platforms }))}
+              onChange={(platforms) => {
+                setSaveState("IDLE");
+                setCurrentRelease(prev => ({ ...prev, platforms }));
+              }}
               disabled={isSaving}
             />
           </div>
 
           <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
             <button type="submit" className="primary-button" disabled={isSaving}>
-              {isSaving ? "Saving Project..." : "Save Project Metadata"}
+              {saveState === "SAVING" ? "Saving…" : saveState === "SAVED" ? "Saved" : "Save Project Metadata"}
             </button>
           </div>
 

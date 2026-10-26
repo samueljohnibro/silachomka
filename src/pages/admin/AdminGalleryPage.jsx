@@ -151,14 +151,19 @@ const AdminGalleryPage = () => {
     try {
       if (target === "primary") {
         const file = files[0];
-        const res = await adminApi.uploadMediaAsset(file);
-        const newAsset = res.asset;
+        const isVideo = file.type.startsWith("video/");
+        const res = await adminApi.uploadMediaAsset(file, isVideo ? "VIDEO" : "IMAGE");
+        const newAsset = res?.asset || res;
 
-        // Add to mediaAssets state immediately
-        setMediaAssets((prev) => [newAsset, ...prev]);
+        if (!newAsset || !newAsset.id) {
+          throw new Error("Upload succeeded but invalid asset record returned.");
+        }
+
+        // Add to mediaAssets state immediately (deduplicated)
+        setMediaAssets((prev) => [newAsset, ...prev.filter(a => a && a.id !== newAsset.id)]);
 
         // Auto-detect post type based on file MIME
-        const isVid = file.type.startsWith("video/") || newAsset.asset_type === "VIDEO";
+        const isVid = isVideo || newAsset.asset_type === "VIDEO" || newAsset.mime_type?.startsWith("video/");
         setCurrentPost((prev) => ({
           ...prev,
           primary_asset_id: newAsset.id,
@@ -167,18 +172,26 @@ const AdminGalleryPage = () => {
       } else {
         // Carousel multi-upload
         const newSlides = [];
+        const addedAssets = [];
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          const res = await adminApi.uploadMediaAsset(file);
-          const newAsset = res.asset;
-          setMediaAssets((prev) => [newAsset, ...prev]);
+          const isVideo = file.type.startsWith("video/");
+          const res = await adminApi.uploadMediaAsset(file, isVideo ? "VIDEO" : "IMAGE");
+          const newAsset = res?.asset || res;
+          if (!newAsset || !newAsset.id) continue;
+          addedAssets.push(newAsset);
 
-          const isVid = file.type.startsWith("video/") || newAsset.asset_type === "VIDEO";
+          const isVid = isVideo || newAsset.asset_type === "VIDEO" || newAsset.mime_type?.startsWith("video/");
           newSlides.push({
             asset_id: newAsset.id,
             slide_type: isVid ? "video" : "image",
             sort_order: (currentPost.carouselSlides?.length || 0) + i,
           });
+        }
+
+        if (addedAssets.length > 0) {
+          const newIds = new Set(addedAssets.map(a => a.id));
+          setMediaAssets((prev) => [...addedAssets, ...prev.filter(a => a && !newIds.has(a.id))]);
         }
 
         setCurrentPost((prev) => ({
@@ -189,6 +202,7 @@ const AdminGalleryPage = () => {
         }));
       }
     } catch (err) {
+      console.error("Gallery upload error:", err);
       setError(err.message || "Failed to upload file.");
     } finally {
       setIsUploadingMedia(false);
@@ -323,7 +337,7 @@ const AdminGalleryPage = () => {
     }
   };
 
-  const getAssetObj = (assetId) => mediaAssets.find((a) => a.id === assetId);
+  const getAssetObj = (assetId) => mediaAssets.find((a) => a && a.id === assetId);
 
   // Sorting
   const sortedPosts = [...posts].sort((a, b) => {
@@ -334,6 +348,7 @@ const AdminGalleryPage = () => {
 
   // Filtered media assets for library picker
   const filteredLibraryAssets = mediaAssets.filter((a) => {
+    if (!a) return false;
     if (!librarySearch.trim()) return true;
     const q = librarySearch.toLowerCase();
     return (

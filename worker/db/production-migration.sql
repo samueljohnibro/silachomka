@@ -896,4 +896,13 @@ BEGIN
     RAISE NOTICE '[VERIFICATION PASSED] All 13 tables, 8 enums, columns, and constraints verified successfully.';
 END $$;
 
+-- ============================================================================
+-- STAGE 25 MIGRATION: PREVIEW AUDIO & GALLERY SOCIAL POST ELIGIBILITY
+-- ============================================================================
+ALTER TABLE releases 
+ADD COLUMN IF NOT EXISTS preview_asset_id UUID REFERENCES media_assets(id);
+
+ALTER TABLE social_links 
+ADD COLUMN IF NOT EXISTS show_on_gallery_posts BOOLEAN DEFAULT false;
+
 COMMIT;

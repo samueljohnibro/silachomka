@@ -58,17 +58,21 @@ adminApp.post('/releases', async (c) => {
   if (!body.slug || !body.title || !body.release_date || !body.type) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
-  // Scheduling logic: if scheduled_at in future and not draft, set SCHEDULED
-  let status = body.status || 'DRAFT'
-  const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
-  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
-    status = 'SCHEDULED'
+  // Automatic status determination:
+  // If release_date is in future (> now), status is SCHEDULED (unless explicitly DRAFT)
+  // If release_date <= now, status is PUBLISHED (unless explicitly DRAFT or ARCHIVED)
+  const relDate = new Date(body.release_date)
+  const isFuture = !isNaN(relDate.getTime()) && relDate > new Date()
+  let status = body.status || (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
+    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
   }
+  const scheduledAt = isFuture ? relDate.toISOString() : (body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null)
 
   try {
     const rows = await sql`
-      INSERT INTO releases (slug, number, title, edition, release_date, display_date, type, primary_artist, feats_silachomka, produced_by_silachomka, description, cover_asset_id, sources, platforms, status, scheduled_at)
-      VALUES (${body.slug}, ${body.number || null}, ${body.title}, ${body.edition || 1}, ${body.release_date}, ${body.display_date || null}, ${body.type}, ${body.primary_artist || 'silachomka'}, ${body.feats_silachomka || false}, ${body.produced_by_silachomka !== false}, ${body.description || null}, ${body.cover_asset_id || null}, ${body.sources ? JSON.stringify(body.sources) : null}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${status}, ${scheduledAt})
+      INSERT INTO releases (slug, number, title, edition, release_date, display_date, type, primary_artist, feats_silachomka, produced_by_silachomka, description, cover_asset_id, preview_asset_id, sources, platforms, status, scheduled_at)
+      VALUES (${body.slug}, ${body.number || null}, ${body.title}, ${body.edition || 1}, ${body.release_date}, ${body.display_date || null}, ${body.type}, ${body.primary_artist || 'silachomka'}, ${body.feats_silachomka || false}, ${body.produced_by_silachomka !== false}, ${body.description || null}, ${body.cover_asset_id || null}, ${body.preview_asset_id || null}, ${body.sources ? JSON.stringify(body.sources) : null}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${status}, ${scheduledAt})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'releases', rows[0].id, null, rows[0])
@@ -94,11 +98,13 @@ adminApp.put('/releases/:id', async (c) => {
   const e = existing[0]
   const up = { ...e, ...body }
 
-  let status = up.status
-  const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
-  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
-    status = 'SCHEDULED'
+  const relDate = new Date(up.release_date)
+  const isFuture = !isNaN(relDate.getTime()) && relDate > new Date()
+  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
+    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
   }
+  const scheduledAt = isFuture ? relDate.toISOString() : (up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null)
 
   try {
     const rows = await sql`
@@ -115,6 +121,7 @@ adminApp.put('/releases/:id', async (c) => {
         produced_by_silachomka = ${up.produced_by_silachomka},
         description = ${up.description},
         cover_asset_id = ${up.cover_asset_id},
+        preview_asset_id = ${up.preview_asset_id || null},
         sources = ${up.sources ? JSON.stringify(body.sources) : null},
         platforms = ${up.platforms ? JSON.stringify(body.platforms) : null},
         status = ${status},
@@ -275,10 +282,11 @@ adminApp.post('/beats', async (c) => {
   if (!body.slug || !body.title) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
-  let status = body.status || 'DRAFT'
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
-  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
-    status = 'SCHEDULED'
+  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
+  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
+    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
   }
 
   try {
@@ -316,10 +324,11 @@ adminApp.put('/beats/:id', async (c) => {
   const up = { ...e, ...body }
   const createdAt = up.created_at ? new Date(up.created_at).toISOString() : e.created_at
 
-  let status = up.status
   const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
-  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
-    status = 'SCHEDULED'
+  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
+  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
+    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
   }
 
   try {
@@ -391,10 +400,11 @@ adminApp.post('/music-videos', async (c) => {
   if (!body.slug || !body.title || !body.youtube_id || !body.youtube_url) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
-  let status = body.status || 'DRAFT'
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
-  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
-    status = 'SCHEDULED'
+  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
+  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
+    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
   }
 
   try {
@@ -428,10 +438,11 @@ adminApp.put('/music-videos/:id', async (c) => {
   const up = { ...e, ...body }
   const createdAt = up.created_at ? new Date(up.created_at).toISOString() : e.created_at
 
-  let status = up.status
   const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
-  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
-    status = 'SCHEDULED'
+  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
+  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
+    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
   }
 
   try {
@@ -577,10 +588,11 @@ adminApp.post('/gallery-posts', async (c) => {
   if (!body.post_type || !body.post_date) return c.json({ error: 'Missing required fields (post_type, post_date)' }, 400)
   if (!isValidSlug(slug)) return c.json({ error: 'Invalid slug' }, 400)
 
-  let status = body.status || 'DRAFT'
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
-  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
-    status = 'SCHEDULED'
+  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
+  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
+    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
   }
 
   // Derive canonical display date automatically
@@ -649,10 +661,11 @@ adminApp.put('/gallery-posts/:id', async (c) => {
   const e = existing[0]
   const up = { ...e, ...body }
 
-  let status = up.status
   const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
-  if (scheduledAt && new Date(scheduledAt) > new Date() && status !== 'DRAFT') {
-    status = 'SCHEDULED'
+  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
+  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
+    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
   }
 
   // Derive canonical display date automatically from post_date
@@ -888,7 +901,9 @@ adminApp.post('/media-assets/upload', async (c) => {
     const mimeMap = {
       jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
       gif: 'image/gif', webp: 'image/webp', mp3: 'audio/mpeg',
-      wav: 'audio/wav', mp4: 'video/mp4', m4a: 'audio/mp4'
+      wav: 'audio/wav', mp4: 'video/mp4', m4a: 'audio/mp4',
+      mov: 'video/quicktime', webm: 'video/webm', aac: 'audio/aac',
+      ogg: 'audio/ogg'
     }
     const detectedMime = file.type || mimeMap[ext] || (assetType === 'AUDIO' ? 'audio/mpeg' : assetType === 'VIDEO' ? 'video/mp4' : 'image/jpeg')
 
@@ -959,8 +974,8 @@ adminApp.post('/social-links', async (c) => {
 
   try {
     const rows = await sql`
-      INSERT INTO social_links (name, handle, url, platform, category, role, link_type, sort_order, is_active)
-      VALUES (${body.name}, ${body.handle || null}, ${body.url}, ${body.platform || null}, ${body.category || null}, ${body.role || null}, ${body.link_type || 'ARTIST'}, ${body.sort_order || 0}, ${body.is_active !== false})
+      INSERT INTO social_links (name, handle, url, platform, category, role, link_type, sort_order, is_active, show_on_gallery_posts)
+      VALUES (${body.name}, ${body.handle || null}, ${body.url}, ${body.platform || null}, ${body.category || null}, ${body.role || null}, ${body.link_type || 'ARTIST'}, ${body.sort_order || 0}, ${body.is_active !== false}, ${body.show_on_gallery_posts === true})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'social_links', rows[0].id, null, rows[0])
@@ -990,6 +1005,7 @@ adminApp.put('/social-links/:id', async (c) => {
         link_type = ${up.link_type},
         sort_order = ${up.sort_order},
         is_active = ${up.is_active},
+        show_on_gallery_posts = ${up.show_on_gallery_posts === true},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *

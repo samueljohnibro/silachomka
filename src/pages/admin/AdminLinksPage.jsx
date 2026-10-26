@@ -20,6 +20,7 @@ const AdminLinksPage = () => {
   
   const [currentLink, setCurrentLink] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveState, setSaveState] = useState("IDLE"); // 'IDLE' | 'SAVING' | 'SAVED'
   const [saveSuccess, setSaveSuccess] = useState(false);
   
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -52,18 +53,22 @@ const AdminLinksPage = () => {
       role: "",
       link_type: "ARTIST",
       sort_order: 0,
-      is_active: true
+      is_active: true,
+      show_on_gallery_posts: false
     });
     setView("CREATE");
     setError(null);
+    setSaveState("IDLE");
   };
 
   const handleEditClick = (link) => {
     setCurrentLink({
-      ...link
+      ...link,
+      show_on_gallery_posts: link.show_on_gallery_posts === true
     });
     setView("EDIT");
     setError(null);
+    setSaveState("IDLE");
   };
 
   const handleCancelForm = (e) => {
@@ -71,10 +76,12 @@ const AdminLinksPage = () => {
     setView("LIST");
     setCurrentLink(null);
     setError(null);
+    setSaveState("IDLE");
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    setSaveState("IDLE");
     setCurrentLink(prev => ({ 
       ...prev, 
       [name]: type === "checkbox" ? checked : value 
@@ -91,7 +98,10 @@ const AdminLinksPage = () => {
     }
 
     try {
-      const payload = { ...currentLink };
+      const payload = { 
+        ...currentLink,
+        show_on_gallery_posts: currentLink.show_on_gallery_posts === true
+      };
       const nullableFields = ["handle", "platform", "category", "role"];
       
       nullableFields.forEach(field => {
@@ -107,6 +117,7 @@ const AdminLinksPage = () => {
       }
 
       setIsSaving(true);
+      setSaveState("SAVING");
       if (view === "CREATE") {
         await adminApi.createSocialLink(payload);
       } else {
@@ -116,9 +127,11 @@ const AdminLinksPage = () => {
       await fetchLinks();
       setView("LIST");
       setSaveSuccess(true);
+      setSaveState("SAVED");
       setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
       setError(err.message || "Failed to save link.");
+      setSaveState("IDLE");
     } finally {
       setIsSaving(false);
     }
@@ -197,16 +210,28 @@ const AdminLinksPage = () => {
             </div>
           </div>
           
-          <div className="studio-field" style={{ textAlign: "left", marginTop: 8 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: 14, color: "var(--text-h)" }}>
-              <input type="checkbox" name="is_active" checked={currentLink.is_active || false} onChange={handleChange} disabled={isSaving} />
-              Is Active (Visible)
-            </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
+            <div className="studio-field" style={{ textAlign: "left" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: 14, color: "var(--text-h)" }}>
+                <input type="checkbox" name="is_active" checked={currentLink.is_active || false} onChange={handleChange} disabled={isSaving} />
+                Is Active (Visible)
+              </label>
+            </div>
+
+            <div className="studio-field" style={{ textAlign: "left" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: 14, color: "var(--text-h)" }}>
+                <input type="checkbox" name="show_on_gallery_posts" checked={currentLink.show_on_gallery_posts || false} onChange={handleChange} disabled={isSaving} />
+                Show on Gallery Posts (Eligible for Random CTA)
+              </label>
+              <p style={{ margin: "4px 0 0 24px", fontSize: 11, color: "var(--muted)" }}>
+                When enabled, this link is included in the rotation of "Follow on [Platform]" CTAs displayed on public gallery posts.
+              </p>
+            </div>
           </div>
 
           <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end" }}>
             <button type="submit" className="primary-button" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Link"}
+              {saveState === "SAVING" ? "Saving…" : saveState === "SAVED" ? "Saved" : "Save Link"}
             </button>
           </div>
 
@@ -275,17 +300,32 @@ const AdminLinksPage = () => {
                   <span style={{ fontSize: 11, textTransform: "uppercase", color: "var(--gold)", fontWeight: 600 }}>
                     {link.link_type || "ARTIST"} {link.platform ? `• ${link.platform}` : ""}
                   </span>
-                  <span style={{
-                    padding: "2px 6px",
-                    borderRadius: "3px",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    background: link.is_active ? "rgba(16, 185, 129, 0.15)" : "rgba(156, 163, 175, 0.15)",
-                    color: link.is_active ? "#34d399" : "var(--muted)"
-                  }}>
-                    {link.is_active ? "Active" : "Hidden"}
-                  </span>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    {link.show_on_gallery_posts && (
+                      <span style={{
+                        padding: "2px 6px",
+                        borderRadius: "3px",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        background: "rgba(223, 194, 125, 0.15)",
+                        color: "var(--gold)"
+                      }}>
+                        Gallery CTA
+                      </span>
+                    )}
+                    <span style={{
+                      padding: "2px 6px",
+                      borderRadius: "3px",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      background: link.is_active ? "rgba(16, 185, 129, 0.15)" : "rgba(156, 163, 175, 0.15)",
+                      color: link.is_active ? "#34d399" : "var(--muted)"
+                    }}>
+                      {link.is_active ? "Active" : "Hidden"}
+                    </span>
+                  </div>
                 </div>
 
                 <h3 style={{ fontSize: 16, margin: "0 0 4px 0", color: "var(--text-h)" }}>{link.name}</h3>
@@ -358,7 +398,21 @@ const AdminLinksPage = () => {
                     </div>
                   </td>
                   <td style={{ padding: "16px" }}>
-                    {link.is_active ? "Active" : "Hidden"}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>{link.is_active ? "Active" : "Hidden"}</span>
+                      {link.show_on_gallery_posts && (
+                        <span style={{
+                          padding: "2px 6px",
+                          borderRadius: "3px",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          background: "rgba(223, 194, 125, 0.15)",
+                          color: "var(--gold)"
+                        }}>
+                          Gallery CTA
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: "16px", textAlign: "right" }}>
                     {deleteConfirmId === link.id ? (

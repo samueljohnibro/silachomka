@@ -63,8 +63,8 @@ export const MediaAssetPicker = ({
   // Accepted file types based on assetType
   const acceptMap = {
     IMAGE: 'image/jpeg,image/png,image/webp,image/gif',
-    AUDIO: 'audio/mpeg,audio/wav,audio/mp3,audio/m4a',
-    VIDEO: 'video/mp4,image/gif'
+    AUDIO: 'audio/mpeg,audio/wav,audio/mp3,audio/m4a,audio/aac,audio/ogg',
+    VIDEO: 'video/mp4,video/webm,video/quicktime,video/x-matroska,image/gif'
   };
   const acceptTypes = acceptMap[assetType] || '*/*';
 
@@ -72,18 +72,30 @@ export const MediaAssetPicker = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Validate reasonable file size (100MB limit)
+    if (file.size > 100 * 1024 * 1024) {
+      setUploadError('File size exceeds the 100MB limit. Please compress or select a smaller file.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setIsUploading(true);
     setUploadError(null);
 
     try {
-      const uploadedRecord = await adminApi.uploadMediaAsset(file, assetType);
+      const res = await adminApi.uploadMediaAsset(file, assetType);
+      const uploadedRecord = res?.asset || res;
+      if (!uploadedRecord || !uploadedRecord.id) {
+        throw new Error('Upload failed: server did not return a valid asset record.');
+      }
+
       const fullRecord = {
         ...uploadedRecord,
         has_file_data: true,
         url: uploadedRecord.url || `/api/media/asset/${uploadedRecord.id}`
       };
       // Immediately inject into local state so selectedAsset resolves without waiting for network re-fetch
-      setAssets(prev => [fullRecord, ...prev.filter(a => a.id !== fullRecord.id)]);
+      setAssets(prev => [fullRecord, ...prev.filter(a => a && a.id !== fullRecord.id)]);
       onChange(fullRecord.id, fullRecord);
       setShowLibrarySelect(false);
       await fetchAssets();
@@ -238,17 +250,13 @@ export const MediaAssetPicker = ({
           )}
 
           {assetType === 'VIDEO' && (
-            <div style={{ position: 'relative', width: '56px', height: '56px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', background: '#000', border: '1px solid var(--border)' }}>
-              <img
+            <div style={{ position: 'relative', width: '72px', height: '56px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden', background: '#000', border: '1px solid var(--border)' }}>
+              <video
                 src={previewUrl}
-                alt="Visualizer"
+                muted
+                playsInline
+                preload="metadata"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => {
-                  if (!e.target.dataset.fallbackTried) {
-                    e.target.dataset.fallbackTried = 'true';
-                    e.target.src = '/og-image.png';
-                  }
-                }}
               />
             </div>
           )}
@@ -284,7 +292,7 @@ export const MediaAssetPicker = ({
               style={{ background: 'transparent', color: 'var(--muted)', borderColor: 'transparent', fontSize: '12px', padding: '4px 8px' }}
               title="Remove file reference"
             >
-              ✕ Remove
+              Remove
             </button>
           </div>
         </div>
@@ -316,7 +324,12 @@ export const MediaAssetPicker = ({
               </>
             ) : (
               <>
-                <span>📁</span> Select & Upload File
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span>Select & Upload File</span>
               </>
             )}
           </button>

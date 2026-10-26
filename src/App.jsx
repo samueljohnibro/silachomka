@@ -42,6 +42,7 @@ import MediaSlideshow from "./components/MediaSlideshow";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
 import ReleasePage, { TrackRow } from "./components/ReleasePage";
 import GalleryPostModal from "./components/GalleryPostModal";
+import RandomPreviewPlayer from "./components/RandomPreviewPlayer";
 import VideosSection from "./components/VideosSection";
 import BeatsPage from "./pages/BeatsPage";
 import BeatDetailPage from "./pages/BeatDetailPage";
@@ -628,6 +629,121 @@ function HomeHero() {
         <span>
           SC
         </span>
+      </div>
+    </section>
+  );
+}
+
+/* =========================================================
+   UPCOMING RELEASE (COMING SOON)
+   ========================================================= */
+
+function UpcomingReleaseSection({ release }) {
+  if (!release) return null;
+
+  const targetTime = useMemo(() => {
+    return new Date(release.release_date || release.date).getTime();
+  }, [release.release_date, release.date]);
+
+  const [timeLeft, setTimeLeft] = useState(() => Math.max(0, targetTime - Date.now()));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeLeft(Math.max(0, targetTime - Date.now()));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [targetTime]);
+
+  const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((timeLeft / (1000 * 60 * 60)) % 24);
+  const minutes = Math.floor((timeLeft / 1000 / 60) % 60);
+  const seconds = Math.floor((timeLeft / 1000) % 60);
+
+  return (
+    <section className="upcoming-section">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow upcoming-eyebrow">
+            COMING SOON
+          </p>
+
+          <h2>{release.title}</h2>
+          {release.artist && release.artist !== "silachomka" && (
+            <p className="release-artist">{release.artist}</p>
+          )}
+        </div>
+
+        <span className="upcoming-launch-date">
+          Official Launch: {release.displayDate}
+        </span>
+      </div>
+
+      <div className="upcoming-release-card">
+        <Link
+          to={`/release/${release.slug}`}
+          className="upcoming-art-frame"
+          aria-label={`Open ${release.title} pre-release`}
+        >
+          {release.cover && (
+            <img
+              src={release.cover}
+              alt={`${release.title} upcoming cover art`}
+              className="upcoming-cover-image"
+              loading="eager"
+              decoding="async"
+              onError={(e) => {
+                if (!e.target.dataset.tried) {
+                  e.target.dataset.tried = "true";
+                  e.target.src = "/og-image.png";
+                }
+              }}
+            />
+          )}
+          <span className="upcoming-cover-overlay" aria-hidden="true" />
+          <span className="upcoming-art-badge">COMING SOON</span>
+        </Link>
+
+        <div className="upcoming-details">
+          <div className="upcoming-countdown-container">
+            <span className="upcoming-countdown-label">COUNTDOWN TO OFFICIAL RELEASE</span>
+            <div className="countdown-timer-grid">
+              <div className="countdown-timer-box">
+                <span className="countdown-timer-num">{String(days).padStart(2, "0")}</span>
+                <span className="countdown-timer-unit">Days</span>
+              </div>
+              <div className="countdown-timer-colon">:</div>
+              <div className="countdown-timer-box">
+                <span className="countdown-timer-num">{String(hours).padStart(2, "0")}</span>
+                <span className="countdown-timer-unit">Hours</span>
+              </div>
+              <div className="countdown-timer-colon">:</div>
+              <div className="countdown-timer-box">
+                <span className="countdown-timer-num">{String(minutes).padStart(2, "0")}</span>
+                <span className="countdown-timer-unit">Minutes</span>
+              </div>
+              <div className="countdown-timer-colon">:</div>
+              <div className="countdown-timer-box">
+                <span className="countdown-timer-num">{String(seconds).padStart(2, "0")}</span>
+                <span className="countdown-timer-unit">Seconds</span>
+              </div>
+            </div>
+          </div>
+
+          {release.preview_audio_url && (
+            <div className="upcoming-preview-wrap">
+              <RandomPreviewPlayer
+                audioUrl={release.preview_audio_url}
+                title={`${release.title} Pre-Release Snippet`}
+              />
+            </div>
+          )}
+
+          <div className="upcoming-actions">
+            <Link className="primary-button" to={`/release/${release.slug}`}>
+              View Pre-Release Details
+            </Link>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1479,6 +1595,12 @@ function SocialsSection() {
 function HomePage() {
   const { releases } = useChomkaStore();
 
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const sortedReleases = useMemo(
     () =>
       sortReleasesByDate(
@@ -1489,8 +1611,28 @@ function HomePage() {
     [releases]
   );
 
-  const latestRelease =
-    sortedReleases[0] ?? null;
+  // Future / upcoming releases (release_date > now)
+  // If multiple, show earliest chronologically
+  const upcomingReleases = useMemo(() => {
+    return sortedReleases
+      .filter((r) => {
+        const d = new Date(r.release_date || r.date);
+        return !isNaN(d.getTime()) && d > now;
+      })
+      .sort((a, b) => new Date(a.release_date || a.date).getTime() - new Date(b.release_date || b.date).getTime());
+  }, [sortedReleases, now]);
+
+  const upcomingRelease = upcomingReleases[0] ?? null;
+
+  // Published releases (release_date <= now)
+  const publishedReleases = useMemo(() => {
+    return sortedReleases.filter((r) => {
+      const d = new Date(r.release_date || r.date);
+      return isNaN(d.getTime()) || d <= now;
+    });
+  }, [sortedReleases, now]);
+
+  const latestRelease = publishedReleases[0] ?? null;
 
   const totalTracks = useMemo(
     () =>
@@ -1516,6 +1658,12 @@ function HomePage() {
 
       <main id="top">
         <HomeHero />
+
+        {upcomingRelease && (
+          <UpcomingReleaseSection
+            release={upcomingRelease}
+          />
+        )}
 
         {latestRelease && (
           <LatestReleaseSection
