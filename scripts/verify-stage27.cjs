@@ -169,7 +169,7 @@ async function verifyStage27() {
   const adminMusicCode = fs.readFileSync(path.join(__dirname, "../src/pages/admin/AdminMusicPage.jsx"), "utf8");
   assert(
     !adminMusicCode.includes("4. Preview Audio (Optional — Pre-Release 30s Listening)") &&
-      adminMusicCode.includes("Track Preview Audio (30s Random Pre-Release MP3"),
+      adminMusicCode.includes("Track Preview Audio (MP3"),
     "Req #14: Redundant project-level Preview Audio section removed; track-level Preview MP3 preserved"
   );
 
