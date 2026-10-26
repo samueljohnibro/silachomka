@@ -369,6 +369,39 @@ async function generateSocialPages() {
       imageAlt: "chomkaMUSIC™ Studio Publishing",
     })
   );
+  await writePage(
+    ["privacy"],
+    withSocialMetadata(homeHtml, {
+      title: "Privacy Policy | silachomka",
+      description:
+        "Privacy Policy and transparency disclosures for silachomka. Explains data privacy, local storage keys including silachomka_cookie_consent_v1, and embedded media consent.",
+      canonicalPath: "/privacy",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Privacy Policy | silachomka",
+    })
+  );
+  await writePage(
+    ["cookies"],
+    withSocialMetadata(homeHtml, {
+      title: "Cookie Policy | silachomka",
+      description:
+        "Cookie Policy and consent management for silachomka. Details silachomka_cookie_consent_v1, functional preferences, and embedded media options.",
+      canonicalPath: "/cookies",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Cookie Policy | silachomka",
+    })
+  );
+  await writePage(
+    ["terms"],
+    withSocialMetadata(homeHtml, {
+      title: "Terms & Conditions | silachomka",
+      description:
+        "Terms and conditions of use for silachomka website, music catalog, beat store, and digital assets.",
+      canonicalPath: "/terms",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Terms & Conditions | silachomka",
+    })
+  );
 
   const [liveBeats, liveGallery, liveReleases] = await Promise.all([
     fetchLiveEndpoint("/api/beats"),
