@@ -14,6 +14,7 @@ import {
   SkipForwardIcon,
   LoadingSpinner,
   CrownIcon,
+  ReelIcon,
 } from "../components/Icons";
 // src/pages/BeatDetailPage.jsx
 
@@ -270,21 +271,10 @@ export default function BeatDetailPage() {
       const onLoadedMetadata = () => {
         if (audioRef.current !== audio) return;
         const totalDur = audio.duration || 0;
-        const isFull = playbackModeRef.current === "full";
-        const winDur = isFull ? totalDur : Math.min(PREVIEW_LENGTH, totalDur);
-        const maxStart = isFull ? 0 : Math.max(0, totalDur - winDur);
-        const startOffset = maxStart > 0 ? Math.random() * maxStart : 0;
-
-        previewStartRef.current = startOffset;
-        previewDurationRef.current = winDur;
-        setDurationTime(formatTime(winDur));
+        previewStartRef.current = 0;
+        previewDurationRef.current = totalDur;
+        setDurationTime(formatTime(totalDur));
         setCurrentTime("0:00");
-
-        if (startOffset > 0.05) {
-          try {
-            audio.currentTime = startOffset;
-          } catch {}
-        }
 
         audio
           .play()
@@ -410,17 +400,57 @@ export default function BeatDetailPage() {
     }
   }, [beat, isPlaying, startBeatPlayback]);
 
-  /* Seek handler */
-  const handleSeek = (e) => {
-    if (!audioRef.current || !audioRef.current.duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const nextProgress = Math.max(0, Math.min(clickX / rect.width, 1));
-    const start = previewStartRef.current;
-    const winDur = previewDurationRef.current || audioRef.current.duration;
-    audioRef.current.currentTime = start + nextProgress * winDur;
+  /* Interactive Draggable Seek Handler */
+  const seekBarRef = useRef(null);
+  const [isDraggingSeek, setIsDraggingSeek] = useState(false);
+
+  const seekToClientX = useCallback((clientX) => {
+    const bar = seekBarRef.current;
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    if (!rect.width) return;
+    const nextProgress = Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
     setProgress(nextProgress);
-  };
+    if (audioRef.current && audioRef.current.duration) {
+      const start = previewStartRef.current;
+      const winDur = previewDurationRef.current || audioRef.current.duration;
+      try {
+        audioRef.current.currentTime = start + nextProgress * winDur;
+      } catch {}
+    }
+  }, []);
+
+  const handleSeekPointerDown = useCallback(
+    (e) => {
+      const clientX = e.touches ? e.touches[0]?.clientX : e.clientX;
+      if (typeof clientX === "number") {
+        seekToClientX(clientX);
+      }
+      setIsDraggingSeek(true);
+    },
+    [seekToClientX]
+  );
+
+  useEffect(() => {
+    if (!isDraggingSeek) return undefined;
+    const onMove = (e) => {
+      const clientX = e.touches ? e.touches[0]?.clientX : e.clientX;
+      if (typeof clientX === "number") {
+        seekToClientX(clientX);
+      }
+    };
+    const onUp = () => setIsDraggingSeek(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, [isDraggingSeek, seekToClientX]);
 
   const seekBackward = () => {
     if (!audioRef.current) return;
@@ -659,36 +689,18 @@ export default function BeatDetailPage() {
             )}
           </div>
 
-          {/* Upgraded Full Audio Playback Deck (Req #13 & #16) */}
+          {/* Upgraded Full Audio Playback Deck (Req #7) */}
           <div className="beat-detail-player-deck">
-            {/* Top Row: Playback Mode Toggle (1 MIN / FULL TRACK) & Track Position */}
+            {/* Top Row: Enter Reel Mode Link & Track Position */}
             <div className="beat-detail-player-top">
-              <div
-                className="beats-segmented-group"
-                role="group"
-                aria-label="Audio playback length"
+              <Link
+                to={`/beats?reel=${encodeURIComponent(beat.id)}`}
+                className="beat-enter-reel-btn"
+                title="Open this beat in 9:16 Reel Mode"
               >
-                <button
-                  type="button"
-                  className={`beats-segment-btn ${
-                    playbackMode === "1min" ? "is-active" : ""
-                  }`}
-                  onClick={() => setPlaybackMode("1min")}
-                  aria-pressed={playbackMode === "1min"}
-                >
-                  1 MIN
-                </button>
-                <button
-                  type="button"
-                  className={`beats-segment-btn ${
-                    playbackMode === "full" ? "is-active" : ""
-                  }`}
-                  onClick={() => setPlaybackMode("full")}
-                  aria-pressed={playbackMode === "full"}
-                >
-                  FULL TRACK
-                </button>
-              </div>
+                <ReelIcon size={13} />
+                <span>Enter Reel Mode</span>
+              </Link>
 
               <div className="beat-detail-time-readout">
                 <span>{currentTime}</span>
@@ -697,18 +709,35 @@ export default function BeatDetailPage() {
               </div>
             </div>
 
-            {/* Scrubber Progress Bar */}
+            {/* Interactive Scrubber Progress Bar with Draggable Handle */}
             <div
-              onClick={handleSeek}
-              className="beat-detail-scrubber"
-              role="progressbar"
+              ref={seekBarRef}
+              onMouseDown={handleSeekPointerDown}
+              onTouchStart={handleSeekPointerDown}
+              className={`beat-detail-scrubber ${isDraggingSeek ? "is-dragging" : ""}`}
+              role="slider"
+              tabIndex={0}
+              aria-label="Seek beat playback position"
               aria-valuenow={Math.round(progress * 100)}
-              aria-valuemin="0"
-              aria-valuemax="100"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  seekForward();
+                } else if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  seekBackward();
+                }
+              }}
             >
               <div
                 className="beat-detail-scrubber-fill"
                 style={{ width: `${Math.max(0, Math.min(progress * 100, 100))}%` }}
+              />
+              <div
+                className="reel-seek-thumb"
+                style={{ left: `${Math.max(0, Math.min(progress * 100, 100))}%` }}
               />
             </div>
 

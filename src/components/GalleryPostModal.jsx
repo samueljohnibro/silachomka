@@ -5,14 +5,27 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import ShareLinkBox from "./ShareLinkBox";
 import SocialPostEmbed from "./SocialPostEmbed";
+import GalleryVideoPlayer from "./GalleryVideoPlayer";
 import { absoluteUrl, DEFAULT_SOURCE } from "../data/credits";
 import { formatGalleryDate } from "../utils/dateFormatter";
 
-function isVideoSrc(src, slideObj, post) {
-  if (slideObj?.isVideo || slideObj?.slideType === "video" || slideObj?.assetType === "VIDEO") {
+function isVideoSrc(src, slideObj, post, slideCount = 1) {
+  if (
+    slideObj?.isVideo ||
+    slideObj?.slideType === "video" ||
+    slideObj?.assetType === "VIDEO" ||
+    (slideObj?.mimeType && String(slideObj.mimeType).toLowerCase().startsWith("video/"))
+  ) {
     return true;
   }
-  if (!slideObj && (post?.isVideo || post?.type === "video" || post?.assetType === "VIDEO")) {
+  if (
+    slideCount <= 1 &&
+    (post?.isVideo ||
+      post?.type === "video" ||
+      post?.post_type === "video" ||
+      post?.assetType === "VIDEO" ||
+      (post?.mimeType && String(post.mimeType).toLowerCase().startsWith("video/")))
+  ) {
     return true;
   }
   if (!src || typeof src !== "string") return false;
@@ -126,13 +139,22 @@ export default function GalleryPostModal({
 
   if (!post) return null;
 
-  // Normalize slides whether they are strings or slide objects ({ asset, src, slideType })
-  const rawSlides = Array.isArray(post.slides) ? post.slides : [];
+  // Normalize slides whether they are strings or slide objects ({ asset, src, slideType, isVideo, mimeType, assetType })
+  const rawSlides =
+    Array.isArray(post.slideObjects) && post.slideObjects.length > 0
+      ? post.slideObjects
+      : Array.isArray(post.slides)
+      ? post.slides
+      : [];
   const normalizedSlides = rawSlides
     .map((s) => {
-      if (typeof s === "string") return { src: s, slideType: isVideoSrc(s, null, null) ? "video" : "image" };
+      if (typeof s === "string") {
+        const isVid = isVideoSrc(s, null, post, rawSlides.length);
+        return { src: s, slideType: isVid ? "video" : "image", isVideo: isVid };
+      }
       const url = s?.src || s?.asset || "";
-      return { ...s, src: url };
+      const isVid = isVideoSrc(url, s, post, rawSlides.length);
+      return { ...s, src: url, slideType: isVid ? "video" : "image", isVideo: isVid };
     })
     .filter((s) => Boolean(s.src));
 
@@ -142,7 +164,13 @@ export default function GalleryPostModal({
     normalizedSlides.length > 0
       ? normalizedSlides
       : primaryMediaUrl
-      ? [{ src: primaryMediaUrl, slideType: post.type === "video" ? "video" : "image", isVideo: post.isVideo }]
+      ? [
+          {
+            src: primaryMediaUrl,
+            slideType: isVideoSrc(primaryMediaUrl, null, post, 1) ? "video" : "image",
+            isVideo: isVideoSrc(primaryMediaUrl, null, post, 1),
+          },
+        ]
       : [];
 
   const isCarousel =
@@ -153,8 +181,9 @@ export default function GalleryPostModal({
     : effectiveSlides[0] || { src: primaryMediaUrl };
   const currentSlideSrc = activeSlideObj?.src || primaryMediaUrl;
   const currentIsVideo =
-    isVideoSrc(currentSlideSrc, activeSlideObj, post) ||
+    isVideoSrc(currentSlideSrc, activeSlideObj, post, effectiveSlides.length) ||
     post.slideTypes?.[activeSlide] === "video";
+  const ambientImageSrc = !currentIsVideo ? currentSlideSrc : post.ogImage || post.image || null;
 
   const externalSocialUrl = post.externalSocialUrl || post.external_social_url || null;
   const externalSocialPlatform = post.externalSocialPlatform || post.external_social_platform || null;
@@ -214,19 +243,15 @@ export default function GalleryPostModal({
 
       <div className="gallery-modal-content">
         {/* ===============================================
-            MEDIA VIEWER AREA (Req #17 & #18)
+            MEDIA VIEWER AREA (Req #11 & #15)
             =============================================== */}
         <div className="gallery-modal-media">
           {isCarousel ? (
             <div className="gallery-carousel-wrapper">
               {currentIsVideo ? (
-                <video
+                <GalleryVideoPlayer
                   key={currentSlideSrc}
                   src={currentSlideSrc}
-                  controls
-                  autoPlay
-                  playsInline
-                  loop
                   className="gallery-modal-video"
                 />
               ) : (
@@ -286,12 +311,9 @@ export default function GalleryPostModal({
             </div>
           ) : currentSlideSrc ? (
             currentIsVideo ? (
-              <video
+              <GalleryVideoPlayer
+                key={currentSlideSrc}
                 src={currentSlideSrc}
-                controls
-                autoPlay
-                playsInline
-                loop
                 className="gallery-modal-video"
               />
             ) : (
@@ -430,7 +452,20 @@ export default function GalleryPostModal({
   );
 
   if (embedded) {
-    return <div className="gallery-embedded-shell">{dialog}</div>;
+    return (
+      <div className="gallery-embedded-shell">
+        {ambientImageSrc && (
+          <div className="product-ambient-backdrop" aria-hidden="true">
+            <div
+              className="ambient-image-layer"
+              style={{ backgroundImage: `url(${ambientImageSrc})` }}
+            />
+            <div className="ambient-gradient-overlay" />
+          </div>
+        )}
+        {dialog}
+      </div>
+    );
   }
 
   return (
@@ -440,6 +475,15 @@ export default function GalleryPostModal({
       role="dialog"
       aria-modal="true"
     >
+      {ambientImageSrc && (
+        <div className="product-ambient-backdrop" aria-hidden="true">
+          <div
+            className="ambient-image-layer"
+            style={{ backgroundImage: `url(${ambientImageSrc})` }}
+          />
+          <div className="ambient-gradient-overlay" />
+        </div>
+      )}
       {dialog}
     </div>
   );

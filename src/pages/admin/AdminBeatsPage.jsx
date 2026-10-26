@@ -7,7 +7,32 @@ import AdminSortControl from '../../components/admin/AdminSortControl';
 import AdminViewToggle from '../../components/admin/AdminViewToggle';
 import './admin.css';
 
-const slugify = (text) => (text || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const slugify = (text) =>
+  String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/['’`]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+// Req #2: Normalize genre words to uppercase, preserve lowercase 'x' separator, and append 'TYPE BEAT'
+const normalizeBeatGenre = (raw) => {
+  if (!raw || !String(raw).trim()) return { genre: null, short_genre: null };
+  const stripped = String(raw).trim().replace(/\s+type\s+beat$/i, '').trim();
+  if (!stripped) return { genre: null, short_genre: null };
+  const parts = stripped
+    .split(/\s+[xX×]\s+/)
+    .map((p) => p.trim().toUpperCase())
+    .filter(Boolean);
+  const shortGenre = parts.join(' x ');
+  return {
+    genre: `${shortGenre} TYPE BEAT`,
+    short_genre: shortGenre,
+  };
+};
 
 const AdminBeatsPage = () => {
   const [beats, setBeats] = useState([]);
@@ -159,10 +184,16 @@ const AdminBeatsPage = () => {
       slug = 'beat-' + Date.now();
     }
 
-    // Genre normalization: admin inputs e.g. "Afrobeat" -> stored as "Afrobeat Type Beat", short_genre = "Afrobeat"
-    const baseGenre = (currentBeat.genre || '').replace(/\s+type\s+beat$/i, '').trim();
-    const finalGenre = baseGenre ? `${baseGenre} Type Beat` : null;
-    const finalShortGenre = baseGenre || null;
+    // Req #2: Normalize genre format ("Trap x Rap" -> "TRAP x RAP TYPE BEAT", short_genre = "TRAP x RAP")
+    const { genre: finalGenre, short_genre: finalShortGenre } = normalizeBeatGenre(currentBeat.genre);
+
+    // Req #10: Automatic status determination from release date / schedule
+    const schedDate = currentBeat.scheduled_at ? new Date(currentBeat.scheduled_at) : null;
+    const createdDate = currentBeat.created_at ? new Date(currentBeat.created_at) : null;
+    const isFuture =
+      (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date()) ||
+      (createdDate && !isNaN(createdDate.getTime()) && createdDate > new Date());
+    const targetStatus = isFuture ? 'SCHEDULED' : 'PUBLISHED';
 
     try {
       setIsSaving(true);
@@ -170,6 +201,7 @@ const AdminBeatsPage = () => {
       const payload = {
         ...currentBeat,
         slug,
+        status: targetStatus,
         genre: finalGenre,
         short_genre: finalShortGenre,
       };
@@ -278,10 +310,10 @@ const AdminBeatsPage = () => {
                 value={currentBeat.genre || ''} 
                 onChange={handleChange} 
                 disabled={isSaving} 
-                placeholder="e.g. Afrobeat or Afro Trap" 
+                placeholder="e.g. Trap x Rap or Afro x Alternative" 
               />
               <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
-                Type: <strong style={{ color: 'var(--gold)' }}>{currentBeat.genre?.trim() ? `${currentBeat.genre.trim()} Type Beat` : '—'}</strong>
+                Formatted: <strong style={{ color: 'var(--gold)' }}>{normalizeBeatGenre(currentBeat.genre).genre || '—'}</strong>
               </span>
             </div>
             <div className="studio-field" style={{ textAlign: 'left' }}>
@@ -366,12 +398,57 @@ const AdminBeatsPage = () => {
               <input type="text" name="producer" className="studio-input" value={currentBeat.producer || 'silachomka'} onChange={handleChange} disabled={isSaving} />
             </div>
             <div className="studio-field" style={{ textAlign: 'left' }}>
-              <label>Status</label>
-              <select name="status" className="studio-input" value={currentBeat.status || 'DRAFT'} onChange={handleChange} disabled={isSaving} style={{ height: '48px' }}>
-                <option value="DRAFT">Draft</option>
-                <option value="PUBLISHED">Published</option>
-                <option value="SCHEDULED">Scheduled</option>
-              </select>
+              <label>Lifecycle Status (Automatic)</label>
+              {(() => {
+                const schedDate = currentBeat.scheduled_at ? new Date(currentBeat.scheduled_at) : null;
+                const createdDate = currentBeat.created_at ? new Date(currentBeat.created_at) : null;
+                const isFuture =
+                  (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date()) ||
+                  (createdDate && !isNaN(createdDate.getTime()) && createdDate > new Date());
+                const computedStatus =
+                  view === 'CREATE' && saveState !== 'SAVED'
+                    ? 'DRAFT (WILL ' + (isFuture ? 'SCHEDULE' : 'PUBLISH') + ' ON SAVE)'
+                    : isFuture
+                    ? 'SCHEDULED'
+                    : 'PUBLISHED';
+                return (
+                  <div
+                    className="studio-input"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      height: '44px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      cursor: 'default',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      color:
+                        view === 'CREATE' && saveState !== 'SAVED'
+                          ? '#fbbf24'
+                          : isFuture
+                          ? '#38bdf8'
+                          : '#34d399',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background:
+                          view === 'CREATE' && saveState !== 'SAVED'
+                            ? '#fbbf24'
+                            : isFuture
+                            ? '#38bdf8'
+                            : '#34d399',
+                      }}
+                    />
+                    <span>{computedStatus}</span>
+                  </div>
+                );
+              })()}
             </div>
             <div className="studio-field" style={{ textAlign: 'left' }}>
               <label>Schedule Publication (Optional)</label>

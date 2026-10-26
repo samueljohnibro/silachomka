@@ -10,7 +10,16 @@ import "./admin.css";
 
 const CREDIT_ROLES = ["FEATURING", "PRODUCER", "WRITER", "ENGINEER", "DIRECTOR"];
 
-const slugify = (text) => (text || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const slugify = (text) =>
+  String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/['’`]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
 const AdminTracksPage = () => {
   const [tracks, setTracks] = useState([]);

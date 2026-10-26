@@ -557,13 +557,13 @@ export default function ReleasePage({ release: propRelease }) {
                 <span className="out-now-pill">OUT NOW</span>
               </>
             )}
-            {isFuture && (
-              <>
-                <span>•</span>
-                <span className="coming-soon-pill">COMING SOON</span>
-              </>
-            )}
           </div>
+
+          {isFuture && (
+            <div className="release-coming-soon-subline">
+              <span className="coming-soon-pill">COMING SOON</span>
+            </div>
+          )}
 
           <p className="release-description-text">
             {release.description || statusLeadDescription}

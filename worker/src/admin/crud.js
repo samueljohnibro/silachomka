@@ -9,6 +9,74 @@ adminApp.use('*', adminAuth)
 // Basic validator for slugs
 const isValidSlug = (slug) => typeof slug === 'string' && /^[a-z0-9-]+$/.test(slug)
 
+// Canonical slug generator preserving historical conventions (& -> and, strip apostrophes/diacritics)
+export function slugify(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/['’`]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+// Normalize beat genre to uppercase words with lowercase 'x' separator and 'TYPE BEAT' suffix
+export function normalizeBeatGenre(raw) {
+  if (!raw || !String(raw).trim()) return { genre: null, short_genre: null }
+  const stripped = String(raw).trim().replace(/\s+type\s+beat$/i, '').trim()
+  if (!stripped) return { genre: null, short_genre: null }
+  const parts = stripped.split(/\s+[xX×]\s+/).map(p => p.trim().toUpperCase()).filter(Boolean)
+  const shortGenre = parts.join(' x ')
+  return {
+    genre: `${shortGenre} TYPE BEAT`,
+    short_genre: shortGenre
+  }
+}
+
+async function resolveUniqueReleaseSlug(sql, baseSlug, excludeId = null) {
+  let candidate = baseSlug
+  let suffix = 2
+  while (true) {
+    const conflict = excludeId
+      ? await sql`SELECT id FROM releases WHERE slug = ${candidate} AND id != ${excludeId} LIMIT 1`
+      : await sql`SELECT id FROM releases WHERE slug = ${candidate} LIMIT 1`
+    if (!conflict.length) return candidate
+    candidate = `${baseSlug}-${suffix++}`
+  }
+}
+
+async function inferGalleryPostType(sql, primaryAssetId, slides, fallbackType) {
+  if (Array.isArray(slides) && slides.length > 1) {
+    return 'carousel'
+  }
+  if (Array.isArray(slides) && slides.length === 1 && slides[0]?.slide_type === 'video') {
+    return 'video'
+  }
+  const targetAssetId = primaryAssetId || (Array.isArray(slides) && slides[0]?.asset_id) || null
+  if (targetAssetId) {
+    try {
+      const assetRows = await sql`SELECT asset_type, mime_type, r2_key FROM media_assets WHERE id = ${targetAssetId} LIMIT 1`
+      if (assetRows.length) {
+        const a = assetRows[0]
+        if (
+          a.asset_type === 'VIDEO' ||
+          (a.mime_type && a.mime_type.toLowerCase().startsWith('video/')) ||
+          /\.(mp4|webm|mov)$/i.test(a.r2_key || '')
+        ) {
+          return 'video'
+        }
+        return 'image'
+      }
+    } catch {}
+  }
+  if (fallbackType === 'video' || fallbackType === 'carousel' || fallbackType === 'image') {
+    return fallbackType
+  }
+  return 'image'
+}
+
 // Helper for Audit Logs
 async function logAudit(sql, userId, action, entityType, entityId, oldData, newData) {
   try {
@@ -55,24 +123,24 @@ adminApp.get('/releases/:id', async (c) => {
 adminApp.post('/releases', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
-  if (!body.slug || !body.title || !body.release_date || !body.type) return c.json({ error: 'Missing required fields' }, 400)
-  if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
+  if (body.slug !== undefined && !isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
+  const rawSlug = body.slug || slugify(body.title)
+  if (!rawSlug || !body.title || !body.release_date || !body.type) return c.json({ error: 'Missing required fields' }, 400)
+  if (!isValidSlug(rawSlug)) return c.json({ error: 'Invalid slug' }, 400)
 
-  // Automatic status determination:
-  // If release_date is in future (> now), status is SCHEDULED (unless explicitly DRAFT)
-  // If release_date <= now, status is PUBLISHED (unless explicitly DRAFT or ARCHIVED)
+  const uniqueSlug = await resolveUniqueReleaseSlug(sql, rawSlug)
+
+  // Automatic status determination from release_date / scheduled_at
   const relDate = new Date(body.release_date)
-  const isFuture = !isNaN(relDate.getTime()) && relDate > new Date()
-  let status = body.status || (isFuture ? 'SCHEDULED' : 'PUBLISHED')
-  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
-    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
-  }
-  const scheduledAt = isFuture ? relDate.toISOString() : (body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null)
+  const schedDate = body.scheduled_at ? new Date(body.scheduled_at) : null
+  const isFuture = (!isNaN(relDate.getTime()) && relDate > new Date()) || (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date())
+  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const scheduledAt = isFuture ? (schedDate && !isNaN(schedDate.getTime()) ? schedDate.toISOString() : relDate.toISOString()) : (body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null)
 
   try {
     const rows = await sql`
       INSERT INTO releases (slug, number, title, edition, release_date, display_date, type, primary_artist, feats_silachomka, produced_by_silachomka, description, cover_asset_id, preview_asset_id, sources, platforms, status, scheduled_at)
-      VALUES (${body.slug}, ${body.number || null}, ${body.title}, ${body.edition || 1}, ${body.release_date}, ${body.display_date || null}, ${body.type}, ${body.primary_artist || 'silachomka'}, ${body.feats_silachomka || false}, ${body.produced_by_silachomka !== false}, ${body.description || null}, ${body.cover_asset_id || null}, ${body.preview_asset_id || null}, ${body.sources ? JSON.stringify(body.sources) : null}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${status}, ${scheduledAt})
+      VALUES (${uniqueSlug}, ${body.number || null}, ${body.title}, ${body.edition || 1}, ${body.release_date}, ${body.display_date || null}, ${body.type}, ${body.primary_artist || 'silachomka'}, ${body.feats_silachomka || false}, ${body.produced_by_silachomka !== false}, ${body.description || null}, ${body.cover_asset_id || null}, ${body.preview_asset_id || null}, ${body.sources ? JSON.stringify(body.sources) : null}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${status}, ${scheduledAt})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'releases', rows[0].id, null, rows[0])
@@ -98,13 +166,22 @@ adminApp.put('/releases/:id', async (c) => {
   const e = existing[0]
   const up = { ...e, ...body }
 
-  const relDate = new Date(up.release_date)
-  const isFuture = !isNaN(relDate.getTime()) && relDate > new Date()
-  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
-  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
-    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
+  // When title changes, automatically regenerate slug from the new title
+  const titleChanged = body.title !== undefined && String(body.title).trim() !== String(e.title || '').trim()
+  if (titleChanged) {
+    const baseSlug = slugify(body.title)
+    if (baseSlug && isValidSlug(baseSlug)) {
+      up.slug = await resolveUniqueReleaseSlug(sql, baseSlug, id)
+    }
+  } else if (body.slug !== undefined && body.slug !== e.slug) {
+    up.slug = await resolveUniqueReleaseSlug(sql, body.slug, id)
   }
-  const scheduledAt = isFuture ? relDate.toISOString() : (up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null)
+
+  const relDate = new Date(up.release_date)
+  const schedDate = up.scheduled_at ? new Date(up.scheduled_at) : null
+  const isFuture = (!isNaN(relDate.getTime()) && relDate > new Date()) || (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date())
+  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
+  const scheduledAt = isFuture ? (schedDate && !isNaN(schedDate.getTime()) ? schedDate.toISOString() : relDate.toISOString()) : (up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null)
 
   try {
     const rows = await sql`
@@ -122,14 +199,21 @@ adminApp.put('/releases/:id', async (c) => {
         description = ${up.description},
         cover_asset_id = ${up.cover_asset_id},
         preview_asset_id = ${up.preview_asset_id || null},
-        sources = ${up.sources ? JSON.stringify(body.sources) : null},
-        platforms = ${up.platforms ? JSON.stringify(body.platforms) : null},
+        sources = ${up.sources ? JSON.stringify(body.sources !== undefined ? body.sources : e.sources) : null},
+        platforms = ${up.platforms ? JSON.stringify(body.platforms !== undefined ? body.platforms : e.platforms) : null},
         status = ${status},
         scheduled_at = ${scheduledAt},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `
+    if (up.slug !== e.slug) {
+      await sql`
+        UPDATE gallery_posts
+        SET legacy_link = ${'/release/' + up.slug}
+        WHERE legacy_link = ${'/release/' + e.slug}
+      `
+    }
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'releases', id, e, rows[0])
     if (rows[0].status === 'PUBLISHED' && e.status !== 'PUBLISHED') {
       await queueSubscriberNotifications(sql, 'release', rows[0].id, rows[0].title)
@@ -283,22 +367,20 @@ adminApp.post('/beats', async (c) => {
   if (!body.slug || !body.title) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
+  const normGenre = normalizeBeatGenre(body.genre || body.short_genre)
+  const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
-  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
-  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
-  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
-    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
-  }
+  const isFuture = (scheduledAt && new Date(scheduledAt) > new Date()) || (createdAt && new Date(createdAt) > new Date())
+  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
 
   try {
-    const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
     const priceBasic = body.price_basic !== undefined && body.price_basic !== '' && body.price_basic !== null ? Number(body.price_basic) : 15000.00
     const pricePremium = body.price_premium !== undefined && body.price_premium !== '' && body.price_premium !== null ? Number(body.price_premium) : 30000.00
     const priceExclusive = body.price_exclusive !== undefined && body.price_exclusive !== '' && body.price_exclusive !== null ? Number(body.price_exclusive) : 60000.00
 
     const rows = await sql`
       INSERT INTO beats (slug, title, genre, short_genre, categories, bpm, beat_key, description, mood, producer, audio_asset_id, image_asset_id, video_asset_id, selar_basic_url, selar_premium_url, selar_ultimate_url, status, scheduled_at, created_at, price_basic, price_premium, price_exclusive)
-      VALUES (${body.slug}, ${body.title}, ${body.genre || null}, ${body.short_genre || null}, ${body.categories ? JSON.stringify(body.categories) : null}, ${body.bpm || null}, ${body.beat_key || null}, ${body.description || null}, ${body.mood || null}, ${body.producer || 'silachomka'}, ${body.audio_asset_id || null}, ${body.image_asset_id || null}, ${body.video_asset_id || null}, ${body.selar_basic_url || null}, ${body.selar_premium_url || null}, ${body.selar_ultimate_url || null}, ${status}, ${scheduledAt}, ${createdAt}, ${priceBasic}, ${pricePremium}, ${priceExclusive})
+      VALUES (${body.slug}, ${body.title}, ${normGenre.genre}, ${normGenre.short_genre}, ${body.categories ? JSON.stringify(body.categories) : null}, ${body.bpm || null}, ${body.beat_key || null}, ${body.description || null}, ${body.mood || null}, ${body.producer || 'silachomka'}, ${body.audio_asset_id || null}, ${body.image_asset_id || null}, ${body.video_asset_id || null}, ${body.selar_basic_url || null}, ${body.selar_premium_url || null}, ${body.selar_ultimate_url || null}, ${status}, ${scheduledAt}, ${createdAt}, ${priceBasic}, ${pricePremium}, ${priceExclusive})
       RETURNING *
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'beats', rows[0].id, null, rows[0])
@@ -323,14 +405,16 @@ adminApp.put('/beats/:id', async (c) => {
 
   const e = existing[0]
   const up = { ...e, ...body }
+  if (body.genre !== undefined || body.short_genre !== undefined) {
+    const normGenre = normalizeBeatGenre(body.genre !== undefined ? body.genre : body.short_genre)
+    up.genre = normGenre.genre
+    up.short_genre = normGenre.short_genre
+  }
   const createdAt = up.created_at ? new Date(up.created_at).toISOString() : e.created_at
 
   const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
-  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
-  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
-  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
-    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
-  }
+  const isFuture = (scheduledAt && new Date(scheduledAt) > new Date()) || (createdAt && new Date(createdAt) > new Date())
+  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
 
   try {
     const priceBasic = up.price_basic !== undefined && up.price_basic !== '' && up.price_basic !== null ? Number(up.price_basic) : (e.price_basic !== null ? e.price_basic : 15000.00)
@@ -343,7 +427,7 @@ adminApp.put('/beats/:id', async (c) => {
         title = ${up.title},
         genre = ${up.genre},
         short_genre = ${up.short_genre},
-        categories = ${up.categories ? JSON.stringify(body.categories) : null},
+        categories = ${up.categories ? JSON.stringify(body.categories !== undefined ? body.categories : e.categories) : null},
         bpm = ${up.bpm},
         beat_key = ${up.beat_key},
         description = ${up.description},
@@ -401,15 +485,12 @@ adminApp.post('/music-videos', async (c) => {
   if (!body.slug || !body.title || !body.youtube_id || !body.youtube_url) return c.json({ error: 'Missing required fields' }, 400)
   if (!isValidSlug(body.slug)) return c.json({ error: 'Invalid slug' }, 400)
 
+  const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
-  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
-  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
-  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
-    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
-  }
+  const isFuture = (scheduledAt && new Date(scheduledAt) > new Date()) || (createdAt && new Date(createdAt) > new Date())
+  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
 
   try {
-    const createdAt = body.created_at ? new Date(body.created_at).toISOString() : new Date().toISOString()
     const rows = await sql`
       INSERT INTO music_videos (slug, title, subtitle, category, youtube_id, youtube_url, aspect_ratio, platforms, related_release_id, related_track_id, status, scheduled_at, created_at)
       VALUES (${body.slug}, ${body.title}, ${body.subtitle || null}, ${body.category || 'Visualizer'}, ${body.youtube_id}, ${body.youtube_url}, ${body.aspect_ratio || '16:9'}, ${body.platforms ? JSON.stringify(body.platforms) : null}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${status}, ${scheduledAt}, ${createdAt})
@@ -440,11 +521,8 @@ adminApp.put('/music-videos/:id', async (c) => {
   const createdAt = up.created_at ? new Date(up.created_at).toISOString() : e.created_at
 
   const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
-  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
-  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
-  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
-    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
-  }
+  const isFuture = (scheduledAt && new Date(scheduledAt) > new Date()) || (createdAt && new Date(createdAt) > new Date())
+  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
 
   try {
     const rows = await sql`
@@ -456,7 +534,7 @@ adminApp.put('/music-videos/:id', async (c) => {
         youtube_id = ${up.youtube_id},
         youtube_url = ${up.youtube_url},
         aspect_ratio = ${up.aspect_ratio},
-        platforms = ${up.platforms ? JSON.stringify(body.platforms) : null},
+        platforms = ${up.platforms ? JSON.stringify(body.platforms !== undefined ? body.platforms : e.platforms) : null},
         related_release_id = ${up.related_release_id},
         related_track_id = ${up.related_track_id},
         status = ${status},
@@ -586,6 +664,17 @@ adminApp.post('/gallery-posts', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
 
+  if (!body.post_date) return c.json({ error: 'Missing required field: post_date' }, 400)
+
+  // Determine primary asset: use body.primary_asset_id or first slide's asset_id
+  let primaryAssetId = body.primary_asset_id || null
+  if (!primaryAssetId && Array.isArray(body.slides) && body.slides.length > 0) {
+    primaryAssetId = body.slides[0].asset_id || null
+  }
+
+  // Automatically infer post_type from uploaded/attached media (single image, carousel, or video)
+  const inferredPostType = await inferGalleryPostType(sql, primaryAssetId, body.slides, body.post_type)
+
   let slug = (body.slug || '').trim()
   if (!slug) {
     if (body.title && body.title.trim()) {
@@ -593,21 +682,20 @@ adminApp.post('/gallery-posts', async (c) => {
     }
     if (!slug) {
       const datePart = body.post_date ? String(body.post_date).split('T')[0] : new Date().toISOString().slice(0, 10)
-      const typePart = (body.post_type || 'image').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      const typePart = inferredPostType.toLowerCase().replace(/[^a-z0-9]+/g, '-')
       const randPart = Math.random().toString(36).substring(2, 7)
       slug = `post-${datePart}-${typePart}-${randPart}`
     }
   }
 
-  if (!body.post_type || !body.post_date) return c.json({ error: 'Missing required fields (post_type, post_date)' }, 400)
   if (!isValidSlug(slug)) return c.json({ error: 'Invalid slug' }, 400)
 
   const scheduledAt = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null
-  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
-  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
-  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
-    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
-  }
+  const postDateObj = body.post_date ? new Date(body.post_date) : null
+  const now = new Date()
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const isFuture = (scheduledAt && new Date(scheduledAt) > now) || (postDateObj && !isNaN(postDateObj.getTime()) && postDateObj > todayUtc && postDateObj > now)
+  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
 
   // Derive canonical display date automatically
   const canonicalDisplayDate = formatCanonicalDate(body.post_date) || body.display_date || null
@@ -626,30 +714,25 @@ adminApp.post('/gallery-posts', async (c) => {
     } catch {}
   }
 
-  // Determine primary asset: use body.primary_asset_id or first slide's asset_id
-  let primaryAssetId = body.primary_asset_id || null
-  if (!primaryAssetId && Array.isArray(body.slides) && body.slides.length > 0) {
-    primaryAssetId = body.slides[0].asset_id || null
-  }
-
   const extSocialUrl = body.external_social_url ? String(body.external_social_url).trim() : null
   const extSocialPlatform = detectSocialPlatform(extSocialUrl, body.external_social_platform)
 
   try {
     const rows = await sql`
       INSERT INTO gallery_posts (slug, title, caption, category, post_type, primary_asset_id, related_release_id, related_track_id, related_beat_id, legacy_link, external_social_url, external_social_platform, tags, post_date, display_date, status, scheduled_at)
-      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${catSlug || 'portraits'}, ${body.post_type}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${extSocialUrl}, ${extSocialPlatform}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
+      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${catSlug || 'portraits'}, ${inferredPostType}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${extSocialUrl}, ${extSocialPlatform}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
       RETURNING *
     `
 
-    // If carousel slides provided, insert them
+    // If carousel/slides provided, insert them
     if (Array.isArray(body.slides) && body.slides.length > 0) {
       for (let i = 0; i < body.slides.length; i++) {
         const s = body.slides[i]
         if (s.asset_id) {
+          const slideType = s.slide_type || (inferredPostType === 'video' && body.slides.length === 1 ? 'video' : 'image')
           await sql`
             INSERT INTO gallery_slides (post_id, asset_id, sort_order, slide_type)
-            VALUES (${rows[0].id}, ${s.asset_id}, ${s.sort_order ?? i}, ${s.slide_type || 'image'})
+            VALUES (${rows[0].id}, ${s.asset_id}, ${s.sort_order ?? i}, ${slideType})
           `
         }
       }
@@ -679,11 +762,11 @@ adminApp.put('/gallery-posts/:id', async (c) => {
   const up = { ...e, ...body }
 
   const scheduledAt = up.scheduled_at ? new Date(up.scheduled_at).toISOString() : null
-  const isFuture = scheduledAt && new Date(scheduledAt) > new Date()
-  let status = body.status !== undefined ? body.status : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
-  if (status !== 'DRAFT' && status !== 'ARCHIVED') {
-    status = isFuture ? 'SCHEDULED' : 'PUBLISHED'
-  }
+  const postDateObj = up.post_date ? new Date(up.post_date) : null
+  const now = new Date()
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const isFuture = (scheduledAt && new Date(scheduledAt) > now) || (postDateObj && !isNaN(postDateObj.getTime()) && postDateObj > todayUtc && postDateObj > now)
+  const status = body.status === 'ARCHIVED' ? 'ARCHIVED' : (isFuture ? 'SCHEDULED' : 'PUBLISHED')
 
   // Derive canonical display date automatically from post_date
   const canonicalDisplayDate = formatCanonicalDate(up.post_date) || up.display_date || null
@@ -708,6 +791,9 @@ adminApp.put('/gallery-posts/:id', async (c) => {
     primaryAssetId = body.slides[0].asset_id || null
   }
 
+  // Automatically infer post_type from media
+  const inferredPostType = await inferGalleryPostType(sql, primaryAssetId, body.slides, up.post_type)
+
   const extSocialUrl = up.external_social_url ? String(up.external_social_url).trim() : null
   const extSocialPlatform = extSocialUrl ? detectSocialPlatform(extSocialUrl, up.external_social_platform) : null
 
@@ -718,7 +804,7 @@ adminApp.put('/gallery-posts/:id', async (c) => {
         title = ${up.title || null},
         caption = ${up.caption || null},
         category = ${catSlug || 'portraits'},
-        post_type = ${up.post_type},
+        post_type = ${inferredPostType},
         primary_asset_id = ${primaryAssetId},
         related_release_id = ${up.related_release_id || null},
         related_track_id = ${up.related_track_id || null},
@@ -742,9 +828,10 @@ adminApp.put('/gallery-posts/:id', async (c) => {
       for (let i = 0; i < body.slides.length; i++) {
         const s = body.slides[i]
         if (s.asset_id) {
+          const slideType = s.slide_type || (inferredPostType === 'video' && body.slides.length === 1 ? 'video' : 'image')
           await sql`
             INSERT INTO gallery_slides (post_id, asset_id, sort_order, slide_type)
-            VALUES (${id}, ${s.asset_id}, ${s.sort_order ?? i}, ${s.slide_type || 'image'})
+            VALUES (${id}, ${s.asset_id}, ${s.sort_order ?? i}, ${slideType})
           `
         }
       }
@@ -1207,28 +1294,68 @@ adminApp.post('/recycle-bin/restore', async (c) => {
     let rows
     switch (table) {
       case 'releases':
-        rows = await sql`UPDATE releases SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        rows = await sql`
+          UPDATE releases
+          SET deleted_at = NULL,
+              status = CASE
+                WHEN (scheduled_at IS NOT NULL AND scheduled_at > NOW()) OR release_date > NOW() THEN 'SCHEDULED'
+                ELSE 'PUBLISHED'
+              END,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${id}
+          RETURNING *
+        `
         break
       case 'tracks':
-        rows = await sql`UPDATE tracks SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        rows = await sql`UPDATE tracks SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`
         break
       case 'beats':
-        rows = await sql`UPDATE beats SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        rows = await sql`
+          UPDATE beats
+          SET deleted_at = NULL,
+              status = CASE
+                WHEN (scheduled_at IS NOT NULL AND scheduled_at > NOW()) OR created_at > NOW() THEN 'SCHEDULED'
+                ELSE 'PUBLISHED'
+              END,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${id}
+          RETURNING *
+        `
         break
       case 'music_videos':
-        rows = await sql`UPDATE music_videos SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        rows = await sql`
+          UPDATE music_videos
+          SET deleted_at = NULL,
+              status = CASE
+                WHEN (scheduled_at IS NOT NULL AND scheduled_at > NOW()) OR created_at > NOW() THEN 'SCHEDULED'
+                ELSE 'PUBLISHED'
+              END,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${id}
+          RETURNING *
+        `
         break
       case 'gallery_posts':
-        rows = await sql`UPDATE gallery_posts SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        rows = await sql`
+          UPDATE gallery_posts
+          SET deleted_at = NULL,
+              status = CASE
+                WHEN (scheduled_at IS NOT NULL AND scheduled_at > NOW()) OR post_date > CURRENT_DATE THEN 'SCHEDULED'
+                ELSE 'PUBLISHED'
+              END,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${id}
+          RETURNING *
+        `
         break
       case 'media_assets':
-        rows = await sql`UPDATE media_assets SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        rows = await sql`UPDATE media_assets SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`
         break
       case 'social_links':
-        rows = await sql`UPDATE social_links SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        rows = await sql`UPDATE social_links SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`
         break
       case 'merchandise':
-        rows = await sql`UPDATE merchandise SET deleted_at = NULL WHERE id = ${id} RETURNING *`
+        rows = await sql`UPDATE merchandise SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`
         break
     }
     if (!rows || !rows.length) return c.json({ error: 'Item not found in recycle bin' }, 404)

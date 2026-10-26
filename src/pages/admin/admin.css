@@ -298,3 +298,14 @@
     padding: 24px;
   }
 }
+
+/* Stage 27 Req #12: Fix Admin Select Dropdown Vertical Clipping */
+select.studio-input,
+.studio-select {
+  height: auto !important;
+  min-height: 44px;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  line-height: 1.35 !important;
+}
+

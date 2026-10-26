@@ -14,6 +14,9 @@ import {
 
 import { useChomkaStore } from "./data/store";
 import { CurrencyProvider } from "./data/CurrencyContext";
+import { CookieConsentProvider, useCookieConsent } from "./data/CookieConsentContext";
+import CookieConsentBanner from "./components/CookieConsentBanner";
+import { PrivacyPolicyPage, CookiePolicyPage, TermsOfUsePage } from "./pages/LegalPages";
 
 // Admin CMS Imports
 import { AdminAuthProvider } from "./pages/admin/AdminAuthProvider";
@@ -370,6 +373,7 @@ function SiteHeader({
 function SiteFooter() {
   const navigate = useNavigate();
   const { socials } = useChomkaStore();
+  const { openCookieSettings } = useCookieConsent();
   const [clickCount, setClickCount] = useState(0);
 
   const handleSecretClick = () => {
@@ -415,6 +419,25 @@ function SiteFooter() {
             {s.name}
           </a>
         ))}
+      </nav>
+
+      <nav className="footer-legal-links" aria-label="Legal and privacy links">
+        <Link to="/privacy" className="footer-legal-link">
+          Privacy Policy
+        </Link>
+        <Link to="/cookies" className="footer-legal-link">
+          Cookie Policy
+        </Link>
+        <Link to="/terms" className="footer-legal-link">
+          Terms of Use
+        </Link>
+        <button
+          type="button"
+          className="footer-legal-link"
+          onClick={openCookieSettings}
+        >
+          Cookie Settings
+        </button>
       </nav>
     </footer>
   );
@@ -1915,6 +1938,7 @@ function App() {
 
   return (
     <AdminAuthProvider>
+      <CookieConsentProvider>
       <CurrencyProvider>
       <>
         {/* Dynamic Starry Space Atmosphere */}
@@ -1968,6 +1992,39 @@ function App() {
               <ReleaseRoute />
             }
           />
+
+          <Route
+            path="/privacy"
+            element={
+              <>
+                <SiteHeader beatsPage />
+                <PrivacyPolicyPage />
+                <SiteFooter />
+              </>
+            }
+          />
+
+          <Route
+            path="/cookies"
+            element={
+              <>
+                <SiteHeader beatsPage />
+                <CookiePolicyPage />
+                <SiteFooter />
+              </>
+            }
+          />
+
+          <Route
+            path="/terms"
+            element={
+              <>
+                <SiteHeader beatsPage />
+                <TermsOfUsePage />
+                <SiteFooter />
+              </>
+            }
+          />
           
           {/* Admin Routes */}
           <Route 
@@ -2008,8 +2065,11 @@ function App() {
             }
           />
         </Routes>
+
+        <CookieConsentBanner />
       </>
       </CurrencyProvider>
+      </CookieConsentProvider>
     </AdminAuthProvider>
   );
 }

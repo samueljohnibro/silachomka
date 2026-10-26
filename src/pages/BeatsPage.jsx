@@ -15,6 +15,8 @@ import {
   ReelIcon,
   CameraIcon,
   LoadingSpinner,
+  ShareIcon,
+  CheckIcon,
 } from "../components/Icons";
 // src/pages/BeatsPage.jsx
 
@@ -26,7 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useChomkaStore } from "../data/store";
 import { useCurrency } from "../data/CurrencyContext";
@@ -87,6 +89,45 @@ const BeatCard = memo(function BeatCard({
   onPlay,
   startingPrice,
 }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShareBeat = useCallback(
+    async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const shareUrl = `https://silachomka.vercel.app/beats/${beat.id}`;
+      try {
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(
+          navigator.userAgent || ""
+        );
+        if (isMobile && typeof navigator.share === "function") {
+          await navigator.share({
+            title: `${beat.title} | chomkaMUSIC™ Studio Beats`,
+            text: `Listen to "${beat.title}" by silachomka`,
+            url: shareUrl,
+          });
+          return;
+        }
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+      } catch {
+        const input = document.createElement("input");
+        input.value = shareUrl;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        document.body.removeChild(input);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    },
+    [beat.id, beat.title]
+  );
+
   return (
     <article className={`beat-card ${isPlaying ? "is-playing" : ""}`}>
       {/* Visualizer Frame */}
@@ -165,6 +206,16 @@ const BeatCard = memo(function BeatCard({
         >
           License Beat <RightArrowIcon />
         </Link>
+        <button
+          type="button"
+          className={`beat-card-share-btn ${copied ? "is-copied" : ""}`}
+          onClick={handleShareBeat}
+          title={copied ? "Link Copied!" : `Share ${beat.title}`}
+          aria-label={copied ? "Beat link copied" : `Share ${beat.title}`}
+        >
+          {copied ? <CheckIcon size={13} /> : <ShareIcon size={13} />}
+          <span>{copied ? "Copied" : "Share"}</span>
+        </button>
       </div>
     </article>
   );
@@ -190,11 +241,59 @@ function BeatReelPlayer({
   onPlay,
   onExitReel,
   onSkip,
+  onSeek,
   repeatMode,
   onCycleRepeat,
   getBeatStartingPrice,
 }) {
   const currentBeat = beats[currentIndex];
+  const seekBarRef = useRef(null);
+  const [isDraggingSeek, setIsDraggingSeek] = useState(false);
+
+  const computeSeekFraction = useCallback((clientX) => {
+    const bar = seekBarRef.current;
+    if (!bar) return null;
+    const rect = bar.getBoundingClientRect();
+    if (!rect.width) return null;
+    return Math.max(0, Math.min((clientX - rect.left) / rect.width, 1));
+  }, []);
+
+  const handleSeekPointerDown = useCallback(
+    (e) => {
+      e.stopPropagation();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const frac = computeSeekFraction(clientX);
+      if (frac !== null && onSeek) {
+        onSeek(frac);
+      }
+      setIsDraggingSeek(true);
+    },
+    [computeSeekFraction, onSeek]
+  );
+
+  useEffect(() => {
+    if (!isDraggingSeek) return undefined;
+    const handleMove = (e) => {
+      const clientX = e.touches ? e.touches[0]?.clientX : e.clientX;
+      if (typeof clientX !== "number") return;
+      const frac = computeSeekFraction(clientX);
+      if (frac !== null && onSeek) {
+        onSeek(frac);
+      }
+    };
+    const handleUp = () => setIsDraggingSeek(false);
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    window.addEventListener("touchmove", handleMove, { passive: true });
+    window.addEventListener("touchend", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+      window.removeEventListener("touchmove", handleMove);
+      window.removeEventListener("touchend", handleUp);
+    };
+  }, [isDraggingSeek, computeSeekFraction, onSeek]);
 
   if (!currentBeat) return null;
 
@@ -209,6 +308,7 @@ function BeatReelPlayer({
     Math.floor(progress * effectiveDuration)
   );
   const startingPrice = getBeatStartingPrice(currentBeat);
+  const clampedPct = Math.max(0, Math.min(progress * 100, 100));
 
   return (
     <div
@@ -259,7 +359,7 @@ function BeatReelPlayer({
           }}
         />
 
-        {/* Top Header Bar: Progress Bar & Mode Controls */}
+        {/* Top Header Bar: Interactive Draggable Seek Bar & Mode Controls */}
         <div
           style={{
             position: "absolute",
@@ -270,25 +370,37 @@ function BeatReelPlayer({
             zIndex: 10,
           }}
         >
-          {/* Segment Progress Bar */}
+          {/* Interactive Seek Scrubber with Draggable Handle (Req #5) */}
           <div
-            style={{
-              width: "100%",
-              height: "4px",
-              background: "rgba(255, 255, 255, 0.2)",
-              borderRadius: "2px",
-              overflow: "hidden",
-              marginBottom: "12px",
+            ref={seekBarRef}
+            className={`reel-seek-scrubber ${isDraggingSeek ? "is-dragging" : ""}`}
+            role="slider"
+            tabIndex={0}
+            aria-label="Seek beat playback position"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(effectiveDuration)}
+            aria-valuenow={elapsedSeconds}
+            onMouseDown={handleSeekPointerDown}
+            onTouchStart={handleSeekPointerDown}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight") {
+                e.preventDefault();
+                onSkip && onSkip(5);
+              } else if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                onSkip && onSkip(-5);
+              }
             }}
           >
+            <div className="reel-seek-track">
+              <div
+                className="reel-seek-fill"
+                style={{ width: `${clampedPct}%` }}
+              />
+            </div>
             <div
-              style={{
-                width: `${Math.max(0, Math.min(progress * 100, 100))}%`,
-                height: "100%",
-                background: "var(--gold)",
-                boxShadow: "0 0 8px var(--gold)",
-                transition: "width 0.1s linear",
-              }}
+              className="reel-seek-thumb"
+              style={{ left: `${clampedPct}%` }}
             />
           </div>
 
@@ -757,6 +869,7 @@ function BeatReelPlayer({
 
 export default function BeatsPage() {
   const { beats } = useChomkaStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     currency,
     setCurrency,
@@ -774,6 +887,7 @@ export default function BeatsPage() {
   const previewStartRef = useRef(0);
   const previewDurationRef = useRef(0);
   const playbackModeRef = useRef(playbackMode);
+  const prevPlaybackModeRef = useRef(playbackMode);
   const audioGenerationRef = useRef(0);
   const animationFrameRef = useRef(null);
   const lastProgressCommitRef = useRef(0);
@@ -807,33 +921,54 @@ export default function BeatsPage() {
     repeatModeRef.current = repeatMode;
   }, [repeatMode]);
 
-  // Synchronize playback window when user switches between 1-Minute and Full Track
+  // Req #4: When switching between 1 MIN and FULL TRACK, stop current playback,
+  // reset time to 0:00, apply the new playback mode, reset progress bar to 0,
+  // and restart playback only if the beat was already playing (if paused, remain paused at 0:00).
   useEffect(() => {
     playbackModeRef.current = playbackMode;
-    const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    if (prevPlaybackModeRef.current === playbackMode) return;
+    prevPlaybackModeRef.current = playbackMode;
 
-    if (playbackMode === "full") {
-      previewStartRef.current = 0;
-      previewDurationRef.current = audio.duration;
-      setActivePreviewDuration(audio.duration);
-      const nextProg = Math.max(0, Math.min(audio.currentTime / audio.duration, 1));
-      setProgress(nextProg);
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
+      setProgress(0);
+      return;
+    }
+
+    const wasPlaying = isPlayingRef.current;
+    try {
+      audio.pause();
+    } catch {}
+
+    previewStartRef.current = 0;
+    const dur =
+      playbackMode === "full"
+        ? audio.duration
+        : Math.min(PREVIEW_LENGTH, audio.duration);
+    previewDurationRef.current = dur;
+    setActivePreviewDuration(dur);
+
+    try {
+      audio.currentTime = 0;
+    } catch {}
+    setProgress(0);
+
+    if (wasPlaying) {
+      audio
+        .play()
+        .then(() => {
+          if (audioRef.current !== audio) return;
+          isPlayingRef.current = true;
+          setIsPlaying(true);
+        })
+        .catch(() => {
+          if (audioRef.current !== audio) return;
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+        });
     } else {
-      const dur = Math.min(PREVIEW_LENGTH, audio.duration);
-      previewDurationRef.current = dur;
-      setActivePreviewDuration(dur);
-      if (
-        audio.currentTime < previewStartRef.current ||
-        audio.currentTime >= previewStartRef.current + dur
-      ) {
-        previewStartRef.current = Math.max(
-          0,
-          Math.min(audio.currentTime, Math.max(0, audio.duration - dur))
-        );
-      }
-      const elapsed = Math.max(0, audio.currentTime - previewStartRef.current);
-      setProgress(Math.max(0, Math.min(elapsed / dur, 1)));
+      isPlayingRef.current = false;
+      setIsPlaying(false);
     }
   }, [playbackMode]);
 
@@ -1281,6 +1416,42 @@ export default function BeatsPage() {
     } catch {}
   }, []);
 
+  // Seek to exact fraction [0..1] within the current preview window (Req #5)
+  const handleSeekFraction = useCallback((fraction) => {
+    const clamped = Math.max(0, Math.min(Number(fraction) || 0, 1));
+    setProgress(clamped);
+    const audio = audioRef.current;
+    if (!audio || !activeBeatRef.current) return;
+    const previewStart = previewStartRef.current;
+    const previewDuration = previewDurationRef.current;
+    if (!Number.isFinite(previewDuration) || previewDuration <= 0) return;
+    const targetTime = previewStart + clamped * previewDuration;
+    try {
+      audio.currentTime = Math.max(
+        previewStart,
+        Math.min(targetTime, previewStart + previewDuration - 0.05)
+      );
+    } catch {}
+  }, []);
+
+  // Open Reel Mode on specific beat when navigated via /beats?reel=<beatId> (Req #7)
+  useEffect(() => {
+    const reelTarget = searchParams.get("reel");
+    if (!reelTarget || beats.length === 0) return;
+    const idx = beats.findIndex((b) => b.id === reelTarget);
+    if (idx !== -1) {
+      setActiveFilter("all");
+      setReelIndex(idx);
+      setIsReelMode(true);
+      if (activeBeatRef.current?.id !== beats[idx].id) {
+        handlePlay(beats[idx]);
+      }
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("reel");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, beats, handlePlay, setSearchParams]);
+
   // Cycle repeat mode: all → one → none → all
   const handleCycleRepeat = useCallback(() => {
     setRepeatMode((prev) => {
@@ -1556,6 +1727,7 @@ export default function BeatsPage() {
           onPlay={handlePlay}
           onExitReel={() => setIsReelMode(false)}
           onSkip={handleSkip}
+          onSeek={handleSeekFraction}
           repeatMode={repeatMode}
           onCycleRepeat={handleCycleRepeat}
           getBeatStartingPrice={getBeatStartingPrice}

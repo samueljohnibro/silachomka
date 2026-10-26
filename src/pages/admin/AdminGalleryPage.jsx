@@ -120,6 +120,20 @@ const AdminGalleryPage = () => {
     setError(null);
   };
 
+  const inferFormatFromItems = (items, fallbackPrimaryId) => {
+    if (Array.isArray(items) && items.length > 1) return "carousel";
+    if (Array.isArray(items) && items.length === 1) {
+      return items[0].slide_type === "video" ? "video" : "image";
+    }
+    if (fallbackPrimaryId) {
+      const a = mediaAssets.find((m) => m && m.id === fallbackPrimaryId);
+      if (a && (a.asset_type === "VIDEO" || a.mime_type?.startsWith("video/"))) {
+        return "video";
+      }
+    }
+    return "image";
+  };
+
   const handleEditClick = (post) => {
     const postSlides = slides
       .filter((s) => s.post_id === post.id)
@@ -130,15 +144,33 @@ const AdminGalleryPage = () => {
         sort_order: s.sort_order,
       }));
 
+    // If single-asset post had no rows in gallery_slides yet, seed 1 item so adding a 2nd item seamlessly creates a carousel
+    let initialSlides = postSlides;
+    if (initialSlides.length === 0 && post.primary_asset_id) {
+      const primaryAsset = mediaAssets.find((a) => a && a.id === post.primary_asset_id);
+      const isVid =
+        post.post_type === "video" ||
+        primaryAsset?.asset_type === "VIDEO" ||
+        primaryAsset?.mime_type?.startsWith("video/");
+      initialSlides = [
+        {
+          asset_id: post.primary_asset_id,
+          slide_type: isVid ? "video" : "image",
+          sort_order: 0,
+        },
+      ];
+    }
+
     setCurrentPost({
       ...post,
       title: post.title || "",
       caption: post.caption || "",
       category: post.category || "Portraits & Style",
+      post_type: inferFormatFromItems(initialSlides, post.primary_asset_id),
       external_social_url: post.external_social_url || post.legacy_link || "",
       external_social_platform: post.external_social_platform || "",
       post_date: post.post_date ? post.post_date.split("T")[0] : "",
-      carouselSlides: postSlides,
+      carouselSlides: initialSlides,
     });
     setView("EDIT");
     setError(null);
@@ -159,7 +191,7 @@ const AdminGalleryPage = () => {
     }));
   };
 
-  // Direct file upload handler
+  // Unified file upload handler — automatically determines Single Image, Video, or Carousel (Req #9)
   const handleFileUpload = async (e, target = "primary") => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -168,58 +200,51 @@ const AdminGalleryPage = () => {
     setError(null);
 
     try {
-      if (target === "primary") {
-        const file = files[0];
+      const uploadedSlides = [];
+      const addedAssets = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const isVideo = file.type.startsWith("video/");
         const res = await adminApi.uploadMediaAsset(file, isVideo ? "VIDEO" : "IMAGE");
         const newAsset = res?.asset || res;
+        if (!newAsset || !newAsset.id) continue;
+        addedAssets.push(newAsset);
 
-        if (!newAsset || !newAsset.id) {
-          throw new Error("Upload succeeded but invalid asset record returned.");
-        }
-
-        // Add to mediaAssets state immediately (deduplicated)
-        setMediaAssets((prev) => [newAsset, ...prev.filter(a => a && a.id !== newAsset.id)]);
-
-        // Auto-detect post type based on file MIME
         const isVid = isVideo || newAsset.asset_type === "VIDEO" || newAsset.mime_type?.startsWith("video/");
-        setCurrentPost((prev) => ({
-          ...prev,
-          primary_asset_id: newAsset.id,
-          post_type: prev.post_type === "carousel" ? "carousel" : (isVid ? "video" : "image"),
-        }));
-      } else {
-        // Carousel multi-upload
-        const newSlides = [];
-        const addedAssets = [];
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          const isVideo = file.type.startsWith("video/");
-          const res = await adminApi.uploadMediaAsset(file, isVideo ? "VIDEO" : "IMAGE");
-          const newAsset = res?.asset || res;
-          if (!newAsset || !newAsset.id) continue;
-          addedAssets.push(newAsset);
-
-          const isVid = isVideo || newAsset.asset_type === "VIDEO" || newAsset.mime_type?.startsWith("video/");
-          newSlides.push({
-            asset_id: newAsset.id,
-            slide_type: isVid ? "video" : "image",
-            sort_order: (currentPost.carouselSlides?.length || 0) + i,
-          });
-        }
-
-        if (addedAssets.length > 0) {
-          const newIds = new Set(addedAssets.map(a => a.id));
-          setMediaAssets((prev) => [...addedAssets, ...prev.filter(a => a && !newIds.has(a.id))]);
-        }
-
-        setCurrentPost((prev) => ({
-          ...prev,
-          post_type: "carousel",
-          carouselSlides: [...(prev.carouselSlides || []), ...newSlides],
-          primary_asset_id: prev.primary_asset_id || newSlides[0]?.asset_id || "",
-        }));
+        uploadedSlides.push({
+          asset_id: newAsset.id,
+          slide_type: isVid ? "video" : "image",
+          sort_order: i,
+        });
       }
+
+      if (addedAssets.length === 0) {
+        throw new Error("Upload succeeded but invalid asset record returned.");
+      }
+
+      const newIds = new Set(addedAssets.map((a) => a.id));
+      setMediaAssets((prev) => [...addedAssets, ...prev.filter((a) => a && !newIds.has(a.id))]);
+
+      setCurrentPost((prev) => {
+        const existingSlides = Array.isArray(prev.carouselSlides) ? prev.carouselSlides : [];
+        // If target === "replace" and only 1 file uploaded, replace the primary single item
+        const combined =
+          target === "replace" && uploadedSlides.length === 1 && existingSlides.length <= 1
+            ? uploadedSlides
+            : [...existingSlides, ...uploadedSlides].map((s, idx) => ({ ...s, sort_order: idx }));
+        const nextType =
+          combined.length > 1
+            ? "carousel"
+            : combined[0]?.slide_type === "video"
+            ? "video"
+            : "image";
+        return {
+          ...prev,
+          post_type: nextType,
+          carouselSlides: combined,
+          primary_asset_id: combined[0]?.asset_id || "",
+        };
+      });
     } catch (err) {
       console.error("Gallery upload error:", err);
       setError(err.message || "Failed to upload file.");
@@ -229,28 +254,29 @@ const AdminGalleryPage = () => {
     }
   };
 
-  // Library modal select handler
+  // Library modal select handler — automatically determines Single Image, Video, or Carousel (Req #9)
   const handleSelectFromLibrary = (asset) => {
-    if (libraryTarget === "primary") {
-      const isVid = asset.asset_type === "VIDEO" || asset.mime_type?.startsWith("video/");
-      setCurrentPost((prev) => ({
+    const isVid = asset.asset_type === "VIDEO" || asset.mime_type?.startsWith("video/");
+    setCurrentPost((prev) => {
+      const existingSlides = Array.isArray(prev.carouselSlides) ? prev.carouselSlides : [];
+      const newItem = { asset_id: asset.id, slide_type: isVid ? "video" : "image", sort_order: 0 };
+      const combined =
+        libraryTarget === "replace" && existingSlides.length <= 1
+          ? [newItem]
+          : [...existingSlides, newItem].map((s, idx) => ({ ...s, sort_order: idx }));
+      const nextType =
+        combined.length > 1
+          ? "carousel"
+          : combined[0]?.slide_type === "video"
+          ? "video"
+          : "image";
+      return {
         ...prev,
-        primary_asset_id: asset.id,
-        post_type: prev.post_type === "carousel" ? "carousel" : (isVid ? "video" : "image"),
-      }));
-    } else {
-      const isVid = asset.asset_type === "VIDEO" || asset.mime_type?.startsWith("video/");
-      const nextSort = currentPost.carouselSlides?.length || 0;
-      setCurrentPost((prev) => ({
-        ...prev,
-        post_type: "carousel",
-        carouselSlides: [
-          ...(prev.carouselSlides || []),
-          { asset_id: asset.id, slide_type: isVid ? "video" : "image", sort_order: nextSort },
-        ],
-        primary_asset_id: prev.primary_asset_id || asset.id,
-      }));
-    }
+        post_type: nextType,
+        carouselSlides: combined,
+        primary_asset_id: combined[0]?.asset_id || "",
+      };
+    });
     setShowLibraryModal(false);
   };
 
@@ -278,11 +304,17 @@ const AdminGalleryPage = () => {
     list.forEach((s, idx) => {
       s.sort_order = idx;
     });
+    const nextType =
+      list.length > 1
+        ? "carousel"
+        : list[0]?.slide_type === "video"
+        ? "video"
+        : "image";
     setCurrentPost((prev) => ({
       ...prev,
       carouselSlides: list,
       primary_asset_id: list[0]?.asset_id || "",
-      post_type: list.length <= 1 ? "image" : "carousel",
+      post_type: nextType,
     }));
   };
 
@@ -295,15 +327,28 @@ const AdminGalleryPage = () => {
       return;
     }
 
+    const activeSlides = Array.isArray(currentPost.carouselSlides) ? currentPost.carouselSlides : [];
+    const inferredType = inferFormatFromItems(activeSlides, currentPost.primary_asset_id);
+
     // Auto-generate stable slug if not existing
     const slugify = (text) => (text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
     let slug = currentPost.slug ? currentPost.slug.trim() : slugify(currentPost.title);
     if (!slug) {
       const datePart = currentPost.post_date ? currentPost.post_date.split("T")[0] : new Date().toISOString().slice(0, 10);
-      const typePart = (currentPost.post_type || "image").toLowerCase();
+      const typePart = inferredType.toLowerCase();
       const randPart = Math.random().toString(36).substring(2, 7);
       slug = `post-${datePart}-${typePart}-${randPart}`;
     }
+
+    // Automatic status determination (Req #10)
+    const schedDate = currentPost.scheduled_at ? new Date(currentPost.scheduled_at) : null;
+    const postDateObj = currentPost.post_date ? new Date(currentPost.post_date) : null;
+    const now = new Date();
+    const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const isFuture =
+      (schedDate && !isNaN(schedDate.getTime()) && schedDate > now) ||
+      (postDateObj && !isNaN(postDateObj.getTime()) && postDateObj > todayUtc && postDateObj > now);
+    const targetStatus = isFuture ? "SCHEDULED" : "PUBLISHED";
 
     try {
       setIsSaving(true);
@@ -311,20 +356,18 @@ const AdminGalleryPage = () => {
       const payload = {
         ...currentPost,
         slug,
+        status: targetStatus,
         title: currentPost.title && currentPost.title.trim() ? currentPost.title.trim() : null,
         caption: currentPost.caption && currentPost.caption.trim() ? currentPost.caption.trim() : null,
         category: currentPost.category && currentPost.category.trim() ? currentPost.category.trim() : "Portraits & Style",
-        post_type: currentPost.post_type || "image",
-        primary_asset_id:
-          currentPost.post_type === "carousel"
-            ? (currentPost.carouselSlides?.[0]?.asset_id || currentPost.primary_asset_id || null)
-            : (currentPost.primary_asset_id || null),
+        post_type: inferredType,
+        primary_asset_id: activeSlides[0]?.asset_id || currentPost.primary_asset_id || null,
         related_release_id: currentPost.related_release_id || null,
         related_track_id: currentPost.related_track_id || null,
         legacy_link: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_url: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_platform: currentPost.external_social_platform || null,
-        slides: currentPost.post_type === "carousel" ? (currentPost.carouselSlides || []) : [],
+        slides: activeSlides,
       };
 
       if (view === "CREATE") {
@@ -446,23 +489,32 @@ const AdminGalleryPage = () => {
               </div>
             </div>
 
-            {/* Media Type Selector */}
+            {/* Automatic Media Format Indicator & Post Date */}
             <div style={{ marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div className="studio-field" style={{ textAlign: "left" }}>
-                <label>Post Format / Type *</label>
-                <select
-                  name="post_type"
+                <label>Detected Post Format (Automatic)</label>
+                <div
                   className="studio-input"
-                  value={currentPost.post_type || "image"}
-                  onChange={handleChange}
-                  disabled={isSaving}
-                  style={{ height: "44px" }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "rgba(255,255,255,0.03)",
+                    cursor: "default",
+                    minHeight: "42px",
+                  }}
                 >
-                  <option value="image">Single Image</option>
-                  <option value="carousel">Carousel (Multi-slide Photos / Videos)</option>
-                  <option value="video">Video</option>
-                  <option value="reel">Reel / Vertical Short</option>
-                </select>
+                  <span style={{ fontWeight: 700, color: "var(--gold)", letterSpacing: "0.06em", fontSize: 12 }}>
+                    {currentPost.post_type === "carousel"
+                      ? `CAROUSEL (${currentPost.carouselSlides?.length || 0} ITEMS)`
+                      : (currentPost.post_type === "video" || isPrimaryVideo)
+                      ? "VIDEO"
+                      : "SINGLE IMAGE"}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                    Inferred from uploaded media
+                  </span>
+                </div>
               </div>
 
               <div className="studio-field" style={{ textAlign: "left" }}>
@@ -489,6 +541,7 @@ const AdminGalleryPage = () => {
               type="file"
               ref={primaryFileInputRef}
               accept="image/*,video/*"
+              multiple
               style={{ display: "none" }}
               onChange={(e) => handleFileUpload(e, "primary")}
             />
@@ -501,7 +554,7 @@ const AdminGalleryPage = () => {
               onChange={(e) => handleFileUpload(e, "carousel")}
             />
 
-            {/* A. SINGLE MEDIA WORKFLOW (Image, Video, Reel) */}
+            {/* A. SINGLE MEDIA WORKFLOW (Image, Video) — Auto-converts to Carousel when 2+ items are added */}
             {currentPost.post_type !== "carousel" && (
               <div>
                 {primaryAssetUrl ? (
@@ -555,15 +608,27 @@ const AdminGalleryPage = () => {
                       <div style={{ fontSize: 12, color: "var(--muted)" }}>
                         Format: {isPrimaryVideo ? "Video" : "Image"}{primaryAssetObj?.size_bytes ? ` • ${(primaryAssetObj.size_bytes / 1024).toFixed(1)} KB` : ""}{primaryAssetObj?.mime_type ? ` • ${primaryAssetObj.mime_type}` : ""}
                       </div>
-                      <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
                         <button
                           type="button"
-                          onClick={() => primaryFileInputRef.current?.click()}
+                          onClick={() => carouselFileInputRef.current?.click()}
                           className="studio-pill-btn"
                           disabled={isUploadingMedia || isSaving}
-                          style={{ fontSize: 12 }}
+                          style={{ fontSize: 12, background: "rgba(223, 194, 125, 0.15)", color: "var(--gold)" }}
                         >
-                          {isUploadingMedia ? "Uploading..." : "Replace File"}
+                          {isUploadingMedia ? "Uploading..." : "+ Add More Media (Carousel)"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLibraryTarget("carousel");
+                            setShowLibraryModal(true);
+                          }}
+                          className="studio-pill-btn"
+                          style={{ background: "transparent", fontSize: 12 }}
+                          disabled={isUploadingMedia || isSaving}
+                        >
+                          + Add Slide from Library
                         </button>
                         <button
                           type="button"
@@ -575,11 +640,11 @@ const AdminGalleryPage = () => {
                           style={{ background: "transparent", fontSize: 12 }}
                           disabled={isUploadingMedia || isSaving}
                         >
-                          Choose from Library
+                          Replace from Library
                         </button>
                         <button
                           type="button"
-                          onClick={() => setCurrentPost((prev) => ({ ...prev, primary_asset_id: "" }))}
+                          onClick={() => setCurrentPost((prev) => ({ ...prev, primary_asset_id: "", post_type: "image" }))}
                           className="studio-pill-btn"
                           style={{
                             background: "transparent",
@@ -604,12 +669,11 @@ const AdminGalleryPage = () => {
                       background: "rgba(0, 0, 0, 0.2)",
                     }}
                   >
-                    <div style={{ fontSize: 24, marginBottom: 8 }}>📷 / 🎬</div>
                     <div style={{ color: "var(--text-h)", fontWeight: 600, marginBottom: 4 }}>
                       Select or Upload Post Media
                     </div>
-                    <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 auto 16px auto", maxWidth: 400 }}>
-                      Upload high-resolution photography, artwork, video clip, or vertical reel.
+                    <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 auto 16px auto", maxWidth: 440 }}>
+                      Upload 1 photo (Single Image), 1 video (Video), or multiple photos/videos (Carousel). Format is detected automatically.
                     </p>
                     <div style={{ display: "inline-flex", gap: 12 }}>
                       <button
@@ -619,7 +683,7 @@ const AdminGalleryPage = () => {
                         disabled={isUploadingMedia || isSaving}
                         style={{ padding: "10px 20px" }}
                       >
-                        {isUploadingMedia ? "Uploading..." : "↑ Upload New Media"}
+                        {isUploadingMedia ? "Uploading..." : "↑ Upload Media (1 or Multiple)"}
                       </button>
                       <button
                         type="button"
@@ -1011,21 +1075,43 @@ const AdminGalleryPage = () => {
               </div>
 
               <div className="studio-field" style={{ textAlign: "left" }}>
-                <label>Status</label>
-                <select
-                  name="status"
+                <label>Lifecycle Status (Automatic)</label>
+                <div
                   className="studio-input"
-                  value={currentPost.status || "DRAFT"}
-                  onChange={handleChange}
-                  disabled={isSaving}
-                  style={{ height: "44px" }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "rgba(255,255,255,0.03)",
+                    cursor: "default",
+                    minHeight: "42px",
+                  }}
                 >
-                  <option value="DRAFT">Draft</option>
-                  <option value="PUBLISHED">Published</option>
-                  <option value="SCHEDULED">Scheduled</option>
-                  <option value="ARCHIVED">Archived</option>
-                  <option value="UNAVAILABLE">Unavailable</option>
-                </select>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color:
+                        (currentPost.scheduled_at && new Date(currentPost.scheduled_at).getTime() > Date.now()) ||
+                        (currentPost.post_date && new Date(currentPost.post_date).getTime() > Date.now())
+                          ? "#93c5fd"
+                          : currentPost.id && currentPost.status !== "DRAFT"
+                          ? "#86efac"
+                          : "var(--gold)",
+                      letterSpacing: "0.06em",
+                      fontSize: 12,
+                    }}
+                  >
+                    {(currentPost.scheduled_at && new Date(currentPost.scheduled_at).getTime() > Date.now()) ||
+                    (currentPost.post_date && new Date(currentPost.post_date).getTime() > Date.now())
+                      ? "SCHEDULED"
+                      : currentPost.id && currentPost.status !== "DRAFT"
+                      ? "PUBLISHED"
+                      : "DRAFT (UNTIL SAVED)"}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                    Auto-set on Save
+                  </span>
+                </div>
               </div>
 
               <div className="studio-field" style={{ textAlign: "left" }}>

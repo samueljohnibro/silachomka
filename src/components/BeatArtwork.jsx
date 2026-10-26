@@ -21,6 +21,7 @@ export default function BeatArtwork({
   onGifLoad,
 }) {
   const containerRef = useRef(null);
+  const gifImgRef = useRef(null);
   const isGif = Boolean(
     video && (/\.gif(\?.*)?$/i.test(video) || videoMimeType === 'image/gif')
   );
@@ -34,7 +35,17 @@ export default function BeatArtwork({
     setGifError(false);
   }, [video]);
 
-  // Viewport visibility observer to avoid simultaneous off-screen GIF decoding
+  // Immediate cache check: if the GIF is already complete in browser cache, take over immediately
+  useEffect(() => {
+    if (!inView || !isGif || gifError) return;
+    const imgEl = gifImgRef.current;
+    if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
+      setGifLoaded(true);
+      onGifLoad?.();
+    }
+  }, [inView, isGif, video, gifError, onGifLoad]);
+
+  // Viewport visibility observer to gate initial GIF request until near viewport
   useEffect(() => {
     if (!lazy) {
       setInView(true);
@@ -50,18 +61,15 @@ export default function BeatArtwork({
         for (const entry of entries) {
           if (entry.isIntersecting) {
             setInView(true);
-          } else {
-            // Unmount offscreen animated GIFs when scrolled far away to free GPU/raster memory
-            setInView(false);
-            setGifLoaded(false);
+            observer.disconnect();
           }
         }
       },
-      { rootMargin: '240px 0px' }
+      { rootMargin: '320px 0px' }
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [lazy]);
+  }, [lazy, video]);
 
   if (!isGif) {
     // Non-GIF video (e.g. MP4/WebM) with JPG poster fallback
@@ -155,12 +163,12 @@ export default function BeatArtwork({
         />
       )}
 
-      {/* Animated GIF — mounts when in view and takes over once loaded */}
+      {/* Animated GIF — mounts when in view and takes over immediately once loaded */}
       {inView && !gifError && (
         <img
+          ref={gifImgRef}
           src={video}
           alt={alt}
-          loading={lazy ? 'lazy' : undefined}
           decoding="async"
           className={className}
           onLoad={() => {
@@ -178,7 +186,8 @@ export default function BeatArtwork({
             height: '100%',
             objectFit: 'cover',
             opacity: gifLoaded ? 1 : 0,
-            transition: 'opacity 0.35s ease',
+            zIndex: gifLoaded ? 2 : 0,
+            transition: 'opacity 0.25s ease',
             ...style,
           }}
         />

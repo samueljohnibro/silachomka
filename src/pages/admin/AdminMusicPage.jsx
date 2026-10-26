@@ -8,7 +8,16 @@ import AdminSortControl from "../../components/admin/AdminSortControl";
 import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import "./admin.css";
 
-const slugify = (text) => (text || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const slugify = (text) =>
+  String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/['’`]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
 const formatReleaseDisplayDate = (isoString) => {
   if (!isoString) return '';
@@ -315,22 +324,22 @@ const AdminMusicPage = () => {
       return;
     }
 
-    // Auto-generate slug on create, or preserve on edit
-    let slug = currentRelease.slug ? currentRelease.slug.trim() : slugify(currentRelease.title);
-    if (!slug) {
-      slug = slugify(currentRelease.title) || ("release-" + Date.now());
-    }
+    // Req #1: Automatically derive slug from project title when created or renamed
+    const slug =
+      slugify(currentRelease.title) ||
+      (currentRelease.slug ? currentRelease.slug.trim() : "") ||
+      "release-" + Date.now();
 
     // Canonical display date derived from release timestamp
     const canonicalDisplayDate = formatReleaseDisplayDate(currentRelease.release_date);
 
-    // Automatic Status Determination
+    // Req #10: Automatic Status Determination from Release Date / Schedule
     const relDate = new Date(currentRelease.release_date);
-    const isFuture = !isNaN(relDate.getTime()) && relDate > new Date();
-    let targetStatus = currentRelease.status;
-    if (targetStatus !== "DRAFT" && targetStatus !== "ARCHIVED") {
-      targetStatus = isFuture ? "SCHEDULED" : "PUBLISHED";
-    }
+    const schedDate = currentRelease.scheduled_at ? new Date(currentRelease.scheduled_at) : null;
+    const isFuture =
+      (!isNaN(relDate.getTime()) && relDate > new Date()) ||
+      (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date());
+    const targetStatus = isFuture ? "SCHEDULED" : "PUBLISHED";
 
     try {
       const payload = {
@@ -635,12 +644,58 @@ const AdminMusicPage = () => {
               />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Status</label>
-              <select name="status" className="studio-input" value={currentRelease.status || "DRAFT"} onChange={handleChange} disabled={isSaving} style={{ height: "44px" }}>
-                <option value="DRAFT">Draft</option>
-                <option value="PUBLISHED">Published</option>
-                <option value="SCHEDULED">Scheduled</option>
-              </select>
+              <label>Lifecycle Status (Automatic)</label>
+              {(() => {
+                const relDate = currentRelease.release_date ? new Date(currentRelease.release_date) : null;
+                const schedDate = currentRelease.scheduled_at ? new Date(currentRelease.scheduled_at) : null;
+                const isFuture =
+                  (relDate && !isNaN(relDate.getTime()) && relDate > new Date()) ||
+                  (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date());
+                const computedStatus =
+                  view === "CREATE" && saveState !== "SAVED"
+                    ? "DRAFT (WILL " + (isFuture ? "SCHEDULE" : "PUBLISH") + " ON SAVE)"
+                    : isFuture
+                    ? "SCHEDULED"
+                    : "PUBLISHED";
+                const isSched = isFuture;
+                return (
+                  <div
+                    className="studio-input"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      height: "44px",
+                      background: "rgba(255, 255, 255, 0.02)",
+                      cursor: "default",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
+                      color:
+                        view === "CREATE" && saveState !== "SAVED"
+                          ? "#fbbf24"
+                          : isSched
+                          ? "#38bdf8"
+                          : "#34d399",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background:
+                          view === "CREATE" && saveState !== "SAVED"
+                            ? "#fbbf24"
+                            : isSched
+                            ? "#38bdf8"
+                            : "#34d399",
+                      }}
+                    />
+                    <span>{computedStatus}</span>
+                  </div>
+                );
+              })()}
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Schedule Publication (Optional)</label>
@@ -794,31 +849,9 @@ const AdminMusicPage = () => {
             />
           </div>
 
-          {/* PREVIEW AUDIO (MP3) PICKER */}
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
-            <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>4. Preview Audio (Optional Pre-Release Snippet)</h3>
-            <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 12px 0" }}>
-              Upload an MP3 for pre-release listening (plays a 30-second random preview on coming-soon release pages and the homepage). This is strictly separate from the final release tracks.
-            </p>
-            <MediaAssetPicker
-              label="Preview Audio (MP3)"
-              assetType="AUDIO"
-              value={currentRelease.preview_asset_id}
-              onChange={(id, assetRecord) => {
-                setSaveState("IDLE");
-                setCurrentRelease(prev => ({ ...prev, preview_asset_id: id }));
-                if (assetRecord) {
-                  setMediaAssets(prev => [assetRecord, ...prev.filter(m => m.id !== assetRecord.id)]);
-                }
-              }}
-              disabled={isSaving}
-              hint="Select or upload an MP3 audio snippet for pre-release playback."
-            />
-          </div>
-
           {/* PROJECT STREAMING LINKS */}
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
-            <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>5. Project Streaming Links</h3>
+            <h3 style={{ fontSize: 14, color: "var(--gold)", marginBottom: "8px" }}>4. Project Streaming Links</h3>
             <PlatformLinksEditor
               label="Release Streaming Links (Spotify, Apple Music, YouTube Music, etc.)"
               value={currentRelease.platforms}
@@ -845,9 +878,9 @@ const AdminMusicPage = () => {
           <div style={{ borderTop: "1px solid var(--border)", marginTop: "32px", paddingTop: "24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: 12 }}>
               <div>
-                <h3 style={{ fontSize: 16, color: "var(--gold)", margin: 0 }}>5. Project Tracks ({projectTracks.length})</h3>
+                <h3 style={{ fontSize: 16, color: "var(--gold)", margin: 0 }}>5. Project Tracks & Pre-Release Previews ({projectTracks.length})</h3>
                 <p style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 0 0" }}>
-                  Manage the tracklist for this project. Tracks inherit the project release date ({currentRelease.display_date || currentRelease.release_date}).
+                  Manage the tracklist and attach optional MP3 preview snippets to each track. During the pre-release countdown, the public 30-second preview player randomly selects a track with preview audio and plays a 30-second snippet without revealing track titles.
                 </p>
               </div>
               <button

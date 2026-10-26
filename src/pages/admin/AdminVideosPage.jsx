@@ -8,7 +8,16 @@ import AdminViewToggle from "../../components/admin/AdminViewToggle";
 import "./admin.css";
 
 const isValidSlug = (slug) => /^[a-z0-9-]+$/.test(slug);
-const slugify = (text) => (text || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const slugify = (text) =>
+  String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/['’`]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
 const AdminVideosPage = () => {
   const [videos, setVideos] = useState([]);
@@ -173,9 +182,17 @@ const AdminVideosPage = () => {
     }
 
     try {
+      const createdDate = currentVideo.created_at ? new Date(currentVideo.created_at) : null;
+      const schedDate = currentVideo.scheduled_at ? new Date(currentVideo.scheduled_at) : null;
+      const isFuture =
+        (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date()) ||
+        (createdDate && !isNaN(createdDate.getTime()) && createdDate > new Date());
+      const targetStatus = isFuture ? "SCHEDULED" : "PUBLISHED";
+
       const payload = {
         ...currentVideo,
-        slug
+        slug,
+        status: targetStatus,
       };
       const nullableFields = ["subtitle", "category", "aspect_ratio", "related_release_id", "related_track_id"];
       nullableFields.forEach((field) => {
@@ -415,19 +432,57 @@ const AdminVideosPage = () => {
               />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
-              <label>Status</label>
-              <select
-                name="status"
-                className="studio-input"
-                value={currentVideo.status || "DRAFT"}
-                onChange={handleChange}
-                disabled={isSaving}
-              >
-                <option value="DRAFT">DRAFT</option>
-                <option value="PUBLISHED">PUBLISHED</option>
-                <option value="ARCHIVED">ARCHIVED</option>
-                <option value="UNAVAILABLE">UNAVAILABLE</option>
-              </select>
+              <label>Lifecycle Status (Automatic)</label>
+              {(() => {
+                const createdDate = currentVideo.created_at ? new Date(currentVideo.created_at) : null;
+                const schedDate = currentVideo.scheduled_at ? new Date(currentVideo.scheduled_at) : null;
+                const isFuture =
+                  (schedDate && !isNaN(schedDate.getTime()) && schedDate > new Date()) ||
+                  (createdDate && !isNaN(createdDate.getTime()) && createdDate > new Date());
+                const computedStatus =
+                  view === "CREATE"
+                    ? "DRAFT (WILL " + (isFuture ? "SCHEDULE" : "PUBLISH") + " ON SAVE)"
+                    : isFuture
+                    ? "SCHEDULED"
+                    : "PUBLISHED";
+                return (
+                  <div
+                    className="studio-input"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      height: "44px",
+                      background: "rgba(255, 255, 255, 0.02)",
+                      cursor: "default",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
+                      color:
+                        view === "CREATE"
+                          ? "#fbbf24"
+                          : isFuture
+                          ? "#38bdf8"
+                          : "#34d399",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background:
+                          view === "CREATE"
+                            ? "#fbbf24"
+                            : isFuture
+                            ? "#38bdf8"
+                            : "#34d399",
+                      }}
+                    />
+                    <span>{computedStatus}</span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

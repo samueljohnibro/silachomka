@@ -86,8 +86,71 @@ app.get('/api/geo', (c) => {
 })
 
 // ------------------------------------------
-// Media Serving (BYTEA / R2 fallback)
+// Media Serving (BYTEA / R2 fallback with HTTP Range support)
 // ------------------------------------------
+function decodeHexToBytes(hex) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(hex, 'hex')
+  }
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16)
+  }
+  return bytes
+}
+
+function serveBinaryResponse(c, bytes, contentType) {
+  const total = bytes.length
+  const rangeHeader = c.req.header('range') || c.req.header('Range')
+  const baseHeaders = {
+    'Content-Type': contentType || 'application/octet-stream',
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'public, max-age=31536000, immutable',
+    'Access-Control-Allow-Origin': '*',
+    'Cross-Origin-Resource-Policy': 'cross-origin'
+  }
+
+  if (rangeHeader && /^bytes=/i.test(rangeHeader)) {
+    const match = rangeHeader.replace(/^bytes=/i, '').match(/^(\d*)-(\d*)/)
+    if (match) {
+      let start = match[1] ? parseInt(match[1], 10) : 0
+      let end = match[2] ? parseInt(match[2], 10) : total - 1
+      if (match[1] === '' && match[2] !== '') {
+        const suffixLen = parseInt(match[2], 10)
+        start = Math.max(0, total - suffixLen)
+        end = total - 1
+      }
+      if (isNaN(start) || isNaN(end) || start >= total || start > end) {
+        return new Response(null, {
+          status: 416,
+          headers: {
+            ...baseHeaders,
+            'Content-Range': `bytes */${total}`
+          }
+        })
+      }
+      end = Math.min(end, total - 1)
+      const chunk = bytes.subarray(start, end + 1)
+      return new Response(chunk, {
+        status: 206,
+        headers: {
+          ...baseHeaders,
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+          'Content-Length': String(chunk.length)
+        }
+      })
+    }
+  }
+
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      ...baseHeaders,
+      'Content-Length': String(total)
+    }
+  })
+}
+
 app.get('/api/media/asset/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
@@ -101,23 +164,8 @@ app.get('/api/media/asset/:id', async (c) => {
   const asset = rows[0]
 
   if (asset.file_hex) {
-    let bytes
-    if (typeof Buffer !== 'undefined') {
-      bytes = Buffer.from(asset.file_hex, 'hex')
-    } else {
-      const hex = asset.file_hex
-      bytes = new Uint8Array(hex.length / 2)
-      for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = parseInt(hex.substr(i * 2, 2), 16)
-      }
-    }
-    return new Response(bytes, {
-      headers: {
-        'Content-Type': asset.mime_type || 'image/jpeg',
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Access-Control-Allow-Origin': '*'
-      }
-    })
+    const bytes = decodeHexToBytes(asset.file_hex)
+    return serveBinaryResponse(c, bytes, asset.mime_type || 'image/jpeg')
   }
 
   // Fallback: If bound to R2 bucket, stream from R2
@@ -125,13 +173,12 @@ app.get('/api/media/asset/:id', async (c) => {
     try {
       const object = await c.env.MEDIA_BUCKET.get(asset.r2_key)
       if (object) {
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': object.httpMetadata?.contentType || asset.mime_type || 'application/octet-stream',
-            'Cache-Control': 'public, max-age=31536000, immutable',
-            'Access-Control-Allow-Origin': '*'
-          }
-        })
+        const buf = await object.arrayBuffer()
+        return serveBinaryResponse(
+          c,
+          new Uint8Array(buf),
+          object.httpMetadata?.contentType || asset.mime_type || 'application/octet-stream'
+        )
       }
     } catch (e) {
       console.warn('R2 read failed:', e.message)
@@ -161,23 +208,8 @@ app.get('/api/media/:folder/:file', async (c) => {
   const asset = rows[0]
 
   if (asset.file_hex) {
-    let bytes
-    if (typeof Buffer !== 'undefined') {
-      bytes = Buffer.from(asset.file_hex, 'hex')
-    } else {
-      const hex = asset.file_hex
-      bytes = new Uint8Array(hex.length / 2)
-      for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = parseInt(hex.substr(i * 2, 2), 16)
-      }
-    }
-    return new Response(bytes, {
-      headers: {
-        'Content-Type': asset.mime_type || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Access-Control-Allow-Origin': '*'
-      }
-    })
+    const bytes = decodeHexToBytes(asset.file_hex)
+    return serveBinaryResponse(c, bytes, asset.mime_type || 'application/octet-stream')
   }
 
   // Fallback: If bound to R2 bucket, stream from R2
@@ -185,13 +217,12 @@ app.get('/api/media/:folder/:file', async (c) => {
     try {
       const object = await c.env.MEDIA_BUCKET.get(asset.r2_key)
       if (object) {
-        return new Response(object.body, {
-          headers: {
-            'Content-Type': object.httpMetadata?.contentType || asset.mime_type || 'application/octet-stream',
-            'Cache-Control': 'public, max-age=31536000, immutable',
-            'Access-Control-Allow-Origin': '*'
-          }
-        })
+        const buf = await object.arrayBuffer()
+        return serveBinaryResponse(
+          c,
+          new Uint8Array(buf),
+          object.httpMetadata?.contentType || asset.mime_type || 'application/octet-stream'
+        )
       }
     } catch (e) {
       console.warn('R2 read failed:', e.message)
