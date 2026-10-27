@@ -1145,12 +1145,13 @@ const AdminMusicPage = () => {
                         className="studio-input"
                         value={newTrackCreditRole}
                         onChange={(e) => setNewTrackCreditRole(e.target.value)}
-                        style={{ fontSize: 12, height: 34, minWidth: 135, width: "auto" }}
+                        style={{ fontSize: 12, height: 34, minWidth: 145 /* minWidth: 135 */, flex: "0 0 145px", width: 145, boxSizing: "border-box", padding: "0 24px 0 10px" }}
                       >
                         <option value="FEATURING">FEATURING</option>
                         <option value="PRODUCER">PRODUCER</option>
                         <option value="WRITER">WRITER</option>
                         <option value="ENGINEER">ENGINEER</option>
+                        <option value="DIRECTOR">DIRECTOR</option>
                       </select>
                       <button
                         type="button"

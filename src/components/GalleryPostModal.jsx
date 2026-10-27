@@ -485,12 +485,23 @@ export default function GalleryPostModal({
       role="dialog"
       aria-modal="true"
     >
-      {ambientImageSrc && (
+      {(ambientImageSrc || (currentIsVideo && currentSlideSrc)) && (
         <div className="product-ambient-backdrop" aria-hidden="true">
-          <div
-            className="ambient-image-layer"
-            style={{ backgroundImage: `url(${ambientImageSrc})` }}
-          />
+          {ambientImageSrc ? (
+            <div
+              className="ambient-image-layer"
+              style={{ backgroundImage: `url(${ambientImageSrc})` }}
+            />
+          ) : (
+            <video
+              src={currentSlideSrc}
+              muted
+              playsInline
+              autoPlay
+              loop
+              className="ambient-video-layer"
+            />
+          )}
           <div className="ambient-gradient-overlay" />
         </div>
       )}

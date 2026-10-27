@@ -44,6 +44,7 @@ import AdminServicesPage from "./pages/admin/AdminServicesPage";
 import SubscriberNewsletterBox from "./components/SubscriberNewsletterBox";
 
 import MediaSlideshow from "./components/MediaSlideshow";
+import GalleryCardVideo from "./components/GalleryCardVideo";
 import StarrySpaceBackground from "./components/StarrySpaceBackground";
 import ReleasePage, { TrackRow } from "./components/ReleasePage";
 import GalleryPostModal from "./components/GalleryPostModal";
@@ -179,8 +180,8 @@ function SiteHeader({
               About
             </Link>
 
-            <Link to="/#world">
-              The World
+            <Link to="/#world" className="nav-item-world">
+              <span className="nav-world-text">The<br className="nav-world-break" />World</span>
             </Link>
 
             <Link to="/#connect">
@@ -301,8 +302,8 @@ function SiteHeader({
             About
           </a>
 
-          <a href="#world">
-            The World
+          <a href="#world" className="nav-item-world">
+            <span className="nav-world-text">The<br className="nav-world-break" />World</span>
           </a>
 
           <a href="#connect">
@@ -1420,11 +1421,9 @@ function GallerySection() {
               <div className="gallery-card-frame">
                 {primarySrc ? (
                   isVideo ? (
-                    <video
+                    <GalleryCardVideo
                       src={primarySrc}
-                      muted
-                      playsInline
-                      preload="metadata"
+                      title={post.title || "Archive video"}
                       className="gallery-card-image"
                     />
                   ) : (

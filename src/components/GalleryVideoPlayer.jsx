@@ -197,6 +197,11 @@ export default function GalleryVideoPlayer({
           const d = e.currentTarget.duration;
           if (Number.isFinite(d) && d > 0) setDuration(d);
           setIsBuffering(false);
+          try {
+            if (e.currentTarget.currentTime === 0) {
+              e.currentTarget.currentTime = 0.1;
+            }
+          } catch {}
         }}
         onTimeUpdate={(e) => {
           if (!isDraggingSeek) {

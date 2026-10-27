@@ -548,29 +548,16 @@ export default function ReleasePage({ release: propRelease }) {
 
           <h1 className="release-title">{release.title}</h1>
 
-          <div className="release-meta-bar">
-            <span>Release {releaseNumber}</span>
-            <span>•</span>
-            <span>{canonicalDateLabel}</span>
-            <span>•</span>
-            <span>
-              {trackCount} {trackCount === 1 ? "Track" : "Tracks"}
-            </span>
-            {isRecentRelease && (
-              <>
-                <span>•</span>
-                <span className="out-now-pill">OUT NOW</span>
-              </>
+          {/* Req #15: Status indicator row with deliberate breathing room, no bullet points */}
+          <div className="release-status-row release-coming-soon-subline" style={{ margin: "14px 0 16px", display: "flex", alignItems: "center" }}>
+            {isFuture ? (
+              <span className="coming-soon-pill" style={{ margin: 0 }}>COMING SOON</span>
+            ) : (
+              <span className="out-now-pill" style={{ margin: 0 }}>OUT NOW</span>
             )}
           </div>
 
-          {isFuture && (
-            <div className="release-coming-soon-subline">
-              <span className="coming-soon-pill">COMING SOON</span>
-            </div>
-          )}
-
-          <p className="release-description-text">
+          <p className="release-description-text" style={{ marginTop: 0, marginBottom: "18px" }}>
             {release.description || statusLeadDescription}
           </p>
 

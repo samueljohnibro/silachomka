@@ -1051,16 +1051,12 @@ app.post('/api/services/orders', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json().catch(() => ({}))
 
-  const serviceSlug = String(body.serviceSlug || body.service_slug || '').trim().toLowerCase()
   const customerName = String(body.customerName || body.customer_name || '').trim()
   const customerEmail = String(body.customerEmail || body.customer_email || '').trim().toLowerCase()
   const customerPhone = String(body.customerPhone || body.customer_phone || '').trim()
-  const configuration = body.configuration || {}
+  const customerMessage = String(body.customerMessage || body.customer_message || body.message || '').trim()
   const clientFiles = Array.isArray(body.clientFiles || body.client_files) ? (body.clientFiles || body.client_files) : []
 
-  if (!serviceSlug) {
-    return c.json({ error: 'Service slug is required' }, 400)
-  }
   if (!customerName) {
     return c.json({ error: 'Customer name is required' }, 400)
   }
@@ -1068,41 +1064,87 @@ app.post('/api/services/orders', async (c) => {
     return c.json({ error: 'Valid customer email is required' }, 400)
   }
 
-  const services = await sql`
+  // Multi-service cart order support (Req #20 & #21)
+  const rawServices = Array.isArray(body.services) && body.services.length > 0
+    ? body.services
+    : (body.serviceSlug || body.service_slug)
+      ? [{ slug: body.serviceSlug || body.service_slug, configuration: body.configuration || {} }]
+      : []
+
+  if (rawServices.length === 0) {
+    return c.json({ error: 'At least one service must be selected' }, 400)
+  }
+
+  // Fetch all active studio services
+  const dbServices = await sql`
     SELECT id, slug, title, category, base_price_ngn, is_hourly, hourly_rate_ngn, turnaround_days
     FROM music_services
-    WHERE slug = ${serviceSlug} AND is_active = true
+    WHERE is_active = true
   `
-  if (services.length === 0) {
-    return c.json({ error: 'Invalid or inactive service requested' }, 400)
-  }
-  const s = services[0]
+  const serviceMap = new Map(dbServices.map(s => [s.slug, s]))
 
-  let totalNgn = null
-  if (s.is_hourly) {
-    const hours = Math.max(1, parseInt(configuration.hours || 1, 10))
-    configuration.hours = hours
-    totalNgn = Number(s.hourly_rate_ngn || 25000) * hours
-  } else if (s.base_price_ngn !== null && s.base_price_ngn !== undefined) {
-    totalNgn = Number(s.base_price_ngn)
-  } else {
-    totalNgn = null
+  const processedItems = []
+  let hasPriceUponRequest = false
+  let calculatedGrandTotal = 0
+
+  for (const item of rawServices) {
+    const slug = String(item.slug || item.serviceSlug || '').trim().toLowerCase()
+    const s = serviceMap.get(slug)
+    if (!s) {
+      return c.json({ error: `Service '${slug}' is invalid or currently inactive` }, 400)
+    }
+
+    const cfg = item.configuration || {}
+    let itemPrice = null
+
+    if (s.is_hourly) {
+      const hours = Math.max(1, parseInt(cfg.hours || 1, 10))
+      cfg.hours = hours
+      const rate = Number(s.hourly_rate_ngn || 25000)
+      itemPrice = rate * hours
+      calculatedGrandTotal += itemPrice
+    } else if (s.base_price_ngn !== null && s.base_price_ngn !== undefined) {
+      itemPrice = Number(s.base_price_ngn)
+      calculatedGrandTotal += itemPrice
+    } else {
+      // Service #5: Price Upon Request (TBD)
+      hasPriceUponRequest = true
+      itemPrice = null
+    }
+
+    processedItems.push({
+      serviceId: s.id,
+      slug: s.slug,
+      title: s.title,
+      category: s.category,
+      basePriceNgn: s.base_price_ngn ? Number(s.base_price_ngn) : null,
+      isHourly: s.is_hourly,
+      hourlyRateNgn: s.hourly_rate_ngn ? Number(s.hourly_rate_ngn) : null,
+      calculatedPriceNgn: itemPrice,
+      configuration: cfg
+    })
   }
 
+  const finalTotalNgn = hasPriceUponRequest ? null : calculatedGrandTotal
   const year = new Date().getFullYear()
   const randomChars = Math.random().toString(36).substring(2, 6).toUpperCase()
   const orderNumber = `SC-SRV-${year}-${randomChars}`
-  const initialStatus = totalNgn === null ? 'IN_PROGRESS' : 'AWAITING_PAYMENT'
+  const initialStatus = finalTotalNgn === null ? 'IN_PROGRESS' : 'AWAITING_PAYMENT'
+
+  const primaryService = processedItems[0]
+  const aggregatedTitle = processedItems.map(i => i.title).join(' + ')
+  const primarySlug = processedItems.length === 1 ? primaryService.slug : 'custom-session'
 
   const inserted = await sql`
     INSERT INTO service_orders (
       order_number, service_id, service_slug, service_title, customer_name, customer_email, customer_phone,
-      configuration, client_files, total_amount_ngn, currency, payment_status, order_status, deadline_timezone
+      customer_message, configuration, items, client_files, total_amount_ngn, currency, payment_status, order_status, deadline_timezone
     ) VALUES (
-      ${orderNumber}, ${s.id}, ${s.slug}, ${s.title}, ${customerName}, ${customerEmail}, ${customerPhone || null},
-      ${JSON.stringify(configuration)}::jsonb, ${JSON.stringify(clientFiles)}::jsonb, ${totalNgn}, 'NGN', 'UNPAID', ${initialStatus}, 'WAT'
+      ${orderNumber}, ${primaryService.serviceId}, ${primarySlug}, ${aggregatedTitle}, ${customerName}, ${customerEmail}, ${customerPhone || null},
+      ${customerMessage || null}, ${JSON.stringify(primaryService.configuration)}::jsonb, ${JSON.stringify(processedItems)}::jsonb,
+      ${JSON.stringify(clientFiles)}::jsonb, ${finalTotalNgn}, 'NGN', 'UNPAID', ${initialStatus}, 'WAT'
     )
-    RETURNING id, order_number, service_slug, service_title, customer_name, customer_email, total_amount_ngn, currency, order_status, created_at
+    RETURNING id, order_number, service_slug, service_title, customer_name, customer_email, total_amount_ngn, currency, order_status, items, created_at
   `
 
   return c.json({
@@ -1117,6 +1159,7 @@ app.post('/api/services/orders', async (c) => {
       totalAmountNgn: inserted[0].total_amount_ngn ? Number(inserted[0].total_amount_ngn) : null,
       currency: inserted[0].currency,
       orderStatus: inserted[0].order_status,
+      items: inserted[0].items || processedItems,
       createdAt: inserted[0].created_at
     }
   }, 201)
@@ -1166,6 +1209,141 @@ app.get('/api/services/orders/:orderNumber', async (c) => {
 })
 
 // Initialize payment for service order
+
+// Verify Paystack Payment Server-Side (Req #26 & #27)
+app.post('/api/services/verify-payment', async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json().catch(() => ({}))
+  const reference = String(body.reference || '').trim()
+  const orderNumber = String(body.orderNumber || body.order_number || '').trim().toUpperCase()
+
+  if (!reference && !orderNumber) {
+    return c.json({ error: 'Reference or order number is required' }, 400)
+  }
+
+  const rows = await sql`
+    SELECT id, order_number, total_amount_ngn, payment_status, order_status, customer_email
+    FROM service_orders
+    WHERE order_number = ${orderNumber} OR payment_reference = ${reference}
+  `
+  if (rows.length === 0) return c.json({ error: 'Order not found' }, 404)
+  const order = rows[0]
+
+  // Idempotent duplicate check
+  if (order.payment_status === 'PAID') {
+    return c.json({
+      success: true,
+      alreadyPaid: true,
+      orderNumber: order.order_number,
+      orderStatus: order.order_status,
+      paymentStatus: 'PAID'
+    })
+  }
+
+  if (c.env?.PAYSTACK_SECRET_KEY && c.env.PAYSTACK_SECRET_KEY.startsWith('sk_')) {
+    try {
+      const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+        headers: {
+          'Authorization': `Bearer ${c.env.PAYSTACK_SECRET_KEY}`
+        }
+      })
+      const verifyData = await verifyRes.json()
+      if (!verifyData.status || verifyData.data?.status !== 'success') {
+        return c.json({
+          error: 'Payment verification failed',
+          details: verifyData.data?.gateway_response || 'Transaction not confirmed'
+        }, 400)
+      }
+
+      // Authoritative server amount check (Req #27)
+      const expectedKobo = Math.round(Number(order.total_amount_ngn || 0) * 100)
+      const actualKobo = Number(verifyData.data?.amount || 0)
+      if (expectedKobo > 0 && actualKobo < expectedKobo) {
+        return c.json({ error: 'Amount paid does not match authoritative order total' }, 400)
+      }
+
+      await sql`
+        UPDATE service_orders
+        SET payment_status = 'PAID', order_status = 'PAID', paid_at = NOW(),
+            payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
+        WHERE id = ${order.id}
+      `
+
+      return c.json({
+        success: true,
+        orderNumber: order.order_number,
+        paymentStatus: 'PAID',
+        orderStatus: 'PAID',
+        reference
+      })
+    } catch (e) {
+      return c.json({ error: 'Error connecting to payment authority: ' + e.message }, 502)
+    }
+  }
+
+  // Development/mock fallback verification
+  await sql`
+    UPDATE service_orders
+    SET payment_status = 'PAID', order_status = 'PAID', paid_at = NOW(),
+        payment_reference = COALESCE(payment_reference, ${reference}), updated_at = NOW()
+    WHERE id = ${order.id}
+  `
+
+  return c.json({
+    success: true,
+    orderNumber: order.order_number,
+    paymentStatus: 'PAID',
+    orderStatus: 'PAID',
+    reference
+  })
+})
+
+// Paystack Webhook Handler (Req #26 & #27)
+app.post('/api/services/webhook', async (c) => {
+  const sql = c.get('sql')
+  const signature = c.req.header('x-paystack-signature')
+  const rawBody = await c.req.text()
+  
+  if (c.env?.PAYSTACK_SECRET_KEY && signature) {
+    try {
+      const encoder = new TextEncoder()
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(c.env.PAYSTACK_SECRET_KEY),
+        { name: 'HMAC', hash: 'SHA-512' },
+        false,
+        ['verify']
+      )
+      const sigBytes = new Uint8Array(signature.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
+      const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(rawBody))
+      if (!isValid) {
+        return c.json({ error: 'Invalid webhook signature' }, 401)
+      }
+    } catch (e) {
+      console.warn('Webhook signature check error:', e.message)
+    }
+  }
+
+  const payload = JSON.parse(rawBody || '{}')
+  if (payload.event === 'charge.success') {
+    const data = payload.data || {}
+    const orderNumber = data.metadata?.order_number
+    const reference = data.reference
+
+    if (orderNumber || reference) {
+      await sql`
+        UPDATE service_orders
+        SET payment_status = 'PAID', order_status = 'PAID', paid_at = NOW(),
+            payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
+        WHERE (order_number = ${orderNumber} OR payment_reference = ${reference})
+          AND payment_status != 'PAID'
+      `
+    }
+  }
+
+  return c.json({ received: true })
+})
+
 app.post('/api/services/orders/:orderNumber/payment', async (c) => {
   const sql = c.get('sql')
   const orderNumber = String(c.req.param('orderNumber') || '').trim().toUpperCase()
@@ -1258,19 +1436,21 @@ function escapeHtmlAttr(val) {
 function resolvePublicMediaUrl(pathOrUrl, workerOrigin, siteOrigin, fallbackUrl = null) {
   if (!pathOrUrl) return fallbackUrl || `${siteOrigin}/beats-image.png`
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl
-  if (pathOrUrl.startsWith('/api/')) return `${workerOrigin}${pathOrUrl}`
   const clean = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`
+  // Return same-domain absolute HTTPS URL for social unfurls
   return `${siteOrigin}${clean}`
 }
 
-function buildShareHtml({ title, description, url, image, type = 'website', audio = null }) {
+function buildShareHtml({ title, description, url, image, type = 'website', audio = null, imageMime = 'image/jpeg' }) {
   const safeTitle = escapeHtmlAttr(title)
   const safeDesc = escapeHtmlAttr(description)
   const safeUrl = escapeHtmlAttr(url)
   const safeImg = escapeHtmlAttr(image)
   const safeType = escapeHtmlAttr(type)
-  const audioMeta = audio
-    ? `\n    <meta property="og:audio" content="${escapeHtmlAttr(audio)}" />\n    <meta property="og:audio:secure_url" content="${escapeHtmlAttr(audio)}" />\n    <meta property="og:audio:type" content="audio/mpeg" />\n    <meta name="twitter:player:stream" content="${escapeHtmlAttr(audio)}" />\n    <meta name="twitter:player:stream:content_type" content="audio/mpeg" />`
+  const detectedMime = imageMime || (/\.png($|\?)/i.test(image) ? 'image/png' : /\.gif($|\?)/i.test(image) ? 'image/gif' : /\.webp($|\?)/i.test(image) ? 'image/webp' : 'image/jpeg')
+  const safeAudio = audio ? escapeHtmlAttr(audio) : null
+  const audioMeta = safeAudio
+    ? `\n    <meta property="og:audio" content="${safeAudio}" />\n    <meta property="og:audio:secure_url" content="${safeAudio}" />\n    <meta property="og:audio:type" content="audio/mpeg" />\n    <meta name="twitter:player:stream" content="${safeAudio}" />\n    <meta name="twitter:player:stream:content_type" content="audio/mpeg" />`
     : ''
 
   return `<!doctype html>
@@ -1288,6 +1468,7 @@ function buildShareHtml({ title, description, url, image, type = 'website', audi
     <meta property="og:url" content="${safeUrl}" />
     <meta property="og:image" content="${safeImg}" />
     <meta property="og:image:secure_url" content="${safeImg}" />
+    <meta property="og:image:type" content="${detectedMime}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="${safeTitle}" />${audioMeta}
@@ -1357,9 +1538,22 @@ app.get('/api/share/:type/:slug', async (c) => {
       SELECT r.slug, r.title, r.release_date, r.display_date, r.type, r.primary_artist, r.description, r.status,
              CASE WHEN m.file_data IS NOT NULL THEN '/api/media/asset/' || m.id
                   WHEN m.r2_key IS NOT NULL THEN '/' || m.r2_key
-                  ELSE NULL END as cover
+                  ELSE NULL END as cover,
+             m.mime_type as "coverMime",
+             CASE WHEN mp.file_data IS NOT NULL THEN '/api/media/asset/' || mp.id
+                  WHEN mp.r2_key IS NOT NULL THEN '/' || mp.r2_key
+                  ELSE NULL END as preview_audio,
+             (SELECT CASE WHEN tp.file_data IS NOT NULL THEN '/api/media/asset/' || tp.id
+                          WHEN tp.r2_key IS NOT NULL THEN '/' || tp.r2_key
+                          ELSE NULL END
+              FROM tracks t
+              LEFT JOIN media_assets tp ON t.preview_asset_id = tp.id
+              WHERE t.release_id = r.id AND t.deleted_at IS NULL AND t.preview_asset_id IS NOT NULL
+              ORDER BY t.track_number LIMIT 1
+             ) as track_preview_audio
       FROM releases r
       LEFT JOIN media_assets m ON r.cover_asset_id = m.id
+      LEFT JOIN media_assets mp ON r.preview_asset_id = mp.id
       WHERE (r.slug = ${cleanSlug} OR r.id::text = ${cleanSlug} OR COALESCE(r.previous_slugs, '[]'::jsonb) @> to_jsonb(${cleanSlug}::text))
         AND r.deleted_at IS NULL
         AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
@@ -1380,12 +1574,15 @@ app.get('/api/share/:type/:slug', async (c) => {
         : ''
       const desc = `${statusLead}${customNote}`.trim()
       const fallbackCover = `${siteOrigin}/covers/${r.slug}.jpg`
+      const previewAudio = r.track_preview_audio || r.preview_audio || null
       const html = buildShareHtml({
         title: `${r.title} — ${r.primary_artist || 'silachomka'} | silachomka`,
         description: desc,
         url: `${siteOrigin}/release/${r.slug}`,
         image: resolvePublicMediaUrl(r.cover, workerOrigin, siteOrigin, fallbackCover),
-        type: 'music.album'
+        imageMime: r.coverMime || 'image/jpeg',
+        type: 'music.album',
+        audio: previewAudio ? resolvePublicMediaUrl(previewAudio, workerOrigin, siteOrigin) : null
       })
       return c.html(html)
     }

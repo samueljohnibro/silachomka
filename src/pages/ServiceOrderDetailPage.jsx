@@ -30,6 +30,36 @@ export default function ServiceOrderDetailPage() {
   const [isInitializingPayment, setIsInitializingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
   const [paymentNotice, setPaymentNotice] = useState(null);
+  const [hasCopiedOrderNumber, setHasCopiedOrderNumber] = useState(false);
+
+  // Check for Paystack redirect parameters (?reference=... or ?trxref=... or ?paid=true)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference") || params.get("trxref");
+    if (reference && order && order.paymentStatus !== "PAID") {
+      fetch("/api/services/verify-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference, orderNumber: order.orderNumber })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          setPaymentNotice("Payment verified successfully! Studio production is now authorized.");
+          setOrder(prev => ({ ...prev, paymentStatus: "PAID", orderStatus: "PAID" }));
+        }
+      })
+      .catch(console.warn);
+    }
+  }, [order]);
+
+  const copyOrderNumber = () => {
+    if (!order?.orderNumber) return;
+    navigator.clipboard.writeText(order.orderNumber).then(() => {
+      setHasCopiedOrderNumber(true);
+      setTimeout(() => setHasCopiedOrderNumber(false), 2400);
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -204,8 +234,28 @@ export default function ServiceOrderDetailPage() {
                   >
                     {STATUS_LABELS[order.orderStatus] || order.orderStatus}
                   </div>
-                  <div style={{ fontSize: "12px", color: "var(--muted)", marginTop: "6px", letterSpacing: "0.06em" }}>
-                    Ref: {order.orderNumber}
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                    <span style={{ fontSize: "12px", color: "var(--gold)", fontFamily: "monospace", letterSpacing: "0.06em" }}>
+                      #{order.orderNumber}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={copyOrderNumber}
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: "3px",
+                        border: "1px solid var(--line-gold)",
+                        background: hasCopiedOrderNumber ? "var(--gold)" : "rgba(223, 194, 125, 0.1)",
+                        color: hasCopiedOrderNumber ? "#050507" : "var(--gold)",
+                        fontSize: "9px",
+                        fontWeight: 800,
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {hasCopiedOrderNumber ? "COPIED" : "COPY"}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -392,6 +442,78 @@ export default function ServiceOrderDetailPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Multi-Service Items Breakdown (Req #20 & #24) */}
+            {Array.isArray(order.items) && order.items.length > 0 && (
+              <div
+                style={{
+                  background: "rgba(13, 13, 18, 0.72)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "12px",
+                  padding: "24px",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 700, marginBottom: "14px" }}>
+                  Selected Studio Services ({order.items.length})
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {order.items.map((it, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "12px 16px",
+                        borderRadius: "6px",
+                        background: "rgba(5, 5, 7, 0.5)",
+                        border: "1px solid rgba(223, 194, 125, 0.12)",
+                      }}
+                    >
+                      <div>
+                        <strong style={{ color: "var(--text-h)", fontSize: "14px", display: "block" }}>
+                          {it.title || it.slug}
+                        </strong>
+                        {it.configuration?.hours && (
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            {it.configuration.hours} hours
+                          </span>
+                        )}
+                        {it.configuration?.genre && (
+                          <span style={{ fontSize: "11px", color: "var(--muted)", marginLeft: "6px" }}>
+                            • {it.configuration.genre}
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ color: "var(--gold)", fontWeight: 800, fontSize: "14px" }}>
+                        {it.calculatedPriceNgn !== null && it.calculatedPriceNgn !== undefined
+                          ? `₦${Number(it.calculatedPriceNgn).toLocaleString()}`
+                          : "Price Upon Request"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Customer Message / Vision (Req #23) */}
+            {order.customerMessage && (
+              <div
+                style={{
+                  background: "rgba(13, 13, 18, 0.72)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "12px",
+                  padding: "24px",
+                }}
+              >
+                <div style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 700, marginBottom: "8px" }}>
+                  Project Vision & Instructions
+                </div>
+                <p style={{ color: "var(--text-p)", fontSize: "13px", lineHeight: 1.6, margin: 0, fontStyle: "italic" }}>
+                  "{order.customerMessage}"
+                </p>
               </div>
             )}
 

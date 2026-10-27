@@ -584,6 +584,42 @@ export default function AdminServicesPage() {
                 </div>
               </div>
 
+              {/* Multi-Service Items (Req #20 & #31) */}
+              {Array.isArray(editingOrder.items) && editingOrder.items.length > 0 && (
+                <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border)", borderRadius: "8px", padding: "14px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: "8px" }}>
+                    Selected Services & Configuration ({editingOrder.items.length})
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {editingOrder.items.map((it, idx) => (
+                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "6px" }}>
+                        <div>
+                          <strong style={{ color: "var(--text-h)" }}>{it.title || it.slug}</strong>
+                          {it.configuration?.hours && <span style={{ color: "var(--muted)", marginLeft: "6px" }}>({it.configuration.hours}h)</span>}
+                          {it.configuration?.genre && <span style={{ color: "var(--muted)", marginLeft: "6px" }}>• {it.configuration.genre}</span>}
+                          {it.configuration?.notes && <div style={{ fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>"{it.configuration.notes}"</div>}
+                        </div>
+                        <span style={{ color: "var(--gold)", fontWeight: 700 }}>
+                          {it.calculatedPriceNgn !== null ? `₦${Number(it.calculatedPriceNgn).toLocaleString()}` : "Price TBD"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Client Project Message (Req #23 & #31) */}
+              {editingOrder.customerMessage && (
+                <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border)", borderRadius: "8px", padding: "14px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: "4px" }}>
+                    Client Project Message
+                  </span>
+                  <p style={{ margin: 0, fontSize: "12px", color: "var(--text-p)", fontStyle: "italic", lineHeight: 1.5 }}>
+                    "{editingOrder.customerMessage}"
+                  </p>
+                </div>
+              )}
+
               {/* Client Stems / Uploads */}
               <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border)", borderRadius: "8px", padding: "14px" }}>
                 <span style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: "6px" }}>

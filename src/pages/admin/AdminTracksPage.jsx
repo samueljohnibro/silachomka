@@ -618,6 +618,7 @@ const AdminTracksPage = () => {
                 value={newCreditRole}
                 onChange={(e) => setNewCreditRole(e.target.value)}
                 disabled={isAddingCredit}
+                style={{ fontSize: 12, height: 38, minWidth: 145, flex: "0 0 145px", width: 145, boxSizing: "border-box", padding: "0 24px 0 10px" }}
               >
                 {CREDIT_ROLES.map((role) => (
                   <option key={role} value={role}>

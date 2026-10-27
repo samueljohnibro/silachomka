@@ -1548,7 +1548,7 @@ adminApp.get('/service-orders', async (c) => {
     SELECT 
       o.id, o.order_number as "orderNumber", o.service_slug as "serviceSlug", o.service_title as "serviceTitle",
       o.customer_name as "customerName", o.customer_email as "customerEmail", o.customer_phone as "customerPhone",
-      o.configuration, o.client_files as "clientFiles", o.total_amount_ngn as "totalAmountNgn", o.currency,
+      o.configuration, o.items as "items", o.customer_message as "customerMessage", o.client_files as "clientFiles", o.total_amount_ngn as "totalAmountNgn", o.currency,
       o.payment_status as "paymentStatus", o.payment_reference as "paymentReference", o.payment_provider as "paymentProvider",
       o.order_status as "orderStatus", o.agreed_deadline as "agreedDeadline", o.deadline_timezone as "deadlineTimezone",
       o.deliverables, o.admin_notes as "adminNotes", o.created_at as "createdAt", o.updated_at as "updatedAt"
