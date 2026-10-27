@@ -37,10 +37,32 @@ export function useDraftAutosave({
     currentDataRef.current = currentData;
   }, [currentData]);
 
+  // Normalization helper to strip transient metadata for clean dirty comparisons
+  const normalizeData = useCallback((obj) => {
+    if (!obj || typeof obj !== 'object') return obj;
+    const copy = { ...obj };
+    delete copy._draftStatus;
+    delete copy.updated_at;
+    delete copy.created_at;
+    delete copy.last_saved_at;
+    return copy;
+  }, []);
+
+  const isDataDifferent = useCallback((a, b) => {
+    if (!a || !b) return Boolean(a !== b);
+    try {
+      return JSON.stringify(normalizeData(a)) !== JSON.stringify(normalizeData(b));
+    } catch {
+      return true;
+    }
+  }, [normalizeData]);
+
   // Synchronous flush handler
   const flushDraft = useCallback(() => {
     if (!active || !isDirtyRef.current || !currentDataRef.current) return;
     try {
+      const serialized = JSON.stringify(currentDataRef.current);
+      if (serialized === initialJsonRef.current) return; // Do not flush if identical to saved state!
       const nowIso = new Date().toISOString();
       const payload = {
         entityKey,
@@ -82,11 +104,17 @@ export function useDraftAutosave({
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.data && parsed.savedAt) {
-          setRecoverableDraft(parsed);
+          // If stored draft is identical to current server data, it is NOT an unsaved draft! Discard it.
+          if (currentData && !isDataDifferent(parsed.data, currentData)) {
+            localStorage.removeItem(storageKey);
+            setRecoverableDraft(null);
+          } else {
+            setRecoverableDraft(parsed);
+          }
         }
       }
     } catch {}
-  }, [active, storageKey]);
+  }, [active, storageKey, currentData, isDataDifferent]);
 
   // Capture baseline snapshot of initial formState on form open
   useEffect(() => {
@@ -153,7 +181,7 @@ export function useDraftAutosave({
     setLastSavedAt(new Date(recoverableDraft.savedAt));
   }, [recoverableDraft, restoreCallback]);
 
-  const clearDraft = useCallback(() => {
+  const clearDraft = useCallback((savedData) => {
     isDirtyRef.current = false;
     if (timerRef.current) clearTimeout(timerRef.current);
     try {
@@ -162,6 +190,15 @@ export function useDraftAutosave({
     setRecoverableDraft(null);
     setAutosaveStatus('IDLE');
     setLastSavedAt(null);
+    if (savedData) {
+      try {
+        initialJsonRef.current = JSON.stringify(savedData);
+      } catch {}
+    } else if (currentDataRef.current) {
+      try {
+        initialJsonRef.current = JSON.stringify(currentDataRef.current);
+      } catch {}
+    }
   }, [storageKey]);
 
   return {

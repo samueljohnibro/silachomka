@@ -306,17 +306,27 @@ app.get('/api/unsubscribe', async (c) => {
 function enrichReleasePreviews(rel) {
   if (!rel) return rel
   const urls = []
-  if (rel.preview_audio_url) urls.push(rel.preview_audio_url)
-  if (Array.isArray(rel.tracks)) {
+  if (Array.isArray(rel.tracks) && rel.tracks.length > 0) {
     for (const t of rel.tracks) {
-      if (t && t.preview_audio_url && !urls.includes(t.preview_audio_url)) {
-        urls.push(t.preview_audio_url)
+      if (t && t.preview_audio_url && typeof t.preview_audio_url === 'string' && t.preview_audio_url.trim() && !urls.includes(t.preview_audio_url.trim())) {
+        urls.push(t.preview_audio_url.trim())
       }
     }
+    // Track previews are the strict authority when tracks exist
+    return {
+      ...rel,
+      preview_audio_url: urls[0] || null,
+      preview_audio_urls: urls
+    }
+  }
+
+  // Fallback for releases without track lists
+  if (rel.preview_audio_url && typeof rel.preview_audio_url === 'string' && rel.preview_audio_url.trim()) {
+    urls.push(rel.preview_audio_url.trim())
   }
   return {
     ...rel,
-    preview_audio_url: rel.preview_audio_url || urls[0] || null,
+    preview_audio_url: urls[0] || null,
     preview_audio_urls: urls
   }
 }
@@ -865,7 +875,7 @@ app.get('/api/gallery', async (c) => {
     LEFT JOIN media_assets m ON g.primary_asset_id = m.id
     WHERE g.deleted_at IS NULL 
       AND (g.status = 'PUBLISHED' OR (g.status = 'SCHEDULED' AND g.scheduled_at <= NOW()))
-    ORDER BY g.post_date DESC
+    ORDER BY g.post_date DESC, g.created_at DESC
   `
   return c.json(posts)
 })

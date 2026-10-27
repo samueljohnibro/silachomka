@@ -375,17 +375,23 @@ const AdminGalleryPage = () => {
 
       if (view === "CREATE") {
         const created = await adminApi.createGalleryPost(payload);
-        clearDraft();
+        clearDraft(created);
         await fetchData();
         refreshCatalogue();
-        setCurrentPost(created);
+        setCurrentPost({
+          ...created,
+          carouselSlides: activeSlides,
+        });
         setView("EDIT");
       } else {
         const updated = await adminApi.updateGalleryPost(currentPost.id, payload);
-        clearDraft();
+        clearDraft(updated);
         await fetchData();
         refreshCatalogue();
-        setCurrentPost(updated);
+        setCurrentPost({
+          ...updated,
+          carouselSlides: activeSlides,
+        });
       }
 
       setSaveSuccess(true);
@@ -415,11 +421,16 @@ const AdminGalleryPage = () => {
 
   const getAssetObj = (assetId) => mediaAssets.find((a) => a && a.id === assetId);
 
-  // Sorting
+  // Sorting (Stage 31 Part 15: deterministic secondary ordering by created_at DESC)
   const sortedPosts = [...posts].sort((a, b) => {
     const da = a.post_date ? new Date(a.post_date).getTime() : 0;
     const db = b.post_date ? new Date(b.post_date).getTime() : 0;
-    return sortOrder === "desc" ? db - da : da - db;
+    if (da !== db) {
+      return sortOrder === "desc" ? db - da : da - db;
+    }
+    const ca = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const cb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return sortOrder === "desc" ? cb - ca : ca - cb;
   });
 
   // Filtered media assets for library picker
@@ -1261,9 +1272,11 @@ const AdminGalleryPage = () => {
                   padding: 20,
                   overflowY: "auto",
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
-                  gap: 12,
+                  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                  gap: 14,
                   flex: 1,
+                  minHeight: 0,
+                  alignContent: "start",
                 }}
               >
                 {filteredLibraryAssets.map((asset) => {
@@ -1275,39 +1288,50 @@ const AdminGalleryPage = () => {
                       key={asset.id}
                       onClick={() => handleSelectFromLibrary(asset)}
                       style={{
-                        background: "#0d0d0d",
+                        background: "#0d0d12",
                         border: "1px solid var(--border)",
                         borderRadius: 6,
                         overflow: "hidden",
                         cursor: "pointer",
-                        transition: "transform 0.15s, border-color 0.15s",
+                        transition: "all 0.16s ease",
+                        display: "flex",
+                        flexDirection: "column",
+                        height: 175,
                         position: "relative",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.borderColor = "var(--gold)";
+                        e.currentTarget.style.transform = "translateY(-2px)";
+                        e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.6)";
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.borderColor = "var(--border)";
+                        e.currentTarget.style.transform = "none";
+                        e.currentTarget.style.boxShadow = "none";
                       }}
                     >
                       <div
                         style={{
                           width: "100%",
-                          paddingBottom: "100%",
+                          height: 135,
                           position: "relative",
                           background: "#000",
+                          overflow: "hidden",
+                          flexShrink: 0,
                         }}
                       >
                         {isVid ? (
                           <video
                             src={url}
-                            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                            muted
+                            playsInline
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                           />
                         ) : (
                           <img
                             src={url}
                             alt={asset.original_filename}
-                            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                             onError={(e) => {
                               e.currentTarget.src = "/og-image.png";
                             }}
@@ -1316,13 +1340,14 @@ const AdminGalleryPage = () => {
                         <span
                           style={{
                             position: "absolute",
-                            bottom: 4,
-                            right: 4,
-                            padding: "1px 4px",
-                            borderRadius: 2,
+                            bottom: 6,
+                            right: 6,
+                            padding: "2px 6px",
+                            borderRadius: 3,
                             fontSize: 9,
-                            fontWeight: 700,
-                            background: isVid ? "rgba(147, 51, 234, 0.85)" : "rgba(34, 197, 94, 0.85)",
+                            fontWeight: 800,
+                            letterSpacing: "0.06em",
+                            background: isVid ? "rgba(147, 51, 234, 0.9)" : "rgba(34, 197, 94, 0.9)",
                             color: "#fff",
                           }}
                         >
@@ -1331,12 +1356,15 @@ const AdminGalleryPage = () => {
                       </div>
                       <div
                         style={{
-                          padding: 6,
+                          padding: "6px 8px",
                           fontSize: 11,
                           color: "var(--text-h)",
                           whiteSpace: "nowrap",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
+                          flex: 1,
+                          display: "flex",
+                          alignItems: "center",
                         }}
                         title={asset.original_filename}
                       >

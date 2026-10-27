@@ -706,6 +706,25 @@ function UpcomingReleaseSection({ release }) {
   const minutes = Math.floor((timeLeft / 1000 / 60) % 60);
   const seconds = Math.floor((timeLeft / 1000) % 60);
 
+  const upcomingPreviewPool = useMemo(() => {
+    const list = [];
+    if (Array.isArray(release?.preview_audio_urls)) {
+      for (const u of release.preview_audio_urls) {
+        if (typeof u === 'string' && u.trim() && !list.includes(u.trim())) {
+          list.push(u.trim());
+        }
+      }
+    }
+    if (Array.isArray(release?.tracks)) {
+      for (const t of release.tracks) {
+        if (t?.preview_audio_url && typeof t.preview_audio_url === 'string' && t.preview_audio_url.trim() && !list.includes(t.preview_audio_url.trim())) {
+          list.push(t.preview_audio_url.trim());
+        }
+      }
+    }
+    return list;
+  }, [release]);
+
   return (
     <section className="upcoming-section">
       <div className="section-heading">
@@ -776,11 +795,11 @@ function UpcomingReleaseSection({ release }) {
             </div>
           </div>
 
-          {(release.preview_audio_url || (Array.isArray(release.preview_audio_urls) && release.preview_audio_urls.length > 0)) && (
+          {upcomingPreviewPool.length > 0 && (
             <div className="upcoming-preview-wrap">
               <RandomPreviewPlayer
-                audioUrl={release.preview_audio_url}
-                audioUrls={release.preview_audio_urls || []}
+                audioUrl={upcomingPreviewPool[0]}
+                audioUrls={upcomingPreviewPool}
                 projectTitle={release.title}
                 title={`${release.title} — PREVIEW`}
               />
@@ -1390,10 +1409,21 @@ function GallerySection() {
       {/* Instagram-Style Grid */}
       <div className="gallery-grid">
         {filteredPosts.map((post) => {
+          const isCarouselPost =
+            (post.type === "carousel" || post.slides?.length > 1) && post.slides?.length > 1;
+
+          // Stage 31 Part 13: Randomize carousel card preview thumbnail on public grid
+          let carouselPreview = null;
+          if (isCarouselPost && Array.isArray(post.slides) && post.slides.length > 0) {
+            const randIdx = Math.floor(Math.random() * post.slides.length);
+            const picked = post.slides[randIdx];
+            carouselPreview = typeof picked === "string" ? picked : (picked?.src || picked?.asset || null);
+          }
+
           const firstSlide = Array.isArray(post.slides) && post.slides.length > 0
             ? (typeof post.slides[0] === "string" ? post.slides[0] : post.slides[0]?.src || post.slides[0]?.asset)
             : null;
-          const primarySrc = post.src || post.asset || firstSlide || post.videoSrc;
+          const primarySrc = carouselPreview || post.src || post.asset || firstSlide || post.videoSrc;
           const isVideo =
             post.isVideo ||
             post.type === "video" ||

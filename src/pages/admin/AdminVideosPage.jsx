@@ -211,14 +211,14 @@ const AdminVideosPage = () => {
       setSaveState("SAVING");
       if (view === "CREATE") {
         const created = await adminApi.createVideo(payload);
-        clearDraft();
+        clearDraft(created);
         await fetchData();
         refreshCatalogue();
         setCurrentVideo(created);
         setView("EDIT");
       } else {
         const updated = await adminApi.updateVideo(payload.id, payload);
-        clearDraft();
+        clearDraft(updated);
         await fetchData();
         refreshCatalogue();
         setCurrentVideo(updated);

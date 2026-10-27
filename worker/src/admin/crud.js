@@ -671,7 +671,7 @@ adminApp.post('/gallery-categories', async (c) => {
 
 adminApp.get('/gallery-posts', async (c) => {
   const sql = c.get('sql')
-  const rows = await sql`SELECT * FROM gallery_posts WHERE deleted_at IS NULL ORDER BY post_date DESC`
+  const rows = await sql`SELECT * FROM gallery_posts WHERE deleted_at IS NULL ORDER BY post_date DESC, created_at DESC`
   return c.json(rows)
 })
 

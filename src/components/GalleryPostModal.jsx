@@ -1,7 +1,7 @@
 import { UpRightArrowIcon, RightArrowIcon } from "../components/Icons";
 // src/components/GalleryPostModal.jsx
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import ShareLinkBox from "./ShareLinkBox";
 import SocialPostEmbed from "./SocialPostEmbed";
@@ -66,6 +66,34 @@ export default function GalleryPostModal({
   embedded = false,
 }) {
   const [activeSlide, setActiveSlide] = useState(0);
+  const touchStartXRef = useRef(null);
+  const touchDeltaXRef = useRef(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+
+  const handleTouchStart = (e) => {
+    if (!e.touches?.[0]) return;
+    touchStartXRef.current = e.touches[0].clientX;
+    touchDeltaXRef.current = 0;
+    setIsSwiping(true);
+  };
+
+  const handleTouchMove = (e) => {
+    if (touchStartXRef.current === null || !e.touches?.[0]) return;
+    touchDeltaXRef.current = e.touches[0].clientX - touchStartXRef.current;
+  };
+
+  const handleTouchEnd = () => {
+    setIsSwiping(false);
+    if (touchStartXRef.current === null) return;
+    const delta = touchDeltaXRef.current;
+    touchStartXRef.current = null;
+    touchDeltaXRef.current = 0;
+    if (delta < -40) {
+      setActiveSlide((prev) => (prev < effectiveSlides.length - 1 ? prev + 1 : 0));
+    } else if (delta > 40) {
+      setActiveSlide((prev) => (prev > 0 ? prev - 1 : effectiveSlides.length - 1));
+    }
+  };
   const [prevPostId, setPrevPostId] = useState(post?.id);
   const [socialOptions, setSocialOptions] = useState(
     cachedSocialLinks || FALLBACK_GALLERY_SOCIALS
@@ -118,10 +146,18 @@ export default function GalleryPostModal({
     (e) => {
       if (e.key === "Escape") {
         onClose();
-      } else if (e.key === "ArrowLeft" && hasPrev) {
-        onPrev();
-      } else if (e.key === "ArrowRight" && hasNext) {
-        onNext();
+      } else if (e.key === "ArrowLeft") {
+        if (isCarousel && effectiveSlides.length > 1) {
+          setActiveSlide((prev) => (prev > 0 ? prev - 1 : effectiveSlides.length - 1));
+        } else if (hasPrev) {
+          onPrev();
+        }
+      } else if (e.key === "ArrowRight") {
+        if (isCarousel && effectiveSlides.length > 1) {
+          setActiveSlide((prev) => (prev < effectiveSlides.length - 1 ? prev + 1 : 0));
+        } else if (hasNext) {
+          onNext();
+        }
       }
     },
     [onClose, onPrev, onNext, hasPrev, hasNext]
@@ -247,31 +283,53 @@ export default function GalleryPostModal({
             =============================================== */}
         <div className="gallery-modal-media">
           {isCarousel ? (
-            <div className="gallery-carousel-wrapper">
-              {currentIsVideo ? (
-                <GalleryVideoPlayer
-                  key={currentSlideSrc}
-                  src={currentSlideSrc}
-                  className="gallery-modal-video"
-                />
-              ) : (
-                <img
-                  key={currentSlideSrc}
-                  src={currentSlideSrc}
-                  alt={`${post.title || "Gallery post"} slide ${activeSlide + 1}`}
-                  className="gallery-modal-image"
-                />
-              )}
+            <div
+              className="gallery-carousel-wrapper"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              <div className="gallery-carousel-viewport">
+                <div
+                  className="gallery-carousel-track"
+                  style={{
+                    transform: `translateX(-${activeSlide * 100}%)`,
+                    transition: isSwiping ? "none" : "transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)",
+                  }}
+                >
+                  {effectiveSlides.map((slide, idx) => {
+                    const isVid = slide.isVideo || slide.slideType === "video";
+                    return (
+                      <div key={idx} className="gallery-carousel-slide">
+                        {isVid ? (
+                          <GalleryVideoPlayer
+                            src={slide.src}
+                            className="gallery-modal-video"
+                          />
+                        ) : (
+                          <img
+                            src={slide.src}
+                            alt={`${post.title || "Gallery post"} slide ${idx + 1}`}
+                            className="gallery-modal-image"
+                            loading={idx === 0 ? "eager" : "lazy"}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
               {/* Carousel Navigation Arrows */}
               <button
                 type="button"
                 className="carousel-slide-btn carousel-prev"
-                onClick={() =>
+                onClick={(e) => {
+                  e.stopPropagation();
                   setActiveSlide((prev) =>
                     prev > 0 ? prev - 1 : effectiveSlides.length - 1
-                  )
-                }
+                  );
+                }}
                 aria-label="Previous slide"
               >
                 ‹
@@ -280,11 +338,12 @@ export default function GalleryPostModal({
               <button
                 type="button"
                 className="carousel-slide-btn carousel-next"
-                onClick={() =>
+                onClick={(e) => {
+                  e.stopPropagation();
                   setActiveSlide((prev) =>
                     prev < effectiveSlides.length - 1 ? prev + 1 : 0
-                  )
-                }
+                  );
+                }}
                 aria-label="Next slide"
               >
                 ›
@@ -299,7 +358,10 @@ export default function GalleryPostModal({
                     className={`carousel-dot ${
                       idx === activeSlide ? "is-active" : ""
                     }`}
-                    onClick={() => setActiveSlide(idx)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveSlide(idx);
+                    }}
                     aria-label={`Go to slide ${idx + 1}`}
                   />
                 ))}

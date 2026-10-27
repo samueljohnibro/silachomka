@@ -219,14 +219,14 @@ const AdminBeatsPage = () => {
 
       if (view === 'CREATE') {
         const created = await adminApi.createBeat(payload);
-        clearDraft();
+        clearDraft(created);
         await fetchBeats();
         refreshCatalogue();
         setCurrentBeat(created);
         setView('EDIT');
       } else {
         const updated = await adminApi.updateBeat(payload.id, payload);
-        clearDraft();
+        clearDraft(updated);
         await fetchBeats();
         refreshCatalogue();
         setCurrentBeat(updated);

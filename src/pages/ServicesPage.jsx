@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
 import {
   LoadingSpinner,
@@ -9,175 +9,293 @@ import {
   TrashIcon,
 } from "../components/Icons";
 
-const CATEGORIES = [
-  { id: "all", label: "All Services" },
-  { id: "PRODUCTION", label: "Production" },
-  { id: "MIXING", label: "Mixing" },
-  { id: "RECORDING", label: "Recording" },
-  { id: "MASTERING", label: "Mastering" },
-  { id: "COLLABORATION", label: "Collaboration" },
+// Conversational Intent Options mapped 1:1 to authoritative services in Neon DB
+const CONVERSATIONAL_SERVICES = [
+  {
+    slug: "beat-production",
+    prompt: "I need a bespoke beat",
+    title: "Beat Production",
+    category: "PRODUCTION",
+    basePriceNgn: 80000,
+    isHourly: false,
+    turnaroundDays: 5,
+    tagline: "Custom instrumental tailored to your sonic identity",
+  },
+  {
+    slug: "beat-mixing",
+    prompt: "I already have a beat and need it mixed",
+    title: "Beat Mixing",
+    category: "MIXING",
+    basePriceNgn: 25000,
+    isHourly: false,
+    turnaroundDays: 3,
+    tagline: "Clarity, punch, and low-end separation for your instrumental",
+  },
+  {
+    slug: "voice-recording",
+    prompt: "I need to record vocals in the studio",
+    title: "Voice Recording",
+    category: "RECORDING",
+    basePriceNgn: 25000,
+    isHourly: true,
+    hourlyRateNgn: 25000,
+    turnaroundDays: 1,
+    tagline: "Professional vocal tracking in a treated studio environment",
+  },
+  {
+    slug: "vocal-mixing",
+    prompt: "I need my recorded vocals mixed into a track",
+    title: "Vocal Mixing",
+    category: "MIXING",
+    basePriceNgn: 35000,
+    isHourly: false,
+    turnaroundDays: 4,
+    tagline: "Tuning, compression, spatial depth, and seamless beat blend",
+  },
+  {
+    slug: "full-song-mastering",
+    prompt: "I need industry-standard mastering",
+    title: "Full Song Mastering",
+    category: "MASTERING",
+    basePriceNgn: 35000,
+    isHourly: false,
+    turnaroundDays: 2,
+    tagline: "Loudness, dynamic polish, and translation across streaming platforms",
+  },
+  {
+    slug: "full-song-production",
+    prompt: "I want a complete song produced from scratch",
+    title: "Full Song Production",
+    category: "PRODUCTION",
+    basePriceNgn: 110000,
+    isHourly: false,
+    turnaroundDays: 10,
+    tagline: "Full song arrangement, live instruments, and radio-ready production",
+  },
+  {
+    slug: "instrumentalist-collaboration",
+    prompt: "I want to collaborate with an instrumentalist / producer",
+    title: "Instrumentalist / Producer Collaboration",
+    category: "COLLABORATION",
+    basePriceNgn: 20000,
+    isHourly: false,
+    turnaroundDays: 5,
+    tagline: "Live guitars, keys, or joint production input on your tracks",
+  },
+  {
+    slug: "recording-mixing-client-beat",
+    prompt: "I want to record vocals & mix on a beat I already own",
+    title: "Recording + Mixing on Client's Beat",
+    category: "PRODUCTION",
+    basePriceNgn: null, // Strictly Price Upon Request
+    isHourly: false,
+    turnaroundDays: 5,
+    tagline: "Integrated vocal tracking and full hybrid mix on your instrumental",
+  },
+  {
+    slug: "feature",
+    prompt: "I want to feature silachomka as an artist",
+    title: "Feature",
+    category: "COLLABORATION",
+    basePriceNgn: 50000,
+    isHourly: false,
+    turnaroundDays: 7,
+    tagline: "Official guest verse or hook collaboration with silachomka",
+  },
 ];
 
 export default function ServicesPage() {
   const navigate = useNavigate();
+  const { slug: routeSlug } = useParams();
   const [searchParams] = useSearchParams();
-  const [services, setServices] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState("all");
 
-  // Multi-service Session Cart (Req #20 & #21)
-  const [sessionCart, setSessionCart] = useState([]);
-  const [configuringService, setConfiguringService] = useState(null);
-  const [currentConfig, setCurrentConfig] = useState({});
+  // Server-fetched authoritative services
+  const [dbServices, setDbServices] = useState([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
 
-  // Active step: 'catalog' | 'review' | 'success'
-  const [activeStep, setActiveStep] = useState("catalog");
+  // Conversational Concierge Steps:
+  // 1: 'intent'     - Opening greeting & multi-service selection
+  // 2: 'confirm'    - "Nice. I've got that. Anything else to include?"
+  // 3: 'details'    - Service-specific tailored questions
+  // 4: 'client'     - Customer contact info & overall brief
+  // 5: 'summary'    - Session summary & review before booking
+  // 6: 'success'    - Order confirmed, copyable reference & payment
+  const [step, setStep] = useState("intent");
 
-  // Customer Contact & Brief
+  // Multi-service selection: array of service slugs
+  const [selectedSlugs, setSelectedSlugs] = useState([]);
+
+  // Per-service tailored configurations: { [slug]: { hours, bpm, key, genre, mood, ... } }
+  const [configurations, setConfigurations] = useState({});
+
+  // Client contact details
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerMessage, setCustomerMessage] = useState("");
 
-  // Private File Upload State
-  const [uploadedFiles, setUploadedFiles] = useState([]);
+  // Attached files (stems, references, beats)
+  const [clientFiles, setClientFiles] = useState([]);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [uploadError, setUploadError] = useState(null);
 
-  // Submission & Confirmation State
-  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
-  const [orderSubmitError, setOrderSubmitError] = useState(null);
+  // Order submission & payment states
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
-  const [hasCopiedOrderNumber, setHasCopiedOrderNumber] = useState(false);
+  const [hasCopiedRef, setHasCopiedRef] = useState(false);
+  const [isInitializingPayment, setIsInitializingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState(null);
 
-  // Fetch Authoritative Services from Worker API
+  // Fetch live services from Worker API
   useEffect(() => {
     let cancelled = false;
     fetch("/api/services")
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (!cancelled) {
-          setServices(Array.isArray(data) ? data : []);
-          setIsLoading(false);
+          setDbServices(Array.isArray(data) ? data : []);
+          setIsLoadingServices(false);
         }
       })
       .catch((err) => {
-        console.warn("Failed to fetch services:", err);
-        if (!cancelled) setIsLoading(false);
+        console.warn("Failed to load services:", err);
+        if (!cancelled) setIsLoadingServices(false);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Pre-select service from URL parameter (e.g. /services?service=beat-production)
+  // Pre-select service if passed via URL (e.g. /services/beat-production or /services?service=beat-production)
   useEffect(() => {
-    const slug = searchParams.get("service");
-    if (slug && services.length > 0 && sessionCart.length === 0) {
-      const match = services.find((s) => s.slug === slug);
+    const targetSlug = routeSlug || searchParams.get("service");
+    if (targetSlug && selectedSlugs.length === 0) {
+      const match = CONVERSATIONAL_SERVICES.find((s) => s.slug === targetSlug);
       if (match) {
-        startConfiguringService(match);
+        setSelectedSlugs([match.slug]);
+        // Set default config
+        if (match.isHourly) {
+          setConfigurations((prev) => ({
+            ...prev,
+            [match.slug]: { hours: 2, ...prev[match.slug] },
+          }));
+        }
       }
     }
-  }, [searchParams, services]);
+  }, [routeSlug, searchParams]);
 
-  const filteredServices = useMemo(() => {
-    if (activeCategory === "all") return services;
-    return services.filter((s) => s.category?.toUpperCase() === activeCategory);
-  }, [services, activeCategory]);
-
-  // Combined Live Total
-  const { cartTotalNgn, hasPriceUponRequest } = useMemo(() => {
-    let total = 0;
-    let uponRequest = false;
-
-    for (const item of sessionCart) {
-      if (item.calculatedPrice === null || item.calculatedPrice === undefined) {
-        uponRequest = true;
-      } else {
-        total += item.calculatedPrice;
-      }
-    }
-
-    return { cartTotalNgn: total, hasPriceUponRequest: uponRequest };
-  }, [sessionCart]);
-
-  const startConfiguringService = (service) => {
-    // Check if already in cart to edit existing config
-    const existing = sessionCart.find((it) => it.service.slug === service.slug);
-    if (existing) {
-      setCurrentConfig({ ...existing.configuration });
-    } else {
-      setCurrentConfig({
-        hours: service.isHourly ? 2 : undefined,
-        bpm: "",
-        musicalKey: "",
-        genre: "",
-        mood: "",
-        featurePart: "verse",
-        referenceLinks: "",
-        notes: "",
-      });
-    }
-    setConfiguringService(service);
-  };
-
-  const handleSaveToSession = () => {
-    if (!configuringService) return;
-
-    let price = null;
-    if (configuringService.isHourly) {
-      const rate = Number(
-        configuringService.hourlyRateNgn ||
-          configuringService.basePriceNgn ||
-          25000
-      );
-      const hours = Math.max(1, parseInt(currentConfig.hours || 1, 10));
-      price = rate * hours;
-    } else if (
-      configuringService.basePriceNgn !== null &&
-      configuringService.basePriceNgn !== undefined
-    ) {
-      price = Number(configuringService.basePriceNgn);
-    } else {
-      // Service #5: Price Upon Request
-      price = null;
-    }
-
-    const newItem = {
-      id: configuringService.slug,
-      service: configuringService,
-      configuration: { ...currentConfig },
-      calculatedPrice: price,
-    };
-
-    setSessionCart((prev) => {
-      const idx = prev.findIndex(
-        (it) => it.service.slug === configuringService.slug
-      );
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = newItem;
-        return copy;
-      }
-      return [...prev, newItem];
+  // Merge client catalogue with any DB price updates
+  const activeServiceList = useMemo(() => {
+    return CONVERSATIONAL_SERVICES.map((s) => {
+      const dbMatch = dbServices.find((d) => d.slug === s.slug);
+      if (!dbMatch) return s;
+      return {
+        ...s,
+        title: dbMatch.title || s.title,
+        basePriceNgn:
+          dbMatch.base_price_ngn !== null && dbMatch.base_price_ngn !== undefined
+            ? Number(dbMatch.base_price_ngn)
+            : s.basePriceNgn,
+        isHourly: dbMatch.is_hourly ?? s.isHourly,
+        hourlyRateNgn:
+          dbMatch.hourly_rate_ngn !== null && dbMatch.hourly_rate_ngn !== undefined
+            ? Number(dbMatch.hourly_rate_ngn)
+            : s.hourlyRateNgn,
+        turnaroundDays: dbMatch.turnaround_days ?? s.turnaroundDays,
+      };
     });
+  }, [dbServices]);
 
-    setConfiguringService(null);
+  // Toggle service selection in conversational intent step
+  const toggleService = (slug) => {
+    setSelectedSlugs((prev) => {
+      if (prev.includes(slug)) {
+        return prev.filter((s) => s !== slug);
+      } else {
+        const svc = activeServiceList.find((s) => s.slug === slug);
+        if (svc?.isHourly && !configurations[slug]?.hours) {
+          setConfigurations((c) => ({
+            ...c,
+            [slug]: { hours: 2, ...c[slug] },
+          }));
+        }
+        return [...prev, slug];
+      }
+    });
   };
 
-  const handleRemoveFromSession = (slug) => {
-    setSessionCart((prev) => prev.filter((it) => it.service.slug !== slug));
+  // Update configuration for a specific service
+  const updateConfig = (slug, field, value) => {
+    setConfigurations((prev) => ({
+      ...prev,
+      [slug]: {
+        ...(prev[slug] || {}),
+        [field]: value,
+      },
+    }));
   };
 
+  // Selected services mapped to objects (Multi-service sessionCart)
+  const selectedServices = useMemo(() => {
+    return selectedSlugs
+      .map((slug) => activeServiceList.find((s) => s.slug === slug))
+      .filter(Boolean);
+  }, [selectedSlugs, activeServiceList]);
+
+  const sessionCart = selectedServices;
+
+  // Live Authoritative Calculation
+  const { totalNgn, hasPriceUponRequest, itemizedPrices, maxTurnaroundDays } =
+    useMemo(() => {
+      let sum = 0;
+      let uponRequest = false;
+      let maxDays = 3;
+      const prices = {};
+
+      for (const svc of selectedServices) {
+        if (svc.turnaroundDays && svc.turnaroundDays > maxDays) {
+          maxDays = svc.turnaroundDays;
+        }
+
+        if (svc.isHourly) {
+          const hours = Math.max(
+            1,
+            parseInt(configurations[svc.slug]?.hours || 1, 10)
+          );
+          const rate = svc.hourlyRateNgn || 25000;
+          const price = rate * hours;
+          prices[svc.slug] = price;
+          sum += price;
+        } else if (
+          svc.basePriceNgn !== null &&
+          svc.basePriceNgn !== undefined
+        ) {
+          const price = Number(svc.basePriceNgn);
+          prices[svc.slug] = price;
+          sum += price;
+        } else {
+          // Service #5: Price Upon Request
+          uponRequest = true;
+          prices[svc.slug] = null;
+        }
+      }
+
+      return {
+        totalNgn: uponRequest && sum === 0 ? null : sum,
+        hasPriceUponRequest: uponRequest,
+        itemizedPrices: prices,
+        maxTurnaroundDays: maxDays,
+      };
+    }, [selectedServices, configurations]);
+
+  // File Upload Handler (Up to 100MB via /api/services/upload)
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.size > 100 * 1024 * 1024) {
-      setUploadError(
-        "File size exceeds 100MB limit. Please upload audio under 100MB or provide a link."
-      );
+      setUploadError("File exceeds 100MB limit. Please upload audio under 100MB.");
       return;
     }
 
@@ -196,43 +314,43 @@ export default function ServicesPage() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "File upload failed");
       }
-      setUploadedFiles((prev) => [...prev, data.file]);
+      setClientFiles((prev) => [...prev, data.file]);
     } catch (err) {
-      setUploadError(err.message);
+      setUploadError(err.message || "Failed to upload file");
     } finally {
       setIsUploadingFile(false);
       e.target.value = "";
     }
   };
 
-  const handleRemoveFile = (fileId) => {
-    setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
+  const removeFile = (id) => {
+    setClientFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
-  const handleSubmitOrder = async (e) => {
-    e.preventDefault();
-    if (sessionCart.length === 0) {
-      setOrderSubmitError("Please select at least one studio service.");
+  // Submit Order to Server-side authority
+  const handleFinalSubmit = async () => {
+    if (selectedServices.length === 0) {
+      setSubmitError("Please select at least one studio service.");
       return;
     }
     if (!customerName.trim() || !customerEmail.trim()) {
-      setOrderSubmitError("Please provide your name and a valid email.");
+      setSubmitError("Please provide your name and contact email.");
       return;
     }
 
-    setIsSubmittingOrder(true);
-    setOrderSubmitError(null);
+    setIsSubmitting(true);
+    setSubmitError(null);
 
     const payload = {
       customerName: customerName.trim(),
       customerEmail: customerEmail.trim().toLowerCase(),
       customerPhone: customerPhone.trim(),
       customerMessage: customerMessage.trim(),
-      services: sessionCart.map((it) => ({
-        slug: it.service.slug,
-        configuration: it.configuration,
+      services: selectedServices.map((svc) => ({
+        slug: svc.slug,
+        configuration: configurations[svc.slug] || {},
       })),
-      clientFiles: uploadedFiles,
+      clientFiles: clientFiles,
     };
 
     try {
@@ -243,27 +361,70 @@ export default function ServicesPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Unable to submit order");
+        throw new Error(data.error || "Unable to reserve studio session");
       }
       setConfirmedOrder(data.order);
-      setActiveStep("success");
+      setStep("success");
     } catch (err) {
-      setOrderSubmitError(err.message);
+      setSubmitError(err.message || "Session reservation failed");
     } finally {
-      setIsSubmittingOrder(false);
+      setIsSubmitting(false);
     }
   };
 
-  const copyOrderNumberToClipboard = () => {
-    if (!confirmedOrder?.orderNumber) return;
+  // Copy order reference to clipboard with "Copied ✓" feedback
+  const handleCopyOrderRef = () => {
+    if (!confirmedOrder?.orderNumber && !confirmedOrder?.order_number) return;
+    const refNum = confirmedOrder.orderNumber || confirmedOrder.order_number;
     navigator.clipboard
-      .writeText(confirmedOrder.orderNumber)
+      .writeText(refNum)
       .then(() => {
-        setHasCopiedOrderNumber(true);
-        setTimeout(() => setHasCopiedOrderNumber(false), 2400);
+        setHasCopiedRef(true);
+        setTimeout(() => setHasCopiedRef(false), 2400);
       })
       .catch(() => {});
   };
+
+  // Paystack Payment Trigger
+  const handleInitializePayment = async () => {
+    const refNum = confirmedOrder?.orderNumber || confirmedOrder?.order_number;
+    if (!refNum) return;
+    setIsInitializingPayment(true);
+    setPaymentError(null);
+
+    try {
+      const res = await fetch(
+        `/api/services/orders/${encodeURIComponent(refNum)}/payment`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+      if (res.ok && data.success && data.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
+      } else if (res.ok && data.success) {
+        // Direct reference fallback
+        navigate(`/services/order/${refNum}`);
+      } else {
+        throw new Error(data.error || "Payment gateway unavailable");
+      }
+    } catch (err) {
+      setPaymentError(err.message || "Failed to initialize payment gateway");
+    } finally {
+      setIsInitializingPayment(false);
+    }
+  };
+
+  // Estimated WAT Deadline calculation
+  const deadlineDateString = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + (maxTurnaroundDays || 3));
+    return d.toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "Africa/Lagos",
+    });
+  }, [maxTurnaroundDays]);
 
   return (
     <main
@@ -271,6 +432,7 @@ export default function ServicesPage() {
         minHeight: "100vh",
         position: "relative",
         padding: "60px 6vw 140px",
+        background: "radial-gradient(ellipse at 50% 0%, rgba(223, 194, 125, 0.04) 0%, transparent 60%)",
       }}
     >
       <SeoHead
@@ -279,1208 +441,1146 @@ export default function ServicesPage() {
         canonicalUrl="/services"
       />
 
-      {/* =========================================================
-          1. WARM CONVERSATIONAL STUDIO GREETING (Req #19)
-          ========================================================= */}
-      <section style={{ maxWidth: "880px", margin: "0 auto 50px" }}>
-        <p
-          className="eyebrow"
-          style={{ letterSpacing: "0.22em", color: "var(--gold)" }}
-        >
-          chomkaMUSIC™ STUDIO SERVICES
-        </p>
-        <h1
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: "clamp(26px, 4.5vw, 44px)",
-            fontWeight: 800,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--text)",
-            margin: "8px 0 16px",
-            lineHeight: 1.15,
-          }}
-        >
-          What are you looking to create?
-        </h1>
-        <p
-          style={{
-            fontSize: "clamp(14px, 1.8vw, 16px)",
-            lineHeight: 1.6,
-            color: "var(--muted)",
-            maxWidth: "700px",
-            margin: 0,
-          }}
-        >
-          Whether you need bespoke beat production, vocal tracking in Lagos, an
-          industry-standard mix, or a collaborative verse, customize your studio
-          session below. You can select multiple services into a single order.
-        </p>
+      <div style={{ maxWidth: "840px", margin: "0 auto" }}>
+        {/* =========================================================
+            HEADER / BREADCRUMB INDICATOR
+            ========================================================= */}
+        <div style={{ marginBottom: "28px", textAlign: "left" }}>
+          <p
+            className="eyebrow"
+            style={{
+              letterSpacing: "0.22em",
+              color: "var(--gold)",
+              marginBottom: "8px",
+            }}
+          >
+            chomkaMUSIC™ STUDIO CONCIERGE
+          </p>
 
-        {/* Step Indicator */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            marginTop: "24px",
-            fontSize: "12px",
-            fontWeight: 700,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-          }}
-        >
-          <span
-            style={{
-              color: activeStep === "catalog" ? "var(--gold)" : "var(--muted)",
-            }}
-          >
-            1. Services
-          </span>
-          <span style={{ color: "var(--line-gold)" }}>→</span>
-          <span
-            style={{
-              color: activeStep === "review" ? "var(--gold)" : "var(--muted)",
-            }}
-          >
-            2. Review & Brief
-          </span>
-          <span style={{ color: "var(--line-gold)" }}>→</span>
-          <span
-            style={{
-              color: activeStep === "success" ? "var(--gold)" : "var(--muted)",
-            }}
-          >
-            3. Confirmation
-          </span>
-        </div>
-      </section>
-
-      {/* =========================================================
-          STEP 1: SERVICES CATALOG & MULTI-SERVICE SELECTION
-          ========================================================= */}
-      {activeStep === "catalog" && (
-        <section style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          {/* Category Filter Pills */}
-          <div
-            style={{
-              display: "flex",
-              gap: "8px",
-              flexWrap: "wrap",
-              marginBottom: "36px",
-            }}
-          >
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setActiveCategory(cat.id)}
-                style={{
-                  height: "36px",
-                  padding: "0 16px",
-                  borderRadius: "4px",
-                  border:
-                    activeCategory === cat.id
-                      ? "1px solid var(--gold)"
-                      : "1px solid var(--line)",
-                  background:
-                    activeCategory === cat.id
-                      ? "rgba(223, 194, 125, 0.12)"
-                      : "rgba(5, 5, 7, 0.4)",
-                  color:
-                    activeCategory === cat.id ? "var(--gold)" : "var(--muted)",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {isLoading ? (
+          {/* Concierge Step Breadcrumb */}
+          {step !== "success" && (
             <div
               style={{
                 display: "flex",
-                justifyContent: "center",
-                padding: "80px 0",
+                alignItems: "center",
+                gap: "10px",
+                fontSize: "11px",
+                fontWeight: 700,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: "var(--muted)",
+                flexWrap: "wrap",
               }}
             >
-              <LoadingSpinner size={32} color="var(--gold)" />
-            </div>
-          ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "repeat(auto-fill, minmax(320px, 1fr))",
-                gap: "24px",
-              }}
-            >
-              {filteredServices.map((service) => {
-                const inCart = sessionCart.find(
-                  (it) => it.service.slug === service.slug
-                );
-
-                return (
-                  <article
-                    key={service.id}
-                    style={{
-                      background: "rgba(10, 10, 16, 0.75)",
-                      border: inCart
-                        ? "1px solid var(--gold)"
-                        : "1px solid rgba(223, 194, 125, 0.15)",
-                      borderRadius: "8px",
-                      padding: "26px",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      transition: "all 0.2s ease",
-                      position: "relative",
-                      boxShadow: inCart
-                        ? "0 0 20px rgba(223, 194, 125, 0.15)"
-                        : "none",
-                    }}
-                  >
-                    {inCart && (
-                      <span
-                        style={{
-                          position: "absolute",
-                          top: "14px",
-                          right: "14px",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          padding: "3px 8px",
-                          borderRadius: "3px",
-                          background: "var(--gold)",
-                          color: "#050507",
-                          fontSize: "9px",
-                          fontWeight: 800,
-                          letterSpacing: "0.12em",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        <CheckIcon size={11} color="#050507" /> IN SESSION
-                      </span>
-                    )}
-
-                    <div>
-                      <span
-                        style={{
-                          fontSize: "10px",
-                          fontWeight: 700,
-                          letterSpacing: "0.16em",
-                          textTransform: "uppercase",
-                          color: "var(--gold)",
-                        }}
-                      >
-                        {service.category}
-                      </span>
-                      <h2
-                        style={{
-                          fontFamily: "var(--font-display)",
-                          fontSize: "18px",
-                          fontWeight: 700,
-                          letterSpacing: "0.06em",
-                          color: "var(--text)",
-                          margin: "8px 0 6px",
-                        }}
-                      >
-                        {service.title}
-                      </h2>
-                      {service.tagline && (
-                        <p
-                          style={{
-                            fontSize: "12px",
-                            fontStyle: "italic",
-                            color: "var(--gold-light)",
-                            margin: "0 0 12px",
-                          }}
-                        >
-                          {service.tagline}
-                        </p>
-                      )}
-                      <p
-                        style={{
-                          fontSize: "13px",
-                          lineHeight: 1.5,
-                          color: "var(--muted)",
-                          margin: "0 0 20px",
-                        }}
-                      >
-                        {service.description}
-                      </p>
-                    </div>
-
-                    <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "baseline",
-                          paddingTop: "14px",
-                          borderTop: "1px solid rgba(223, 194, 125, 0.12)",
-                          marginBottom: "16px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: 600,
-                            letterSpacing: "0.12em",
-                            color: "var(--muted)",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          Rate
-                        </span>
-                        <span
-                          style={{
-                            fontSize: "16px",
-                            fontWeight: 800,
-                            letterSpacing: "0.06em",
-                            color: "var(--gold)",
-                          }}
-                        >
-                          {service.isHourly
-                            ? `₦${Number(
-                                service.hourlyRateNgn || 25000
-                              ).toLocaleString()} / hr`
-                            : service.basePriceNgn !== null &&
-                              service.basePriceNgn !== undefined
-                            ? `₦${Number(
-                                service.basePriceNgn
-                              ).toLocaleString()}`
-                            : "Price Upon Request"}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => startConfiguringService(service)}
-                        style={{
-                          width: "100%",
-                          height: "40px",
-                          borderRadius: "4px",
-                          border: inCart
-                            ? "1px solid var(--gold)"
-                            : "1px solid var(--line-gold)",
-                          background: inCart
-                            ? "rgba(223, 194, 125, 0.15)"
-                            : "rgba(223, 194, 125, 0.05)",
-                          color: inCart ? "var(--gold)" : "var(--text)",
-                          fontSize: "11px",
-                          fontWeight: 700,
-                          letterSpacing: "0.12em",
-                          textTransform: "uppercase",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "8px",
-                          transition: "all 0.15s ease",
-                        }}
-                      >
-                        {inCart ? "Edit Configuration" : "+ Add to Session"}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
+              <span
+                style={{
+                  color: step === "intent" ? "var(--gold)" : "var(--muted)",
+                  borderBottom: step === "intent" ? "1px solid var(--gold)" : "none",
+                  paddingBottom: "2px",
+                }}
+              >
+                1. Intent
+              </span>
+              <span style={{ color: "rgba(223, 194, 125, 0.3)" }}>→</span>
+              <span
+                style={{
+                  color: step === "confirm" ? "var(--gold)" : "var(--muted)",
+                  borderBottom: step === "confirm" ? "1px solid var(--gold)" : "none",
+                  paddingBottom: "2px",
+                }}
+              >
+                2. Confirmation
+              </span>
+              <span style={{ color: "rgba(223, 194, 125, 0.3)" }}>→</span>
+              <span
+                style={{
+                  color: step === "details" ? "var(--gold)" : "var(--muted)",
+                  borderBottom: step === "details" ? "1px solid var(--gold)" : "none",
+                  paddingBottom: "2px",
+                }}
+              >
+                3. Session Details
+              </span>
+              <span style={{ color: "rgba(223, 194, 125, 0.3)" }}>→</span>
+              <span
+                style={{
+                  color: step === "client" ? "var(--gold)" : "var(--muted)",
+                  borderBottom: step === "client" ? "1px solid var(--gold)" : "none",
+                  paddingBottom: "2px",
+                }}
+              >
+                4. Brief & Contact
+              </span>
+              <span style={{ color: "rgba(223, 194, 125, 0.3)" }}>→</span>
+              <span
+                style={{
+                  color: step === "summary" ? "var(--gold)" : "var(--muted)",
+                  borderBottom: step === "summary" ? "1px solid var(--gold)" : "none",
+                  paddingBottom: "2px",
+                }}
+              >
+                5. Review
+              </span>
             </div>
           )}
-        </section>
-      )}
+        </div>
 
-      {/* =========================================================
-          PERSISTENT "YOUR SESSION" DRAWER BAR (Req #20)
-          ========================================================= */}
-      {sessionCart.length > 0 && activeStep === "catalog" && (
-        <aside
-          style={{
-            position: "fixed",
-            bottom: "20px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: "min(94vw, 920px)",
-            background: "rgba(10, 10, 15, 0.94)",
-            border: "1px solid var(--gold)",
-            borderRadius: "10px",
-            padding: "16px 24px",
-            boxShadow:
-              "0 20px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(223, 194, 125, 0.18)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            zIndex: 990,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "20px",
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                marginBottom: "4px",
-              }}
-            >
-              <span
+        {/* =========================================================
+            STAGE 1: INTENT (Hey. What are we creating?)
+            ========================================================= */}
+        {step === "intent" && (
+          <section
+            style={{
+              background: "rgba(10, 10, 16, 0.8)",
+              border: "1px solid rgba(223, 194, 125, 0.2)",
+              borderRadius: "12px",
+              padding: "clamp(24px, 4vw, 44px)",
+              backdropFilter: "blur(12px)",
+              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
+              animation: "fadeIn 0.25s ease-out",
+            }}
+          >
+            <div style={{ marginBottom: "28px" }}>
+              <h1
                 style={{
-                  fontSize: "11px",
+                  fontFamily: "var(--font-display)",
+                  fontSize: "clamp(26px, 4vw, 40px)",
                   fontWeight: 800,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "var(--gold)",
+                  letterSpacing: "0.04em",
+                  color: "var(--text)",
+                  margin: "0 0 10px",
+                  lineHeight: 1.2,
                 }}
               >
-                YOUR SESSION ({sessionCart.length}{" "}
-                {sessionCart.length === 1 ? "SERVICE" : "SERVICES"})
-              </span>
+                Hey. What are we creating?
+              </h1>
+              <p
+                style={{
+                  fontSize: "15px",
+                  lineHeight: 1.6,
+                  color: "var(--muted)",
+                  margin: 0,
+                }}
+              >
+                Tell me what you're trying to get done and I'll help you put together the right studio session.
+              </p>
+              <p
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--gold)",
+                  marginTop: "16px",
+                  marginBottom: 0,
+                }}
+              >
+                What are you looking to create?
+              </p>
             </div>
+
+            {/* Selectable conversational service options */}
             <div
               style={{
                 display: "flex",
-                gap: "8px",
-                flexWrap: "wrap",
-                alignItems: "center",
+                flexDirection: "column",
+                gap: "12px",
+                marginBottom: "32px",
               }}
             >
-              {sessionCart.map((item) => (
-                <span
-                  key={item.id}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    background: "rgba(223, 194, 125, 0.1)",
-                    border: "1px solid rgba(223, 194, 125, 0.25)",
-                    padding: "3px 8px",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    color: "var(--text)",
-                  }}
-                >
-                  {item.service.title}
-                  {item.calculatedPrice !== null && (
-                    <strong style={{ color: "var(--gold)" }}>
-                      ₦{item.calculatedPrice.toLocaleString()}
-                    </strong>
-                  )}
+              {activeServiceList.map((svc) => {
+                const isSelected = selectedSlugs.includes(svc.slug);
+
+                return (
                   <button
+                    key={svc.slug}
                     type="button"
-                    onClick={() => handleRemoveFromSession(item.service.slug)}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      color: "var(--muted)",
-                      cursor: "pointer",
-                      padding: "0 2px",
-                      fontSize: "13px",
-                      lineHeight: 1,
-                    }}
-                    title="Remove service"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "20px",
-              marginLeft: "auto",
-            }}
-          >
-            <div style={{ textAlign: "right" }}>
-              <span
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  letterSpacing: "0.12em",
-                  color: "var(--muted)",
-                  textTransform: "uppercase",
-                  display: "block",
-                }}
-              >
-                Session Total
-              </span>
-              <span
-                style={{
-                  fontSize: "18px",
-                  fontWeight: 800,
-                  color: "var(--gold)",
-                }}
-              >
-                {hasPriceUponRequest
-                  ? "Quote Upon Request"
-                  : `₦${cartTotalNgn.toLocaleString()}`}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setActiveStep("review")}
-              style={{
-                height: "42px",
-                padding: "0 22px",
-                borderRadius: "5px",
-                border: "none",
-                background: "linear-gradient(135deg, #fae2a0 0%, #dfc27d 100%)",
-                color: "#050507",
-                fontSize: "11px",
-                fontWeight: 800,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
-              Review & Book <RightArrowIcon size={12} />
-            </button>
-          </div>
-        </aside>
-      )}
-
-      {/* =========================================================
-          SERVICE CONFIGURATION MODAL (Req #21)
-          ========================================================= */}
-      {configuringService && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(5, 5, 7, 0.85)",
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setConfiguringService(null)}
-        >
-          <div
-            style={{
-              background: "#0c0c12",
-              border: "1px solid var(--line-gold)",
-              borderRadius: "10px",
-              width: "min(92vw, 580px)",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              padding: "30px",
-              boxShadow: "0 25px 60px rgba(0, 0, 0, 0.9)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                marginBottom: "20px",
-              }}
-            >
-              <div>
-                <span
-                  style={{
-                    fontSize: "10px",
-                    fontWeight: 700,
-                    letterSpacing: "0.14em",
-                    textTransform: "uppercase",
-                    color: "var(--gold)",
-                  }}
-                >
-                  Configure Service
-                </span>
-                <h3
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: 800,
-                    letterSpacing: "0.06em",
-                    color: "var(--text)",
-                    margin: "4px 0 0",
-                  }}
-                >
-                  {configuringService.title}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setConfiguringService(null)}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  color: "var(--muted)",
-                  fontSize: "20px",
-                  cursor: "pointer",
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Dynamic Service-Specific Fields (Req #21) */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {/* Hourly Voice Recording Stepper */}
-              {configuringService.isHourly && (
-                <div
-                  style={{
-                    padding: "16px",
-                    borderRadius: "6px",
-                    background: "rgba(223, 194, 125, 0.05)",
-                    border: "1px solid rgba(223, 194, 125, 0.2)",
-                  }}
-                >
-                  <label
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "var(--gold)",
-                      display: "block",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    Studio Time Required (Hours)
-                  </label>
-                  <div
+                    onClick={() => toggleService(svc.slug)}
                     style={{
                       display: "flex",
                       alignItems: "center",
+                      justifyContent: "space-between",
+                      textAlign: "left",
+                      padding: "16px 20px",
+                      borderRadius: "8px",
+                      border: isSelected
+                        ? "1px solid var(--gold)"
+                        : "1px solid rgba(255, 255, 255, 0.08)",
+                      background: isSelected
+                        ? "rgba(223, 194, 125, 0.1)"
+                        : "rgba(5, 5, 8, 0.5)",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
                       gap: "16px",
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCurrentConfig((prev) => ({
-                          ...prev,
-                          hours: Math.max(1, (prev.hours || 1) - 1),
-                        }))
-                      }
-                      style={{
-                        width: "36px",
-                        height: "36px",
-                        borderRadius: "4px",
-                        border: "1px solid var(--line-gold)",
-                        background: "rgba(5, 5, 7, 0.6)",
-                        color: "var(--gold)",
-                        fontSize: "18px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      -
-                    </button>
-                    <span
-                      style={{
-                        fontSize: "18px",
-                        fontWeight: 800,
-                        color: "var(--text)",
-                        minWidth: "30px",
-                        textAlign: "center",
-                      }}
-                    >
-                      {currentConfig.hours || 1}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCurrentConfig((prev) => ({
-                          ...prev,
-                          hours: (prev.hours || 1) + 1,
-                        }))
-                      }
-                      style={{
-                        width: "36px",
-                        height: "36px",
-                        borderRadius: "4px",
-                        border: "1px solid var(--line-gold)",
-                        background: "rgba(5, 5, 7, 0.6)",
-                        color: "var(--gold)",
-                        fontSize: "18px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      +
-                    </button>
-                    <span
-                      style={{
-                        fontSize: "13px",
-                        color: "var(--gold)",
-                        marginLeft: "auto",
-                        fontWeight: 700,
-                      }}
-                    >
-                      ₦
-                      {(
-                        Number(configuringService.hourlyRateNgn || 25000) *
-                        (currentConfig.hours || 1)
-                      ).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Feature Part Selector */}
-              {configuringService.slug === "feature" && (
-                <div>
-                  <label
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "var(--gold)",
-                      display: "block",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    Desired Feature Placement
-                  </label>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    {["verse", "hook", "both"].map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() =>
-                          setCurrentConfig((prev) => ({
-                            ...prev,
-                            featurePart: opt,
-                          }))
-                        }
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1 }}>
+                      {/* Checkbox circle indicator */}
+                      <div
                         style={{
-                          flex: 1,
-                          height: "34px",
+                          width: "20px",
+                          height: "20px",
                           borderRadius: "4px",
-                          border:
-                            currentConfig.featurePart === opt
-                              ? "1px solid var(--gold)"
-                              : "1px solid var(--line)",
-                          background:
-                            currentConfig.featurePart === opt
-                              ? "rgba(223, 194, 125, 0.15)"
-                              : "transparent",
-                          color:
-                            currentConfig.featurePart === opt
-                              ? "var(--gold)"
-                              : "var(--muted)",
-                          fontSize: "10px",
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.1em",
-                          cursor: "pointer",
+                          border: isSelected
+                            ? "1px solid var(--gold)"
+                            : "1px solid rgba(255, 255, 255, 0.25)",
+                          background: isSelected ? "var(--gold)" : "transparent",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          transition: "all 0.15s ease",
                         }}
                       >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+                        {isSelected && <CheckIcon size={13} color="#050507" />}
+                      </div>
 
-              {/* Musical Parameters */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "12px",
-                }}
-              >
-                <div>
-                  <label
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "var(--gold)",
-                      display: "block",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Tempo / BPM (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 105 or ~120"
-                    value={currentConfig.bpm || ""}
-                    onChange={(e) =>
-                      setCurrentConfig((prev) => ({
-                        ...prev,
-                        bpm: e.target.value,
-                      }))
-                    }
-                    style={{
-                      width: "100%",
-                      height: "38px",
-                      padding: "0 12px",
-                      borderRadius: "4px",
-                      border: "1px solid var(--line-gold)",
-                      background: "rgba(5, 5, 7, 0.6)",
-                      color: "var(--text)",
-                      fontSize: "12px",
-                    }}
-                  />
-                </div>
-                <div>
-                  <label
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "var(--gold)",
-                      display: "block",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Key (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. F# Minor or C Major"
-                    value={currentConfig.musicalKey || ""}
-                    onChange={(e) =>
-                      setCurrentConfig((prev) => ({
-                        ...prev,
-                        musicalKey: e.target.value,
-                      }))
-                    }
-                    style={{
-                      width: "100%",
-                      height: "38px",
-                      padding: "0 12px",
-                      borderRadius: "4px",
-                      border: "1px solid var(--line-gold)",
-                      background: "rgba(5, 5, 7, 0.6)",
-                      color: "var(--text)",
-                      fontSize: "12px",
-                    }}
-                  />
-                </div>
-              </div>
+                      <div>
+                        <p
+                          style={{
+                            fontSize: "15px",
+                            fontWeight: 600,
+                            color: isSelected ? "var(--text)" : "#d6d6d8",
+                            margin: "0 0 2px",
+                          }}
+                        >
+                          {svc.prompt}
+                        </p>
+                        <p
+                          style={{
+                            fontSize: "12px",
+                            color: "var(--muted)",
+                            margin: 0,
+                          }}
+                        >
+                          {svc.title} · {svc.tagline}
+                        </p>
+                      </div>
+                    </div>
 
-              {/* Genre / Mood */}
-              <div>
-                <label
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: "var(--gold)",
-                    display: "block",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Genre & Vibe
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Afrobeats, Trap, R&B, Dark / Energetic"
-                  value={currentConfig.genre || ""}
-                  onChange={(e) =>
-                    setCurrentConfig((prev) => ({
-                      ...prev,
-                      genre: e.target.value,
-                    }))
-                  }
-                  style={{
-                    width: "100%",
-                    height: "38px",
-                    padding: "0 12px",
-                    borderRadius: "4px",
-                    border: "1px solid var(--line-gold)",
-                    background: "rgba(5, 5, 7, 0.6)",
-                    color: "var(--text)",
-                    fontSize: "12px",
-                  }}
-                />
-              </div>
-
-              {/* Reference Links */}
-              <div>
-                <label
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: "var(--gold)",
-                    display: "block",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Reference Song / Sound Links
-                </label>
-                <input
-                  type="text"
-                  placeholder="Spotify, Apple Music, or YouTube link"
-                  value={currentConfig.referenceLinks || ""}
-                  onChange={(e) =>
-                    setCurrentConfig((prev) => ({
-                      ...prev,
-                      referenceLinks: e.target.value,
-                    }))
-                  }
-                  style={{
-                    width: "100%",
-                    height: "38px",
-                    padding: "0 12px",
-                    borderRadius: "4px",
-                    border: "1px solid var(--line-gold)",
-                    background: "rgba(5, 5, 7, 0.6)",
-                    color: "var(--text)",
-                    fontSize: "12px",
-                  }}
-                />
-              </div>
-
-              {/* Specific Instructions */}
-              <div>
-                <label
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: "var(--gold)",
-                    display: "block",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Specific Notes for this Service
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Specific requirements, stems information, or notes..."
-                  value={currentConfig.notes || ""}
-                  onChange={(e) =>
-                    setCurrentConfig((prev) => ({
-                      ...prev,
-                      notes: e.target.value,
-                    }))
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: "4px",
-                    border: "1px solid var(--line-gold)",
-                    background: "rgba(5, 5, 7, 0.6)",
-                    color: "var(--text)",
-                    fontSize: "12px",
-                    lineHeight: 1.5,
-                  }}
-                />
-              </div>
-
-              {configuringService.basePriceNgn === null && (
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: "5px",
-                    background: "rgba(223, 194, 125, 0.08)",
-                    border: "1px solid rgba(223, 194, 125, 0.25)",
-                    fontSize: "12px",
-                    color: "var(--gold)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  ✦ <strong>Price Upon Request:</strong> Submit your request
-                  details and stems. Chomka Music Studio will review and issue
-                  an official quote before payment.
-                </div>
-              )}
+                    {/* Price tag */}
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          color: isSelected ? "var(--gold)" : "var(--muted)",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        {svc.basePriceNgn === null
+                          ? "Price Upon Request"
+                          : svc.isHourly
+                          ? `₦${(svc.hourlyRateNgn || 25000).toLocaleString()}/hr`
+                          : `₦${svc.basePriceNgn.toLocaleString()}`}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
+            {/* Bottom Action Bar */}
             <div
               style={{
                 display: "flex",
-                justifyContent: "flex-end",
-                gap: "12px",
-                marginTop: "24px",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingTop: "20px",
+                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                flexWrap: "wrap",
+                gap: "14px",
               }}
             >
+              <div>
+                {selectedSlugs.length > 0 ? (
+                  <p style={{ margin: 0, fontSize: "14px", color: "var(--text)" }}>
+                    <strong style={{ color: "var(--gold)" }}>
+                      {selectedSlugs.length}
+                    </strong>{" "}
+                    {selectedSlugs.length === 1 ? "service" : "services"} selected
+                    {totalNgn !== null && (
+                      <span style={{ color: "var(--muted)", marginLeft: "8px" }}>
+                        · Subtotal: ₦{totalNgn.toLocaleString()}
+                      </span>
+                    )}
+                    {hasPriceUponRequest && (
+                      <span style={{ color: "var(--gold)", marginLeft: "6px" }}>
+                        (+ Custom Quote)
+                      </span>
+                    )}
+                  </p>
+                ) : (
+                  <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
+                    Select one or multiple options above to proceed.
+                  </p>
+                )}
+              </div>
+
               <button
                 type="button"
-                onClick={() => setConfiguringService(null)}
+                disabled={selectedSlugs.length === 0}
+                onClick={() => setStep("confirm")}
+                className="primary-button"
                 style={{
-                  height: "38px",
-                  padding: "0 16px",
-                  borderRadius: "4px",
-                  border: "1px solid var(--line)",
-                  background: "transparent",
-                  color: "var(--muted)",
-                  fontSize: "11px",
+                  opacity: selectedSlugs.length === 0 ? 0.4 : 1,
+                  cursor: selectedSlugs.length === 0 ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "0 24px",
+                  height: "44px",
+                  fontSize: "13px",
                   fontWeight: 700,
-                  textTransform: "uppercase",
-                  cursor: "pointer",
+                  letterSpacing: "0.1em",
                 }}
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveToSession}
-                style={{
-                  height: "38px",
-                  padding: "0 20px",
-                  borderRadius: "4px",
-                  border: "none",
-                  background: "linear-gradient(135deg, #fae2a0 0%, #dfc27d 100%)",
-                  color: "#050507",
-                  fontSize: "11px",
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  cursor: "pointer",
-                }}
-              >
-                Add to Session
+                Continue <RightArrowIcon size={14} color="#050507" />
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </section>
+        )}
 
-      {/* =========================================================
-          STEP 2: REVIEW & CONTACT DETAILS (Req #24)
-          ========================================================= */}
-      {activeStep === "review" && (
-        <section
-          style={{
-            maxWidth: "780px",
-            margin: "0 auto",
-            background: "rgba(10, 10, 16, 0.8)",
-            border: "1px solid var(--line-gold)",
-            borderRadius: "10px",
-            padding: "36px 40px",
-            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.8)",
-          }}
-        >
-          <div
+        {/* =========================================================
+            STAGE 2: CONFIRMATION & EXPANSION
+            "Nice. I've got that. Anything else you want included?"
+            ========================================================= */}
+        {step === "confirm" && (
+          <section
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "24px",
+              background: "rgba(10, 10, 16, 0.8)",
+              border: "1px solid rgba(223, 194, 125, 0.2)",
+              borderRadius: "12px",
+              padding: "clamp(24px, 4vw, 44px)",
+              backdropFilter: "blur(12px)",
+              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
+              animation: "fadeIn 0.25s ease-out",
             }}
           >
-            <button
-              type="button"
-              onClick={() => setActiveStep("catalog")}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                border: "none",
-                background: "transparent",
-                color: "var(--gold)",
-                fontSize: "11px",
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                cursor: "pointer",
-              }}
-            >
-              <LeftArrowIcon size={12} /> Back to Catalog
-            </button>
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: 700,
-                letterSpacing: "0.14em",
-                color: "var(--muted)",
-                textTransform: "uppercase",
-              }}
-            >
-              Step 2 of 3
-            </span>
-          </div>
-
-          <h2
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: "22px",
-              fontWeight: 800,
-              letterSpacing: "0.06em",
-              color: "var(--text)",
-              marginBottom: "20px",
-              textTransform: "uppercase",
-            }}
-          >
-            Your Studio Session Summary
-          </h2>
-
-          {/* Itemized Services Breakdown */}
-          <div
-            style={{
-              borderRadius: "6px",
-              border: "1px solid rgba(223, 194, 125, 0.15)",
-              background: "rgba(5, 5, 7, 0.5)",
-              padding: "16px 20px",
-              marginBottom: "24px",
-            }}
-          >
-            {sessionCart.map((item, idx) => (
-              <div
-                key={item.id}
+            <div style={{ marginBottom: "26px" }}>
+              <h1
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "10px 0",
-                  borderBottom:
-                    idx < sessionCart.length - 1
-                      ? "1px solid rgba(223, 194, 125, 0.1)"
-                      : "none",
+                  fontFamily: "var(--font-display)",
+                  fontSize: "clamp(26px, 4vw, 38px)",
+                  fontWeight: 800,
+                  letterSpacing: "0.04em",
+                  color: "var(--text)",
+                  margin: "0 0 10px",
                 }}
               >
-                <div>
-                  <span
-                    style={{
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "var(--text)",
-                      display: "block",
-                    }}
-                  >
-                    {item.service.title}
-                  </span>
-                  {item.service.isHourly && (
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--muted)",
-                      }}
-                    >
-                      {item.configuration.hours || 1} hours × ₦
-                      {Number(
-                        item.service.hourlyRateNgn || 25000
-                      ).toLocaleString()}
-                    </span>
-                  )}
-                  {item.configuration.genre && (
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        color: "var(--muted)",
-                        marginLeft: "8px",
-                      }}
-                    >
-                      • {item.configuration.genre}
-                    </span>
-                  )}
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <span
-                    style={{
-                      fontSize: "14px",
-                      fontWeight: 800,
-                      color: "var(--gold)",
-                    }}
-                  >
-                    {item.calculatedPrice !== null
-                      ? `₦${item.calculatedPrice.toLocaleString()}`
-                      : "Price Upon Request"}
-                  </span>
-                </div>
-              </div>
-            ))}
+                Nice. I've got that.
+              </h1>
+              <p
+                style={{
+                  fontSize: "15px",
+                  color: "var(--muted)",
+                  margin: "0 0 16px",
+                }}
+              >
+                You're looking at:
+              </p>
 
+              {/* Selected List */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  padding: "16px 20px",
+                  background: "rgba(5, 5, 8, 0.6)",
+                  border: "1px solid rgba(223, 194, 125, 0.15)",
+                  borderRadius: "8px",
+                  marginBottom: "24px",
+                }}
+              >
+                {selectedServices.map((svc) => (
+                  <div
+                    key={svc.slug}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      fontSize: "14px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <CheckIcon size={14} color="var(--gold)" />
+                      <span style={{ fontWeight: 600, color: "var(--text)" }}>
+                        {svc.title}
+                      </span>
+                    </div>
+                    <span style={{ color: "var(--gold)", fontWeight: 700 }}>
+                      {svc.basePriceNgn === null
+                        ? "Price Upon Request"
+                        : svc.isHourly
+                        ? `₦${(svc.hourlyRateNgn || 25000).toLocaleString()}/hr`
+                        : `₦${svc.basePriceNgn.toLocaleString()}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <h2
+                style={{
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  color: "var(--text)",
+                  margin: "0 0 8px",
+                }}
+              >
+                Anything else you want included?
+              </h2>
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "var(--muted)",
+                  margin: 0,
+                }}
+              >
+                You can add complementary mixing, recording, or mastering to keep your entire record under one cohesive sonic direction.
+              </p>
+            </div>
+
+            {/* Decision Buttons */}
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                flexWrap: "wrap",
+                paddingTop: "20px",
+                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setStep("intent")}
+                className="secondary-button"
+                style={{
+                  height: "44px",
+                  padding: "0 20px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  border: "1px solid rgba(223, 194, 125, 0.3)",
+                  color: "var(--gold)",
+                  cursor: "pointer",
+                }}
+              >
+                + Add / Modify Services
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStep("details")}
+                className="primary-button"
+                style={{
+                  height: "44px",
+                  padding: "0 24px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                That's Everything — Tailor Details <RightArrowIcon size={14} color="#050507" />
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* =========================================================
+            STAGE 3: DYNAMIC RELEVANT QUESTIONS PER SERVICE
+            ========================================================= */}
+        {step === "details" && (
+          <section
+            style={{
+              background: "rgba(10, 10, 16, 0.8)",
+              border: "1px solid rgba(223, 194, 125, 0.2)",
+              borderRadius: "12px",
+              padding: "clamp(24px, 4vw, 44px)",
+              backdropFilter: "blur(12px)",
+              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
+              animation: "fadeIn 0.25s ease-out",
+            }}
+          >
+            <div style={{ marginBottom: "28px" }}>
+              <h1
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "clamp(24px, 3.8vw, 36px)",
+                  fontWeight: 800,
+                  letterSpacing: "0.04em",
+                  color: "var(--text)",
+                  margin: "0 0 10px",
+                }}
+              >
+                Let's tailor your session.
+              </h1>
+              <p
+                style={{
+                  fontSize: "14px",
+                  color: "var(--muted)",
+                  margin: 0,
+                  lineHeight: 1.5,
+                }}
+              >
+                Please answer only the details relevant to the services you selected so we can prepare the studio properly.
+              </p>
+            </div>
+
+            {/* Service-by-service tailored fields */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "28px", marginBottom: "36px" }}>
+              {selectedServices.map((svc) => {
+                const cfg = configurations[svc.slug] || {};
+
+                return (
+                  <div
+                    key={svc.slug}
+                    style={{
+                      background: "rgba(5, 5, 8, 0.5)",
+                      border: "1px solid rgba(223, 194, 125, 0.15)",
+                      borderRadius: "8px",
+                      padding: "22px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: "16px",
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                        paddingBottom: "10px",
+                      }}
+                    >
+                      <h2
+                        style={{
+                          fontSize: "16px",
+                          fontWeight: 700,
+                          letterSpacing: "0.04em",
+                          color: "var(--gold)",
+                          margin: 0,
+                        }}
+                      >
+                        {svc.title}
+                      </h2>
+                      <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 600 }}>
+                        {svc.isHourly
+                          ? `${cfg.hours || 2} hrs × ₦${(svc.hourlyRateNgn || 25000).toLocaleString()} = ₦${(
+                              (cfg.hours || 2) * (svc.hourlyRateNgn || 25000)
+                            ).toLocaleString()}`
+                          : svc.basePriceNgn === null
+                          ? "Price Upon Request"
+                          : `₦${svc.basePriceNgn.toLocaleString()}`}
+                      </span>
+                    </div>
+
+                    {/* Specific Questions based on Service Slug */}
+                    {svc.slug === "voice-recording" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div>
+                          <label
+                            style={{
+                              display: "block",
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              color: "var(--text)",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            How many recording hours do you need?
+                          </label>
+                          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = Math.max(1, parseInt(cfg.hours || 2, 10));
+                                if (current > 1) updateConfig(svc.slug, "hours", current - 1);
+                              }}
+                              style={{
+                                width: "36px",
+                                height: "36px",
+                                borderRadius: "4px",
+                                border: "1px solid rgba(223, 194, 125, 0.3)",
+                                background: "rgba(5, 5, 7, 0.8)",
+                                color: "var(--gold)",
+                                fontSize: "18px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              -
+                            </button>
+                            <span
+                              style={{
+                                fontSize: "16px",
+                                fontWeight: 700,
+                                color: "var(--text)",
+                                minWidth: "70px",
+                                textAlign: "center",
+                              }}
+                            >
+                              {cfg.hours || 2} {parseInt(cfg.hours || 2, 10) === 1 ? "Hour" : "Hours"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = parseInt(cfg.hours || 2, 10);
+                                updateConfig(svc.slug, "hours", current + 1);
+                              }}
+                              style={{
+                                width: "36px",
+                                height: "36px",
+                                borderRadius: "4px",
+                                border: "1px solid rgba(223, 194, 125, 0.3)",
+                                background: "rgba(5, 5, 7, 0.8)",
+                                color: "var(--gold)",
+                                fontSize: "18px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              +
+                            </button>
+                            <span
+                              style={{
+                                fontSize: "13px",
+                                color: "var(--gold)",
+                                fontWeight: 700,
+                                marginLeft: "12px",
+                              }}
+                            >
+                              = ₦{((parseInt(cfg.hours || 2, 10)) * (svc.hourlyRateNgn || 25000)).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label
+                            style={{
+                              display: "block",
+                              fontSize: "12px",
+                              color: "var(--muted)",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            Preferred Session Dates / Times / Studio Logistics (WAT)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Next Tuesday afternoon or weekend evening"
+                            value={cfg.sessionInfo || ""}
+                            onChange={(e) => updateConfig(svc.slug, "sessionInfo", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {(svc.slug === "beat-production" || svc.slug === "full-song-production") && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            Genre / Sound Direction
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Afrobeats, Amapiano, Drill, Trap"
+                            value={cfg.genre || ""}
+                            onChange={(e) => updateConfig(svc.slug, "genre", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            BPM & Musical Key (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 104 BPM, C# Minor"
+                            value={cfg.bpmKey || ""}
+                            onChange={(e) => updateConfig(svc.slug, "bpmKey", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            Reference Artists or Song Links
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Asake, Rema, Travis Scott, or YouTube/Spotify URL"
+                            value={cfg.references || ""}
+                            onChange={(e) => updateConfig(svc.slug, "references", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {(svc.slug === "beat-mixing" || svc.slug === "vocal-mixing" || svc.slug === "full-song-mastering") && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            BPM & Track Key
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 110 BPM, F Major"
+                            value={cfg.bpmKey || ""}
+                            onChange={(e) => updateConfig(svc.slug, "bpmKey", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            Reference Mix / Target Sound
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Crisp vocal presence, warm punchy low end"
+                            value={cfg.referenceMix || ""}
+                            onChange={(e) => updateConfig(svc.slug, "referenceMix", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            What needs the most attention?
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Sibilance control, vocal riding, wide stereo image, bass muddiness"
+                            value={cfg.attention || ""}
+                            onChange={(e) => updateConfig(svc.slug, "attention", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {svc.slug === "feature" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            Feature Scope
+                          </label>
+                          <div style={{ display: "flex", gap: "12px" }}>
+                            {["Verse", "Hook", "Verse + Hook"].map((part) => (
+                              <button
+                                key={part}
+                                type="button"
+                                onClick={() => updateConfig(svc.slug, "part", part)}
+                                style={{
+                                  padding: "8px 16px",
+                                  borderRadius: "4px",
+                                  border:
+                                    (cfg.part || "Verse") === part
+                                      ? "1px solid var(--gold)"
+                                      : "1px solid rgba(255, 255, 255, 0.1)",
+                                  background:
+                                    (cfg.part || "Verse") === part
+                                      ? "rgba(223, 194, 125, 0.12)"
+                                      : "rgba(10, 10, 16, 0.6)",
+                                  color:
+                                    (cfg.part || "Verse") === part
+                                      ? "var(--gold)"
+                                      : "var(--muted)",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {part}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            Creative Direction & Theme
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Energetic Afrobeats vibe, reflective storytelling, romantic mood"
+                            value={cfg.direction || ""}
+                            onChange={(e) => updateConfig(svc.slug, "direction", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {svc.slug === "recording-mixing-client-beat" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div
+                          style={{
+                            padding: "12px 14px",
+                            borderRadius: "6px",
+                            background: "rgba(223, 194, 125, 0.08)",
+                            border: "1px solid rgba(223, 194, 125, 0.25)",
+                            fontSize: "12px",
+                            color: "var(--gold)",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          <strong>Price Upon Request:</strong> Attach your beat/session stems below or paste a cloud link. silachomka will review your tracks and provide a dedicated custom quote based on track count and complexity.
+                        </div>
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            Session Scope & Details
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 16 vocal tracks over stereo MP3/WAV beat, need tuning and full mix"
+                            value={cfg.scope || ""}
+                            onChange={(e) => updateConfig(svc.slug, "scope", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {svc.slug === "instrumentalist-collaboration" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            Collaboration Instrument / Role
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Live acoustic guitar, bassline composition, saxophone lead"
+                            value={cfg.collabRole || ""}
+                            onChange={(e) => updateConfig(svc.slug, "collabRole", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Audio & Stem Upload Component */}
+            <div
+              style={{
+                background: "rgba(5, 5, 8, 0.5)",
+                border: "1px dashed rgba(223, 194, 125, 0.3)",
+                borderRadius: "8px",
+                padding: "20px",
+                marginBottom: "32px",
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  color: "var(--text)",
+                  margin: "0 0 6px",
+                }}
+              >
+                Upload Project Audio / Stems (Optional)
+              </h3>
+              <p
+                style={{
+                  fontSize: "12px",
+                  color: "var(--muted)",
+                  margin: "0 0 14px",
+                  lineHeight: 1.5,
+                }}
+              >
+                Upload WAV, MP3, ZIP, or AIFF up to 100MB. Files are securely transferred directly to studio storage.
+              </p>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "0 18px",
+                    height: "38px",
+                    borderRadius: "4px",
+                    border: "1px solid var(--gold)",
+                    background: "rgba(223, 194, 125, 0.1)",
+                    color: "var(--gold)",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: isUploadingFile ? "wait" : "pointer",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  {isUploadingFile ? (
+                    <>
+                      <LoadingSpinner size={14} color="var(--gold)" /> Uploading...
+                    </>
+                  ) : (
+                    "+ Select File to Upload"
+                  )}
+                  <input
+                    type="file"
+                    accept="audio/*,.zip,.rar,.tar,.gz,.aiff,.wav,.mp3"
+                    disabled={isUploadingFile}
+                    onChange={handleFileUpload}
+                    style={{ display: "none" }}
+                  />
+                </label>
+
+                {uploadError && (
+                  <span style={{ fontSize: "12px", color: "#e57373" }}>
+                    {uploadError}
+                  </span>
+                )}
+              </div>
+
+              {/* Uploaded Files List */}
+              {clientFiles.length > 0 && (
+                <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {clientFiles.map((f) => (
+                    <div
+                      key={f.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "8px 12px",
+                        background: "rgba(10, 10, 16, 0.7)",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                      }}
+                    >
+                      <span style={{ color: "var(--text)" }}>
+                        {f.originalName} ({(f.size / (1024 * 1024)).toFixed(1)} MB)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(f.id)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#e57373",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <TrashIcon size={14} color="#e57373" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Navigation buttons */}
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
-                paddingTop: "14px",
-                marginTop: "10px",
-                borderTop: "2px solid rgba(223, 194, 125, 0.25)",
+                paddingTop: "20px",
+                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                gap: "12px",
+                flexWrap: "wrap",
               }}
             >
-              <span
+              <button
+                type="button"
+                onClick={() => setStep("confirm")}
+                className="secondary-button"
                 style={{
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "var(--text)",
+                  height: "44px",
+                  padding: "0 20px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
                 }}
               >
-                Total Session Amount
-              </span>
-              <span
-                style={{
-                  fontSize: "20px",
-                  fontWeight: 800,
-                  color: "var(--gold)",
-                }}
-              >
-                {hasPriceUponRequest
-                  ? "Quote Upon Request"
-                  : `₦${cartTotalNgn.toLocaleString()}`}
-              </span>
-            </div>
-          </div>
+                <LeftArrowIcon size={13} color="var(--gold)" /> Back to Services
+              </button>
 
-          <form onSubmit={handleSubmitOrder}>
-            {/* Customer Information */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "16px",
-                marginBottom: "16px",
-              }}
-            >
+              <button
+                type="button"
+                onClick={() => setStep("client")}
+                className="primary-button"
+                style={{
+                  height: "44px",
+                  padding: "0 24px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                Continue to Brief & Contact <RightArrowIcon size={14} color="#050507" />
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* =========================================================
+            STAGE 4: CLIENT BRIEF & CONTACT DETAILS
+            ========================================================= */}
+        {step === "client" && (
+          <section
+            style={{
+              background: "rgba(10, 10, 16, 0.8)",
+              border: "1px solid rgba(223, 194, 125, 0.2)",
+              borderRadius: "12px",
+              padding: "clamp(24px, 4vw, 44px)",
+              backdropFilter: "blur(12px)",
+              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
+              animation: "fadeIn 0.25s ease-out",
+            }}
+          >
+            <div style={{ marginBottom: "26px" }}>
+              <h1
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "clamp(26px, 4vw, 38px)",
+                  fontWeight: 800,
+                  letterSpacing: "0.04em",
+                  color: "var(--text)",
+                  margin: "0 0 10px",
+                }}
+              >
+                Who am I working with?
+              </h1>
+              <p
+                style={{
+                  fontSize: "14px",
+                  color: "var(--muted)",
+                  margin: 0,
+                  lineHeight: 1.5,
+                }}
+              >
+                Provide your contact details so the studio can coordinate delivery, revisions, and direct communication.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "18px", marginBottom: "32px" }}>
               <div>
                 <label
                   style={{
-                    fontSize: "11px",
+                    display: "block",
+                    fontSize: "12px",
                     fontWeight: 700,
-                    letterSpacing: "0.12em",
+                    letterSpacing: "0.08em",
                     textTransform: "uppercase",
                     color: "var(--gold)",
-                    display: "block",
-                    marginBottom: "4px",
+                    marginBottom: "8px",
                   }}
                 >
-                  Your Name *
+                  Full Name / Artist Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. John Doe / Artist Alias"
+                  placeholder="e.g. Samuel John / Sila"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   style={{
                     width: "100%",
-                    height: "40px",
-                    padding: "0 12px",
-                    borderRadius: "4px",
-                    border: "1px solid var(--line-gold)",
-                    background: "rgba(5, 5, 7, 0.6)",
+                    padding: "12px 16px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    background: "rgba(5, 5, 8, 0.7)",
                     color: "var(--text)",
-                    fontSize: "13px",
+                    fontSize: "14px",
                   }}
                 />
               </div>
@@ -1488,13 +1588,13 @@ export default function ServicesPage() {
               <div>
                 <label
                   style={{
-                    fontSize: "11px",
+                    display: "block",
+                    fontSize: "12px",
                     fontWeight: 700,
-                    letterSpacing: "0.12em",
+                    letterSpacing: "0.08em",
                     textTransform: "uppercase",
                     color: "var(--gold)",
-                    display: "block",
-                    marginBottom: "4px",
+                    marginBottom: "8px",
                   }}
                 >
                   Email Address *
@@ -1502,477 +1602,707 @@ export default function ServicesPage() {
                 <input
                   type="email"
                   required
-                  placeholder="you@domain.com"
+                  placeholder="e.g. artist@example.com"
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
                   style={{
                     width: "100%",
-                    height: "40px",
-                    padding: "0 12px",
-                    borderRadius: "4px",
-                    border: "1px solid var(--line-gold)",
-                    background: "rgba(5, 5, 7, 0.6)",
+                    padding: "12px 16px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    background: "rgba(5, 5, 8, 0.7)",
                     color: "var(--text)",
-                    fontSize: "13px",
+                    fontSize: "14px",
                   }}
                 />
               </div>
-            </div>
 
-            <div style={{ marginBottom: "16px" }}>
-              <label
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: "var(--gold)",
-                  display: "block",
-                  marginBottom: "4px",
-                }}
-              >
-                Phone / WhatsApp (Optional)
-              </label>
-              <input
-                type="tel"
-                placeholder="+234 ..."
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: "40px",
-                  padding: "0 12px",
-                  borderRadius: "4px",
-                  border: "1px solid var(--line-gold)",
-                  background: "rgba(5, 5, 7, 0.6)",
-                  color: "var(--text)",
-                  fontSize: "13px",
-                }}
-              />
-            </div>
-
-            {/* Creative Brief / Customer Message (Req #23) */}
-            <div style={{ marginBottom: "20px" }}>
-              <label
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: "var(--gold)",
-                  display: "block",
-                  marginBottom: "4px",
-                }}
-              >
-                Project Vision & Message to Studio
-              </label>
-              <textarea
-                rows={4}
-                placeholder="Describe what you want to achieve, mood, references, or specific instructions..."
-                value={customerMessage}
-                onChange={(e) => setCustomerMessage(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: "4px",
-                  border: "1px solid var(--line-gold)",
-                  background: "rgba(5, 5, 7, 0.6)",
-                  color: "var(--text)",
-                  fontSize: "13px",
-                  lineHeight: 1.5,
-                }}
-              />
-            </div>
-
-            {/* File Upload Section (Req #22) */}
-            <div style={{ marginBottom: "28px" }}>
-              <label
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: "var(--gold)",
-                  display: "block",
-                  marginBottom: "6px",
-                }}
-              >
-                Project Audio & Reference Files
-              </label>
-              <div
-                style={{
-                  border: "1px dashed rgba(223, 194, 125, 0.35)",
-                  borderRadius: "6px",
-                  padding: "20px",
-                  textAlign: "center",
-                  background: "rgba(5, 5, 7, 0.4)",
-                }}
-              >
-                <input
-                  type="file"
-                  id="client-file-input"
-                  style={{ display: "none" }}
-                  onChange={handleFileUpload}
-                  disabled={isUploadingFile}
-                />
+              <div>
                 <label
-                  htmlFor="client-file-input"
                   style={{
-                    display: "inline-block",
-                    padding: "8px 16px",
-                    borderRadius: "4px",
-                    background: "rgba(223, 194, 125, 0.1)",
-                    border: "1px solid var(--line-gold)",
-                    color: "var(--gold)",
-                    fontSize: "11px",
+                    display: "block",
+                    fontSize: "12px",
                     fontWeight: 700,
+                    letterSpacing: "0.08em",
                     textTransform: "uppercase",
-                    cursor: isUploadingFile ? "wait" : "pointer",
-                    letterSpacing: "0.12em",
+                    color: "var(--gold)",
+                    marginBottom: "8px",
                   }}
                 >
-                  {isUploadingFile
-                    ? "Uploading File..."
-                    : "+ Upload WAV, MP3, or ZIP"}
+                  Phone / WhatsApp (Optional)
                 </label>
-                <p
+                <input
+                  type="tel"
+                  placeholder="e.g. +234 800 000 0000"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
                   style={{
-                    fontSize: "11px",
-                    color: "var(--muted)",
-                    margin: "8px 0 0",
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    background: "rgba(5, 5, 8, 0.7)",
+                    color: "var(--text)",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: "var(--gold)",
+                    marginBottom: "8px",
                   }}
                 >
-                  Maximum 100MB per file. Files are stored securely and
-                  accessible only by the studio.
-                </p>
-
-                {uploadError && (
-                  <p
-                    style={{
-                      color: "#ff6b6b",
-                      fontSize: "12px",
-                      margin: "8px 0 0",
-                    }}
-                  >
-                    {uploadError}
-                  </p>
-                )}
-
-                {uploadedFiles.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: "14px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    {uploadedFiles.map((f) => (
-                      <div
-                        key={f.id}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "6px 10px",
-                          borderRadius: "4px",
-                          background: "rgba(223, 194, 125, 0.08)",
-                          fontSize: "12px",
-                        }}
-                      >
-                        <span style={{ color: "var(--text)" }}>{f.name}</span>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                          }}
-                        >
-                          <span style={{ color: "var(--muted)" }}>
-                            {Math.round(f.size / 1024)} KB
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFile(f.id)}
-                            style={{
-                              border: "none",
-                              background: "transparent",
-                              color: "#ff6b6b",
-                              cursor: "pointer",
-                              padding: "0 4px",
-                            }}
-                            title="Remove file"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  Overall Project Brief / Message
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Tell silachomka anything else about the vision, release goals, reference tracks, or specific timeline constraints..."
+                  value={customerMessage}
+                  onChange={(e) => setCustomerMessage(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    background: "rgba(5, 5, 8, 0.7)",
+                    color: "var(--text)",
+                    fontSize: "14px",
+                    lineHeight: 1.5,
+                  }}
+                />
               </div>
             </div>
 
-            {/* Agreed Deadline Note (Req #29) */}
+            {/* Navigation buttons */}
             <div
               style={{
-                fontSize: "11.5px",
-                color: "var(--muted)",
-                lineHeight: 1.5,
-                padding: "12px 14px",
-                borderRadius: "5px",
-                background: "rgba(5, 5, 7, 0.6)",
-                border: "1px solid rgba(223, 194, 125, 0.15)",
-                marginBottom: "24px",
+                display: "flex",
+                justifyContent: "space-between",
+                paddingTop: "20px",
+                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                gap: "12px",
+                flexWrap: "wrap",
               }}
             >
-              ✦ <strong>Studio Delivery Schedule:</strong> Standard turnaround
-              is 3–5 working days upon payment confirmation. Official delivery
-              deadlines are confirmed in West Africa Time (WAT / UTC+1).
-            </div>
-
-            {orderSubmitError && (
-              <p
+              <button
+                type="button"
+                onClick={() => setStep("details")}
+                className="secondary-button"
                 style={{
-                  color: "#ff6b6b",
-                  fontSize: "12px",
-                  marginBottom: "16px",
+                  height: "44px",
+                  padding: "0 20px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
                 }}
               >
-                {orderSubmitError}
+                <LeftArrowIcon size={13} color="var(--gold)" /> Back to Session Details
+              </button>
+
+              <button
+                type="button"
+                disabled={!customerName.trim() || !customerEmail.trim()}
+                onClick={() => setStep("summary")}
+                className="primary-button"
+                style={{
+                  opacity: !customerName.trim() || !customerEmail.trim() ? 0.4 : 1,
+                  cursor: !customerName.trim() || !customerEmail.trim() ? "not-allowed" : "pointer",
+                  height: "44px",
+                  padding: "0 24px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                Review Session Summary <RightArrowIcon size={14} color="#050507" />
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* =========================================================
+            STAGE 5: SESSION SUMMARY & AUTHORITATIVE TOTAL
+            ========================================================= */}
+        {step === "summary" && (
+          <section
+            style={{
+              background: "rgba(10, 10, 16, 0.8)",
+              border: "1px solid rgba(223, 194, 125, 0.25)",
+              borderRadius: "12px",
+              padding: "clamp(24px, 4vw, 44px)",
+              backdropFilter: "blur(12px)",
+              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
+              animation: "fadeIn 0.25s ease-out",
+            }}
+          >
+            <div style={{ marginBottom: "26px", textAlign: "left" }}>
+              <h1
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "clamp(26px, 4vw, 40px)",
+                  fontWeight: 800,
+                  letterSpacing: "0.06em",
+                  color: "var(--text)",
+                  margin: "0 0 8px",
+                }}
+              >
+                YOUR SESSION
+              </h1>
+              <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0 }}>
+                Review your session breakdown before confirming. The total below is authoritative.
               </p>
+            </div>
+
+            {/* Itemized Services Breakdown */}
+            <div
+              style={{
+                background: "rgba(5, 5, 8, 0.6)",
+                border: "1px solid rgba(223, 194, 125, 0.15)",
+                borderRadius: "8px",
+                padding: "24px",
+                marginBottom: "28px",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {selectedServices.map((svc) => {
+                  const cfg = configurations[svc.slug] || {};
+                  const price = itemizedPrices[svc.slug];
+
+                  return (
+                    <div
+                      key={svc.slug}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "space-between",
+                        paddingBottom: "14px",
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                        gap: "16px",
+                      }}
+                    >
+                      <div>
+                        <h2
+                          style={{
+                            fontSize: "15px",
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            color: "var(--text)",
+                            margin: "0 0 4px",
+                          }}
+                        >
+                          {svc.title}
+                        </h2>
+                        {svc.isHourly && (
+                          <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
+                            {cfg.hours || 2} hours × ₦{(svc.hourlyRateNgn || 25000).toLocaleString()}
+                          </p>
+                        )}
+                        {svc.slug === "recording-mixing-client-beat" && (
+                          <p style={{ fontSize: "12px", color: "var(--gold)", margin: 0 }}>
+                            Scope: {cfg.scope || "Client custom beat & tracking"}
+                          </p>
+                        )}
+                        {cfg.genre && (
+                          <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
+                            Genre: {cfg.genre} {cfg.bpmKey ? `· ${cfg.bpmKey}` : ""}
+                          </p>
+                        )}
+                      </div>
+
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <span
+                          style={{
+                            fontSize: "15px",
+                            fontWeight: 700,
+                            color: price === null ? "var(--gold)" : "var(--text)",
+                          }}
+                        >
+                          {price === null ? "Price Upon Request" : `₦${price.toLocaleString()}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Total Calculation */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingTop: "18px",
+                  marginTop: "8px",
+                  borderTop: "1px solid rgba(223, 194, 125, 0.3)",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: "18px",
+                    fontWeight: 800,
+                    letterSpacing: "0.1em",
+                    color: "var(--text)",
+                  }}
+                >
+                  TOTAL
+                </span>
+                <span
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: "22px",
+                    fontWeight: 800,
+                    letterSpacing: "0.06em",
+                    color: "var(--gold)",
+                  }}
+                >
+                  {totalNgn === null
+                    ? "Custom Quote (Price Upon Request)"
+                    : hasPriceUponRequest
+                    ? `₦${totalNgn.toLocaleString()} + Custom Quote`
+                    : `₦${totalNgn.toLocaleString()}`}
+                </span>
+              </div>
+            </div>
+
+            {/* Brief & Logistics Summary */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "16px",
+                marginBottom: "32px",
+              }}
+            >
+              <div
+                style={{
+                  padding: "16px",
+                  background: "rgba(5, 5, 8, 0.5)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "6px",
+                }}
+              >
+                <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)" }}>
+                  Client Contact
+                </span>
+                <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)", margin: "4px 0 2px" }}>
+                  {customerName}
+                </p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
+                  {customerEmail} {customerPhone ? `· ${customerPhone}` : ""}
+                </p>
+              </div>
+
+              <div
+                style={{
+                  padding: "16px",
+                  background: "rgba(5, 5, 8, 0.5)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "6px",
+                }}
+              >
+                <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)" }}>
+                  Estimated WAT Deadline
+                </span>
+                <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)", margin: "4px 0 2px" }}>
+                  {deadlineDateString}
+                </p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
+                  Based on ~{maxTurnaroundDays} business days turnaround
+                </p>
+              </div>
+
+              <div
+                style={{
+                  padding: "16px",
+                  background: "rgba(5, 5, 8, 0.5)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "6px",
+                }}
+              >
+                <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)" }}>
+                  Attached Files
+                </span>
+                <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)", margin: "4px 0 2px" }}>
+                  {clientFiles.length === 0
+                    ? "None attached"
+                    : `${clientFiles.length} file${clientFiles.length === 1 ? "" : "s"}`}
+                </p>
+                <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
+                  {clientFiles.length > 0 ? clientFiles.map((f) => f.originalName).join(", ") : "Can be sent via WhatsApp/email"}
+                </p>
+              </div>
+            </div>
+
+            {customerMessage && (
+              <div
+                style={{
+                  padding: "16px",
+                  background: "rgba(5, 5, 8, 0.5)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "6px",
+                  marginBottom: "32px",
+                }}
+              >
+                <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)" }}>
+                  Your Brief
+                </span>
+                <p style={{ fontSize: "13px", color: "var(--text)", margin: "6px 0 0", lineHeight: 1.5 }}>
+                  "{customerMessage}"
+                </p>
+              </div>
             )}
 
-            <button
-              type="submit"
-              disabled={isSubmittingOrder}
+            {submitError && (
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: "6px",
+                  background: "rgba(229, 115, 115, 0.12)",
+                  border: "1px solid #e57373",
+                  color: "#e57373",
+                  fontSize: "13px",
+                  marginBottom: "20px",
+                }}
+              >
+                {submitError}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div
               style={{
-                width: "100%",
-                height: "46px",
-                borderRadius: "5px",
-                border: "none",
-                background: "linear-gradient(135deg, #fae2a0 0%, #dfc27d 100%)",
-                color: "#050507",
-                fontSize: "12px",
-                fontWeight: 800,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-                cursor: isSubmittingOrder ? "wait" : "pointer",
+                display: "flex",
+                justifyContent: "space-between",
+                paddingTop: "20px",
+                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setStep("client")}
+                className="secondary-button"
+                style={{
+                  height: "44px",
+                  padding: "0 20px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <LeftArrowIcon size={13} color="var(--gold)" /> Adjust Details
+              </button>
+
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleFinalSubmit}
+                className="primary-button"
+                style={{
+                  height: "46px",
+                  padding: "0 28px",
+                  fontSize: "13px",
+                  fontWeight: 800,
+                  letterSpacing: "0.1em",
+                  cursor: isSubmitting ? "wait" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                {isSubmitting ? (
+                  <>
+                    <LoadingSpinner size={16} color="#050507" /> Reserving Session...
+                  </>
+                ) : totalNgn === null ? (
+                  "Submit Session For Custom Quote"
+                ) : (
+                  <>
+                    Lock In Session & Proceed to Payment <RightArrowIcon size={14} color="#050507" />
+                  </>
+                )}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* =========================================================
+            STAGE 6: SESSION RESERVED & REAL PAYMENT TRIGGER
+            (Part 7 & Part 8: Real Working Payment + Copyable Order Ref)
+            ========================================================= */}
+        {step === "success" && confirmedOrder && (
+          <section
+            style={{
+              background: "rgba(10, 10, 16, 0.85)",
+              border: "1px solid rgba(223, 194, 125, 0.3)",
+              borderRadius: "12px",
+              padding: "clamp(26px, 5vw, 50px)",
+              backdropFilter: "blur(14px)",
+              boxShadow: "0 10px 50px rgba(0, 0, 0, 0.6)",
+              textAlign: "center",
+              animation: "fadeIn 0.3s ease-out",
+            }}
+          >
+            <div
+              style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "50%",
+                background: "rgba(223, 194, 125, 0.15)",
+                border: "1px solid var(--gold)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "8px",
+                margin: "0 auto 20px",
               }}
             >
-              {isSubmittingOrder ? (
-                <LoadingSpinner size={18} color="#050507" />
-              ) : (
-                "Confirm & Proceed to Payment →"
-              )}
-            </button>
-          </form>
-        </section>
-      )}
+              <CheckIcon size={28} color="var(--gold)" />
+            </div>
 
-      {/* =========================================================
-          STEP 3: ORDER CONFIRMED & PAYMENT CTA (Req #25 & #26)
-          ========================================================= */}
-      {activeStep === "success" && confirmedOrder && (
-        <section
-          style={{
-            maxWidth: "680px",
-            margin: "0 auto",
-            background: "rgba(10, 10, 16, 0.85)",
-            border: "1px solid var(--gold)",
-            borderRadius: "10px",
-            padding: "40px",
-            textAlign: "center",
-            boxShadow:
-              "0 20px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(223, 194, 125, 0.15)",
-          }}
-        >
-          <div
-            style={{
-              width: "50px",
-              height: "50px",
-              borderRadius: "50%",
-              background: "rgba(223, 194, 125, 0.15)",
-              border: "1px solid var(--gold)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 18px",
-            }}
-          >
-            <CheckIcon size={24} color="var(--gold)" />
-          </div>
-
-          <h2
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: "24px",
-              fontWeight: 800,
-              letterSpacing: "0.08em",
-              color: "var(--text)",
-              margin: "0 0 8px",
-              textTransform: "uppercase",
-            }}
-          >
-            Studio Session Booked
-          </h2>
-
-          <p
-            style={{
-              fontSize: "13.5px",
-              lineHeight: 1.6,
-              color: "var(--muted)",
-              marginBottom: "24px",
-            }}
-          >
-            Your session has been logged with Chomka Music Studio. Save your
-            order number below to track production progress and deliverables.
-          </p>
-
-          {/* 1-Click Copyable Order Number (Req #25) */}
-          <div
-            style={{
-              background: "rgba(5, 5, 7, 0.7)",
-              border: "1px solid rgba(223, 194, 125, 0.35)",
-              borderRadius: "6px",
-              padding: "16px 20px",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "14px",
-              marginBottom: "30px",
-            }}
-          >
-            <span
+            <p
+              className="eyebrow"
               style={{
-                fontFamily: "monospace",
-                fontSize: "18px",
-                fontWeight: 700,
+                letterSpacing: "0.22em",
                 color: "var(--gold)",
-                letterSpacing: "0.1em",
-              }}
-            >
-              #{confirmedOrder.orderNumber}
-            </span>
-            <button
-              type="button"
-              onClick={copyOrderNumberToClipboard}
-              style={{
-                height: "30px",
-                padding: "0 12px",
-                borderRadius: "3px",
-                border: "1px solid var(--line-gold)",
-                background: hasCopiedOrderNumber
-                  ? "var(--gold)"
-                  : "rgba(223, 194, 125, 0.1)",
-                color: hasCopiedOrderNumber ? "#050507" : "var(--gold)",
-                fontSize: "10px",
-                fontWeight: 800,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-            >
-              {hasCopiedOrderNumber ? "COPIED!" : "COPY"}
-            </button>
-          </div>
-
-          {/* Session Summary & Payment Action */}
-          <div
-            style={{
-              textAlign: "left",
-              padding: "18px",
-              borderRadius: "6px",
-              background: "rgba(5, 5, 7, 0.5)",
-              border: "1px solid rgba(223, 194, 125, 0.15)",
-              marginBottom: "26px",
-              fontSize: "12.5px",
-              lineHeight: 1.6,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
                 marginBottom: "6px",
               }}
             >
-              <span style={{ color: "var(--muted)" }}>Client:</span>
-              <span style={{ color: "var(--text)", fontWeight: 600 }}>
-                {confirmedOrder.customerName} ({confirmedOrder.customerEmail})
-              </span>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: "6px",
-              }}
-            >
-              <span style={{ color: "var(--muted)" }}>Session:</span>
-              <span style={{ color: "var(--text)", fontWeight: 600 }}>
-                {confirmedOrder.serviceTitle}
-              </span>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                borderTop: "1px solid rgba(223, 194, 125, 0.15)",
-                paddingTop: "8px",
-                marginTop: "8px",
-              }}
-            >
-              <span style={{ color: "var(--muted)" }}>Total Due:</span>
-              <span
-                style={{
-                  color: "var(--gold)",
-                  fontWeight: 800,
-                  fontSize: "15px",
-                }}
-              >
-                {confirmedOrder.totalAmountNgn !== null
-                  ? `₦${confirmedOrder.totalAmountNgn.toLocaleString()}`
-                  : "Quote Upon Request"}
-              </span>
-            </div>
-          </div>
+              SESSION RESERVED
+            </p>
 
-          <div
-            style={{
-              display: "flex",
-              gap: "12px",
-              justifyContent: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <Link
-              to={`/services/order/${confirmedOrder.orderNumber}`}
+            <h1
               style={{
-                height: "42px",
-                padding: "0 22px",
-                borderRadius: "5px",
-                background: "linear-gradient(135deg, #fae2a0 0%, #dfc27d 100%)",
-                color: "#050507",
-                fontSize: "11px",
+                fontFamily: "var(--font-display)",
+                fontSize: "clamp(24px, 4.5vw, 38px)",
                 fontWeight: 800,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                textDecoration: "none",
+                letterSpacing: "0.06em",
+                color: "var(--text)",
+                margin: "0 0 12px",
+              }}
+            >
+              Your studio session is locked in.
+            </h1>
+
+            <p
+              style={{
+                fontSize: "15px",
+                color: "var(--muted)",
+                maxWidth: "600px",
+                margin: "0 auto 28px",
+                lineHeight: 1.6,
+              }}
+            >
+              A confirmation and studio stem link have been reserved for{" "}
+              <strong style={{ color: "var(--text)" }}>{confirmedOrder.customer_email || confirmedOrder.customerEmail}</strong>.
+            </p>
+
+            {/* Copyable Order Reference Box (Part 8) */}
+            <div
+              style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "6px",
+                gap: "14px",
+                padding: "12px 20px",
+                background: "rgba(5, 5, 8, 0.8)",
+                border: "1px solid rgba(223, 194, 125, 0.35)",
+                borderRadius: "8px",
+                marginBottom: "32px",
+                flexWrap: "wrap",
+                justifyContent: "center",
               }}
             >
-              Proceed to Payment & Tracking →
-            </Link>
-          </div>
-        </section>
-      )}
+              <span
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: "16px",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  color: "var(--gold)",
+                }}
+              >
+                #{confirmedOrder.order_number || confirmedOrder.orderNumber}
+              </span>
+
+              <button
+                type="button"
+                onClick={handleCopyOrderRef}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "4px",
+                  border: hasCopiedRef
+                    ? "1px solid #81c784"
+                    : "1px solid var(--gold)",
+                  background: hasCopiedRef
+                    ? "rgba(129, 199, 132, 0.15)"
+                    : "rgba(223, 194, 125, 0.15)",
+                  color: hasCopiedRef ? "#81c784" : "var(--gold)",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {hasCopiedRef ? "Copied ✓" : "Copy"}
+              </button>
+            </div>
+
+            {/* Payment Section (Part 7: Real Working Payment) */}
+            {confirmedOrder.total_amount_ngn !== null &&
+            Number(confirmedOrder.total_amount_ngn) > 0 ? (
+              <div
+                style={{
+                  background: "rgba(5, 5, 8, 0.6)",
+                  border: "1px solid rgba(223, 194, 125, 0.2)",
+                  borderRadius: "8px",
+                  padding: "24px",
+                  maxWidth: "540px",
+                  margin: "0 auto 30px",
+                  textAlign: "left",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "14px" }}>
+                  <span style={{ fontSize: "13px", color: "var(--muted)" }}>Authoritative Total</span>
+                  <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--gold)" }}>
+                    ₦{Number(confirmedOrder.total_amount_ngn).toLocaleString()}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
+                  <span style={{ fontSize: "13px", color: "var(--muted)" }}>Status</span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                      background: "rgba(223, 194, 125, 0.15)",
+                      color: "var(--gold)",
+                    }}
+                  >
+                    AWAITING PAYMENT
+                  </span>
+                </div>
+
+                {paymentError && (
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: "4px",
+                      background: "rgba(229, 115, 115, 0.15)",
+                      color: "#e57373",
+                      fontSize: "12px",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    {paymentError}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isInitializingPayment}
+                  onClick={handleInitializePayment}
+                  className="primary-button"
+                  style={{
+                    width: "100%",
+                    height: "46px",
+                    fontSize: "13px",
+                    fontWeight: 800,
+                    letterSpacing: "0.1em",
+                    cursor: isInitializingPayment ? "wait" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                  }}
+                >
+                  {isInitializingPayment ? (
+                    <>
+                      <LoadingSpinner size={16} color="#050507" /> Connecting to Paystack...
+                    </>
+                  ) : (
+                    "Pay with Paystack →"
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "rgba(5, 5, 8, 0.6)",
+                  border: "1px solid rgba(223, 194, 125, 0.2)",
+                  borderRadius: "8px",
+                  padding: "20px",
+                  maxWidth: "540px",
+                  margin: "0 auto 30px",
+                  textAlign: "center",
+                }}
+              >
+                <p style={{ fontSize: "14px", color: "var(--gold)", margin: "0 0 6px", fontWeight: 700 }}>
+                  Custom Scope Under Review
+                </p>
+                <p style={{ fontSize: "13px", color: "var(--muted)", margin: 0 }}>
+                  Your session involves Price Upon Request services. silachomka will inspect your files and deliver a tailored invoice and schedule.
+                </p>
+              </div>
+            )}
+
+            {/* Link to order status tracking */}
+            <div style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap" }}>
+              <Link
+                to={`/services/order/${confirmedOrder.order_number || confirmedOrder.orderNumber}`}
+                className="secondary-button"
+                style={{
+                  padding: "10px 20px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                }}
+              >
+                View Full Session Tracking →
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmedOrder(null);
+                  setSelectedSlugs([]);
+                  setConfigurations({});
+                  setClientFiles([]);
+                  setStep("intent");
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--muted)",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                Start New Session Request
+              </button>
+            </div>
+          </section>
+        )}
+      </div>
     </main>
   );
 }

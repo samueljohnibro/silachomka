@@ -253,23 +253,16 @@ export default function ReleasePage({ release: propRelease }) {
     !isFuture &&
     now - releaseTimestamp <= 30 * 24 * 60 * 60 * 1000;
 
-  // Req #12: Smooth, non-blocking entry splash animation ("COMING SOON" or "OUT NOW") once per session
+  // Stage 31 Part 23: Smooth, non-blocking entry animation ("COMING SOON" or "OUT NOW") on release entry
   const [showEntrySplash, setShowEntrySplash] = useState(false);
 
   useEffect(() => {
     if (!release?.slug) return;
-    const sessionKey = `chomka_release_entry_splash_${release.slug}`;
-    try {
-      if (sessionStorage.getItem(sessionKey) === "shown") {
-        return;
-      }
-      sessionStorage.setItem(sessionKey, "shown");
-    } catch {}
-
+    // Trigger cinematic entry animation on release navigation
     setShowEntrySplash(true);
     const timer = setTimeout(() => {
       setShowEntrySplash(false);
-    }, 2600);
+    }, 2800);
     return () => clearTimeout(timer);
   }, [release?.slug]);
 
@@ -340,21 +333,24 @@ export default function ReleasePage({ release: propRelease }) {
   const platforms = release.platforms || {};
   const allTracks = release.tracks || [];
 
-  // Collect all track-level preview audio URLs + release-level preview audio URL (Req #19)
-  const previewAudioPool = [];
-  if (Array.isArray(release.preview_audio_urls)) {
-    for (const u of release.preview_audio_urls) {
-      if (u && !previewAudioPool.includes(u)) previewAudioPool.push(u);
+  // Collect all valid track-level preview audio URLs (Stage 31 Part 9)
+  const previewAudioPool = useMemo(() => {
+    const pool = [];
+    if (Array.isArray(allTracks) && allTracks.length > 0) {
+      for (const t of allTracks) {
+        if (t?.preview_audio_url && typeof t.preview_audio_url === 'string' && t.preview_audio_url.trim() && !pool.includes(t.preview_audio_url.trim())) {
+          pool.push(t.preview_audio_url.trim());
+        }
+      }
+    } else if (Array.isArray(release.preview_audio_urls)) {
+      for (const u of release.preview_audio_urls) {
+        if (u && typeof u === 'string' && u.trim() && !pool.includes(u.trim())) {
+          pool.push(u.trim());
+        }
+      }
     }
-  }
-  if (release.preview_audio_url && !previewAudioPool.includes(release.preview_audio_url)) {
-    previewAudioPool.push(release.preview_audio_url);
-  }
-  for (const t of allTracks) {
-    if (t?.preview_audio_url && !previewAudioPool.includes(t.preview_audio_url)) {
-      previewAudioPool.push(t.preview_audio_url);
-    }
-  }
+    return pool;
+  }, [allTracks, release.preview_audio_urls]);
 
   // Filter tracks based on the active filter from Music section
   const tracks = allTracks.filter((track) => {

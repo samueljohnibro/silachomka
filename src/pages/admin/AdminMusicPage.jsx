@@ -372,14 +372,14 @@ const AdminMusicPage = () => {
       setSaveState("SAVING");
       if (view === "CREATE") {
         const saved = await adminApi.createRelease(payload);
-        clearDraft();
+        clearDraft(saved);
         await fetchData();
         refreshCatalogue();
         setCurrentRelease(saved);
         setView("EDIT"); // Transition to EDIT view so user can immediately manage project tracks!
       } else {
         const updated = await adminApi.updateRelease(payload.id, payload);
-        clearDraft();
+        clearDraft(updated);
         await fetchData();
         refreshCatalogue();
         setCurrentRelease(updated);
