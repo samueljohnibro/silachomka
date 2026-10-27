@@ -258,28 +258,24 @@ a:focus-visible {
   transform: scaleX(1);
 }
 
+.header-brand-badge,
 .header-label {
   justify-self: end;
   display: inline-flex;
   align-items: center;
-  height: 40px;
+  height: 28px;
   line-height: 1;
-
-  font-size: 11px;
+  padding: 4px 12px;
+  font-size: 10px;
   font-weight: 700;
-
+  letter-spacing: 0.16em;
   color: var(--gold);
-
-  letter-spacing: 0.14em;
-
-  transition:
-    opacity var(--transition-fast) ease,
-    transform var(--transition-fast) var(--ease-out);
-}
-
-.header-label:hover {
-  opacity: 0.85;
-  transform: translateY(-2px);
+  background: rgba(223, 194, 125, 0.08);
+  border: 1px solid rgba(223, 194, 125, 0.28);
+  border-radius: 999px;
+  pointer-events: none;
+  user-select: none;
+  text-transform: uppercase;
 }
 
 /* =========================================================
@@ -4169,7 +4165,8 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
 @media (max-width: 900px) {
   .site-header { grid-template-columns: auto 1fr auto; }
   .site-header nav { display: none; }
-  .header-label { display: none; }
+  .header-label,
+  .header-brand-badge { display: none; }
   .nav-toggle { display: flex; }
 
   .hero { min-height: 85vh; padding: 100px 6vw 60px; }
@@ -4681,7 +4678,9 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
 }
 
 .release-page-view > *:not(.product-ambient-backdrop):not(.release-entry-splash),
-.beat-detail-view > *:not(.product-ambient-backdrop) {
+.beat-detail-view > *:not(.product-ambient-backdrop),
+.beats-page-view > *:not(.product-ambient-backdrop),
+.beat-reel-wrapper > *:not(.product-ambient-backdrop) {
   position: relative;
   z-index: 1;
 }
@@ -5112,13 +5111,13 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
 .beats-currency-select {
   height: 34px;
   padding: 0 10px;
-  background: rgba(223, 194, 125, 0.06);
+  background: rgba(223, 194, 125, 0.08);
   border: 1px solid var(--line-gold);
   border-radius: 4px;
   color: var(--gold);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   cursor: pointer;
   outline: none;
   transition: border-color var(--transition-fast) ease, background var(--transition-fast) ease;
@@ -5127,7 +5126,15 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
 .beats-currency-select:hover,
 .beats-currency-select:focus {
   border-color: var(--gold);
-  background: rgba(223, 194, 125, 0.14);
+  background: rgba(223, 194, 125, 0.16);
+}
+
+.beats-currency-select option {
+  background: #0b0b10;
+  color: #f5f3ef;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
 }
 
 /* Beat Detail Full Audio Player Deck (Req #16) */

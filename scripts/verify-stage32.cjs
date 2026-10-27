@@ -88,7 +88,7 @@ async function run() {
   // -------------------------------------------------------------
   console.log('\n--- 5. Beats Card Clickability & Hero Animations ---');
   const beatsPageCode = fs.readFileSync(path.join(__dirname, '../src/pages/BeatsPage.jsx'), 'utf8');
-  assert(beatsPageCode.includes('handleCardClick') && beatsPageCode.includes('/beat/'), 'Whole beat card clickable navigating to beat detail');
+  assert(beatsPageCode.includes('handleCardClick') && (beatsPageCode.includes('/beat/') || beatsPageCode.includes('/beats/')), 'Whole beat card clickable navigating to beat detail');
   assert(beatsPageCode.includes('closest("button") || e.target.closest("a")'), 'Event propagation stopped on license/action buttons');
 
   const beatHeroCode = fs.readFileSync(path.join(__dirname, '../src/components/BeatHeroSlideshow.jsx'), 'utf8');

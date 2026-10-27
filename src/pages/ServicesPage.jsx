@@ -256,6 +256,33 @@ export default function ServicesPage() {
     };
   }, []);
 
+  // Fetch admin-configured studio availability (Req #10)
+  // Default state: ALL DATES/TIMES UNAVAILABLE unless explicitly opened by admin
+  const [studioAvailability, setStudioAvailability] = useState([]);
+  const [isLoadingAvailability, setIsLoadingAvailability] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/services/availability")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (!cancelled) {
+          setStudioAvailability(Array.isArray(data) ? data : []);
+          setIsLoadingAvailability(false);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to load studio availability:", err);
+        if (!cancelled) {
+          setStudioAvailability([]);
+          setIsLoadingAvailability(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Pre-select service if passed via URL (e.g. /services/beat-production or /services?service=beat-production)
   useEffect(() => {
     const targetSlug = routeSlug || searchParams.get("service");
@@ -439,6 +466,18 @@ export default function ServicesPage() {
         `Audio files or stems are required for: ${servicesRequiringFiles.map((s) => s.title).join(", ")}. Please attach your audio stems/mix before proceeding.`
       );
       return;
+    }
+    // Req #10: Validate booking date & time slot for hourly studio services
+    for (const svc of selectedServices) {
+      if (svc.isHourly || svc.slug === "voice-recording") {
+        const cfg = configurations[svc.slug] || {};
+        if (!cfg.bookingDate || !cfg.bookingTime) {
+          setSubmitError(
+            `Please select an available booking date and studio time slot for ${svc.title}.`
+          );
+          return;
+        }
+      }
     }
     if (!customerName.trim() || !customerEmail.trim()) {
       setSubmitError("Please provide your name and contact email.");
@@ -996,22 +1035,110 @@ export default function ServicesPage() {
                       </button>
                     );
                   })}
-                  <div style={{ textAlign: "right", paddingTop: "8px" }}>
-                    <button
-                      type="button"
-                      onClick={() => setIsDropdownOpen(false)}
+
+                  {/* Active Running Total & Selected Chips Inside Open Dropdown (Req #9) */}
+                  <div
+                    style={{
+                      background: "rgba(18, 14, 28, 0.9)",
+                      border: "1px solid rgba(223, 194, 125, 0.3)",
+                      borderRadius: "8px",
+                      padding: "12px 14px",
+                      marginTop: "6px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    <div
                       style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--gold)",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        padding: "4px 8px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: "8px",
                       }}
                     >
-                      Done Selecting (Close Menu) ✕
-                    </button>
+                      <div>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            letterSpacing: "0.12em",
+                            textTransform: "uppercase",
+                            color: "var(--muted)",
+                            display: "block",
+                          }}
+                        >
+                          RUNNING SESSION TOTAL
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "var(--font-display)",
+                            fontSize: "18px",
+                            fontWeight: 800,
+                            color: "var(--gold)",
+                          }}
+                        >
+                          {selectedServices.length === 0
+                            ? "₦0"
+                            : totalNgn === null
+                            ? "Custom Quote"
+                            : hasPriceUponRequest
+                            ? `₦${totalNgn.toLocaleString()} + Custom Quote`
+                            : `₦${totalNgn.toLocaleString()}`}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(false)}
+                        style={{
+                          background: selectedServices.length > 0 ? "var(--gold)" : "rgba(223, 194, 125, 0.2)",
+                          color: selectedServices.length > 0 ? "#050507" : "var(--muted)",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "6px 14px",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        {selectedServices.length > 0 ? "Done Selecting ✓" : "Close Menu ✕"}
+                      </button>
+                    </div>
+
+                    {selectedServices.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                          paddingTop: "6px",
+                          borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                        }}
+                      >
+                        {selectedServices.map((svc) => (
+                          <span
+                            key={svc.slug}
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: 600,
+                              color: "var(--gold)",
+                              background: "rgba(223, 194, 125, 0.12)",
+                              border: "1px solid rgba(223, 194, 125, 0.25)",
+                              borderRadius: "999px",
+                              padding: "2px 8px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            {svc.title}
+                            {svc.isHourly ? ` (${configurations[svc.slug]?.hours || 2}h)` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1500,32 +1627,160 @@ export default function ServicesPage() {
                           </div>
                         </div>
 
-                        <div>
-                          <label
-                            style={{
-                              display: "block",
-                              fontSize: "12px",
-                              color: "var(--muted)",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            Preferred Session Dates / Times / Studio Logistics (WAT)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Next Tuesday afternoon or weekend evening"
-                            value={cfg.sessionInfo || ""}
-                            onChange={(e) => updateConfig(svc.slug, "sessionInfo", e.target.value)}
-                            style={{
-                              width: "100%",
-                              padding: "10px 14px",
-                              borderRadius: "4px",
-                              border: "1px solid rgba(255, 255, 255, 0.1)",
-                              background: "rgba(10, 10, 16, 0.6)",
-                              color: "var(--text)",
-                              fontSize: "13px",
-                            }}
-                          />
+                        {/* Admin-Controlled Studio Appointment Scheduling (Req #10) */}
+                        <div
+                          style={{
+                            background: "rgba(18, 14, 28, 0.7)",
+                            border: "1px solid rgba(223, 194, 125, 0.25)",
+                            borderRadius: "8px",
+                            padding: "16px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "12px",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                            <label
+                              style={{
+                                fontSize: "13px",
+                                fontWeight: 700,
+                                color: "var(--gold)",
+                                letterSpacing: "0.04em",
+                                margin: 0,
+                              }}
+                            >
+                              Studio Appointment Date & Time (Admin Controlled)
+                            </label>
+                            <span style={{ fontSize: "11px", color: "var(--muted)" }}>WAT (West Africa Time)</span>
+                          </div>
+
+                          {studioAvailability.length === 0 ? (
+                            <div
+                              style={{
+                                padding: "14px",
+                                background: "rgba(229, 115, 115, 0.08)",
+                                border: "1px solid rgba(229, 115, 115, 0.25)",
+                                borderRadius: "6px",
+                                fontSize: "12px",
+                                color: "#e57373",
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              <strong>Studio Notice:</strong> All upcoming studio session dates are currently closed by studio administration. Please check back soon or contact studio management directly.
+                            </div>
+                          ) : (
+                            <>
+                              <div>
+                                <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                                  Select an Open Studio Date:
+                                </label>
+                                <select
+                                  value={cfg.bookingDate || ""}
+                                  onChange={(e) => {
+                                    const nextDate = e.target.value;
+                                    updateConfig(svc.slug, "bookingDate", nextDate);
+                                    updateConfig(svc.slug, "bookingTime", "");
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    padding: "10px 14px",
+                                    borderRadius: "4px",
+                                    border: "1px solid rgba(223, 194, 125, 0.3)",
+                                    background: "#0b0b10",
+                                    color: "var(--text)",
+                                    fontSize: "13px",
+                                    cursor: "pointer",
+                                    outline: "none",
+                                  }}
+                                >
+                                  <option value="">-- Choose an open date --</option>
+                                  {studioAvailability.map((avail) => (
+                                    <option key={avail.dateStr} value={avail.dateStr}>
+                                      {avail.dateStr} {avail.notes ? `(${avail.notes})` : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {cfg.bookingDate && (
+                                <div>
+                                  <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                                    Available Time Slots for {cfg.bookingDate}:
+                                  </label>
+                                  {(() => {
+                                    const matching = studioAvailability.find((a) => a.dateStr === cfg.bookingDate);
+                                    const slots = Array.isArray(matching?.slots) ? matching.slots : [];
+                                    if (slots.length === 0) {
+                                      return (
+                                        <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)" }}>
+                                          No time slots currently open for this date.
+                                        </p>
+                                      );
+                                    }
+                                    return (
+                                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                                        {slots.map((slot) => {
+                                          const isSelected = cfg.bookingTime === slot;
+                                          return (
+                                            <button
+                                              key={slot}
+                                              type="button"
+                                              onClick={() => updateConfig(svc.slug, "bookingTime", slot)}
+                                              style={{
+                                                padding: "8px 14px",
+                                                borderRadius: "4px",
+                                                border: isSelected
+                                                  ? "1px solid var(--gold)"
+                                                  : "1px solid rgba(255, 255, 255, 0.15)",
+                                                background: isSelected
+                                                  ? "var(--gold)"
+                                                  : "rgba(255, 255, 255, 0.04)",
+                                                color: isSelected ? "#050507" : "var(--text)",
+                                                fontSize: "12px",
+                                                fontWeight: 700,
+                                                cursor: "pointer",
+                                                transition: "all 0.15s ease",
+                                              }}
+                                            >
+                                              {slot}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          <div>
+                            <label
+                              style={{
+                                display: "block",
+                                fontSize: "12px",
+                                color: "var(--muted)",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Additional Session Notes / Logistics (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Bringing personal microphone, accompaniment musician, etc."
+                              value={cfg.sessionInfo || ""}
+                              onChange={(e) => updateConfig(svc.slug, "sessionInfo", e.target.value)}
+                              style={{
+                                width: "100%",
+                                padding: "10px 14px",
+                                borderRadius: "4px",
+                                border: "1px solid rgba(255, 255, 255, 0.1)",
+                                background: "rgba(10, 10, 16, 0.6)",
+                                color: "var(--text)",
+                                fontSize: "13px",
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1902,42 +2157,130 @@ export default function ServicesPage() {
                 )}
               </div>
 
-              {/* Uploaded Files List */}
+              {/* Active Uploading Indicator (Req #11) */}
+              {isUploadingFile && (
+                <div
+                  style={{
+                    marginTop: "14px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "10px 14px",
+                    background: "rgba(223, 194, 125, 0.08)",
+                    border: "1px dashed var(--gold)",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                    color: "var(--gold)",
+                  }}
+                >
+                  <LoadingSpinner size={16} color="var(--gold)" />
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontWeight: 700 }}>Uploading studio asset...</span>
+                    <span style={{ display: "block", fontSize: "11px", color: "var(--muted)" }}>
+                      Streaming securely to Chomka Studio Cloud Storage
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "11px", fontWeight: 700 }}>In Progress</span>
+                </div>
+              )}
+
+              {/* Uploaded Files List with Complete File Information (Req #11) */}
               {clientFiles.length > 0 && (
-                <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                  {clientFiles.map((f) => (
-                    <div
-                      key={f.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "8px 12px",
-                        background: "rgba(10, 10, 16, 0.7)",
-                        border: "1px solid rgba(255, 255, 255, 0.08)",
-                        borderRadius: "4px",
-                        fontSize: "12px",
-                      }}
-                    >
-                      <span style={{ color: "var(--text)" }}>
-                        {f.originalName} ({(f.size / (1024 * 1024)).toFixed(1)} MB)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(f.id)}
+                <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {clientFiles.map((f) => {
+                    const fname = f.originalName || f.name || "audio-asset";
+                    const ext = (fname.split(".").pop() || "").toUpperCase();
+                    const sizeMb = Number(f.size) ? (Number(f.size) / (1024 * 1024)).toFixed(2) : "0.0";
+                    return (
+                      <div
+                        key={f.id}
                         style={{
-                          background: "none",
-                          border: "none",
-                          color: "#e57373",
-                          cursor: "pointer",
-                          display: "inline-flex",
+                          display: "flex",
                           alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "10px 14px",
+                          background: "rgba(10, 10, 16, 0.8)",
+                          border: "1px solid rgba(223, 194, 125, 0.25)",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          gap: "12px",
                         }}
                       >
-                        <TrashIcon size={14} color="#e57373" />
-                      </button>
-                    </div>
-                  ))}
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+                          <span
+                            style={{
+                              background: "rgba(223, 194, 125, 0.16)",
+                              color: "var(--gold)",
+                              border: "1px solid rgba(223, 194, 125, 0.35)",
+                              borderRadius: "4px",
+                              padding: "2px 6px",
+                              fontSize: "10px",
+                              fontWeight: 800,
+                              letterSpacing: "0.08em",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {ext || "FILE"}
+                          </span>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <p
+                              style={{
+                                margin: 0,
+                                color: "var(--text)",
+                                fontWeight: 600,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                              title={fname}
+                            >
+                              {fname}
+                            </p>
+                            <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                              {sizeMb} MB · Audio Asset
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              color: "#81c784",
+                              background: "rgba(76, 175, 80, 0.12)",
+                              border: "1px solid rgba(76, 175, 80, 0.25)",
+                              padding: "3px 8px",
+                              borderRadius: "999px",
+                            }}
+                          >
+                            ✓ Upload Complete
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => removeFile(f.id)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "#e57373",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "4px",
+                            }}
+                            title="Remove file"
+                            aria-label={`Remove ${fname}`}
+                          >
+                            <TrashIcon size={14} color="#e57373" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

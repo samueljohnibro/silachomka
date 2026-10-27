@@ -1538,6 +1538,50 @@ adminApp.put('/services/:id', async (c) => {
   return c.json(updated[0])
 })
 
+// ------------------------------------------
+// Admin Studio Availability & Scheduling (Req #10)
+// ------------------------------------------
+adminApp.get('/services/availability', async (c) => {
+  const sql = c.get('sql')
+  const rows = await sql`
+    SELECT id, date_str as "dateStr", slots, is_closed as "isClosed", notes, updated_at as "updatedAt"
+    FROM service_availability
+    ORDER BY date_str ASC
+  `
+  return c.json(rows)
+})
+
+adminApp.post('/services/availability', async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json().catch(() => ({}))
+  const dateStr = String(body.dateStr || body.date || '').trim()
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return c.json({ error: 'Valid dateStr (YYYY-MM-DD) is required' }, 400)
+  }
+  const slots = Array.isArray(body.slots) ? body.slots : []
+  const isClosed = Boolean(body.isClosed)
+  const notes = String(body.notes || '').trim()
+
+  const rows = await sql`
+    INSERT INTO service_availability (date_str, slots, is_closed, notes, updated_at)
+    VALUES (${dateStr}, ${JSON.stringify(slots)}::jsonb, ${isClosed}, ${notes}, NOW())
+    ON CONFLICT (date_str) DO UPDATE SET
+      slots = EXCLUDED.slots,
+      is_closed = EXCLUDED.is_closed,
+      notes = EXCLUDED.notes,
+      updated_at = NOW()
+    RETURNING id, date_str as "dateStr", slots, is_closed as "isClosed", notes, updated_at as "updatedAt"
+  `
+  return c.json(rows[0])
+})
+
+adminApp.delete('/services/availability/:dateStr', async (c) => {
+  const sql = c.get('sql')
+  const dateStr = String(c.req.param('dateStr') || '').trim()
+  await sql`DELETE FROM service_availability WHERE date_str = ${dateStr}`
+  return c.json({ success: true, dateStr })
+})
+
 adminApp.get('/service-orders', async (c) => {
   const sql = c.get('sql')
   const status = c.req.query('status')

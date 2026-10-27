@@ -946,6 +946,19 @@ app.get('/api/services', async (c) => {
   return c.json(rows)
 })
 
+// Public studio appointment availability (Req #10)
+// Default state: ALL DATES/TIMES UNAVAILABLE unless explicitly configured by admin
+app.get('/api/services/availability', async (c) => {
+  const sql = c.get('sql')
+  const rows = await sql`
+    SELECT id, date_str as "dateStr", slots, is_closed as "isClosed", notes
+    FROM service_availability
+    WHERE is_closed = false
+    ORDER BY date_str ASC
+  `
+  return c.json(rows)
+})
+
 app.get('/api/services/:slug', async (c) => {
   const sql = c.get('sql')
   const slug = String(c.req.param('slug') || '').trim().toLowerCase()
@@ -1134,12 +1147,37 @@ app.post('/api/services/orders', async (c) => {
     const cfg = item.configuration || {}
     let itemPrice = null
 
-    if (s.is_hourly) {
+    if (s.is_hourly || s.slug === 'voice-recording') {
       const hours = Math.max(1, parseInt(cfg.hours || 1, 10))
       cfg.hours = hours
       const rate = Number(s.hourly_rate_ngn || 25000)
       itemPrice = rate * hours
       calculatedGrandTotal += itemPrice
+
+      // Req #10: Smart Hourly Booking + Admin-Controlled Availability Validation
+      const bookingDate = String(cfg.bookingDate || cfg.date || '').trim()
+      const bookingTime = String(cfg.bookingTime || cfg.time || '').trim()
+      if (!bookingDate || !bookingTime) {
+        return c.json({
+          error: `Booking date and time slot are required for ${s.title}. Please select an open studio appointment.`
+        }, 400)
+      }
+      const availRows = await sql`
+        SELECT slots, is_closed
+        FROM service_availability
+        WHERE date_str = ${bookingDate} AND is_closed = false
+      `
+      if (availRows.length === 0) {
+        return c.json({
+          error: `Studio date ${bookingDate} is currently closed or unavailable. Please choose an open booking date.`
+        }, 400)
+      }
+      const openSlots = Array.isArray(availRows[0].slots) ? availRows[0].slots : []
+      if (!openSlots.includes(bookingTime)) {
+        return c.json({
+          error: `Time slot ${bookingTime} on ${bookingDate} is unavailable. Please select from available slots: ${openSlots.join(', ')}.`
+        }, 400)
+      }
     } else if (s.base_price_ngn !== null && s.base_price_ngn !== undefined) {
       itemPrice = Number(s.base_price_ngn)
       calculatedGrandTotal += itemPrice

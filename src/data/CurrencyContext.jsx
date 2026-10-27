@@ -7,14 +7,16 @@ export function CurrencyProvider({ children }) {
   const pricing = useSelarPricing();
   const [playbackMode, setPlaybackModeState] = useState(() => {
     try {
-      return sessionStorage.getItem('chomka_beat_playback_mode') || '1min';
+      const stored = sessionStorage.getItem('chomka_beat_playback_mode');
+      if (stored === 'full') return 'full';
+      return '45sec';
     } catch {
-      return '1min';
+      return '45sec';
     }
   });
 
   const setPlaybackMode = (mode) => {
-    const next = mode === 'full' ? 'full' : '1min';
+    const next = mode === 'full' ? 'full' : '45sec';
     setPlaybackModeState(next);
     try {
       sessionStorage.setItem('chomka_beat_playback_mode', next);

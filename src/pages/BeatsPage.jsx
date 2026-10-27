@@ -17,6 +17,8 @@ import {
   LoadingSpinner,
   ShareIcon,
   CheckIcon,
+  FullscreenIcon,
+  ExitFullscreenIcon,
 } from "../components/Icons";
 // src/pages/BeatsPage.jsx
 
@@ -38,7 +40,7 @@ import ExclusiveBeatModal from "../components/ExclusiveBeatModal";
 import SeoHead from "../components/SeoHead";
 import { getBeatProducer, getBeatSource } from "../data/credits";
 
-const PREVIEW_LENGTH = 60;
+const PREVIEW_LENGTH = 45;
 
 function formatClock(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -98,7 +100,7 @@ const BeatCard = memo(function BeatCard({
       return;
     }
     const targetSlug = beat.slug || beat.id;
-    navigate(`/beat/${targetSlug}`);
+    navigate(`/beats/${targetSlug}`);
   };
 
   const handleShareBeat = useCallback(
@@ -309,14 +311,47 @@ function BeatReelPlayer({
     };
   }, [isDraggingSeek, computeSeekFraction, onSeek]);
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+
+  // Keyboard escape listener and lock body scroll in fullscreen (Req #1)
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsFullscreen(false);
+        setShowControls(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    const origOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = origOverflow;
+    };
+  }, [isFullscreen]);
+
+  const handleMediaClick = (e) => {
+    if (e.target.closest("button") || e.target.closest("a") || e.target.closest(".reel-seek-scrubber")) {
+      return;
+    }
+    if (!isFullscreen) {
+      setIsFullscreen(true);
+      setShowControls(true);
+    } else {
+      setShowControls((prev) => !prev);
+    }
+  };
+
   if (!currentBeat) return null;
 
   const effectiveDuration =
     Number.isFinite(previewDuration) && previewDuration > 0
       ? previewDuration
-      : playbackMode === "1min"
-      ? 60
-      : 180;
+      : playbackMode === "full"
+      ? 180
+      : 45;
   const elapsedSeconds = Math.min(
     effectiveDuration,
     Math.floor(progress * effectiveDuration)
@@ -326,24 +361,62 @@ function BeatReelPlayer({
 
   return (
     <div
-      className="beat-reel-wrapper"
-      style={{ margin: "20px auto 40px", maxWidth: "440px", padding: "0 12px" }}
+      className={`beat-reel-wrapper ${isFullscreen ? "is-fullscreen-reel" : ""}`}
+      style={
+        isFullscreen
+          ? {
+              position: "fixed",
+              inset: 0,
+              zIndex: 99990,
+              width: "100vw",
+              height: "100vh",
+              background: "#050507",
+              margin: 0,
+              maxWidth: "none",
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+            }
+          : {
+              margin: "20px auto 40px",
+              maxWidth: "440px",
+              padding: "0 12px",
+              position: "relative",
+            }
+      }
     >
+      {/* Req #1: Atmospheric Ambient Artwork Background */}
+      <div className="product-ambient-backdrop" aria-hidden="true">
+        <div
+          className="ambient-image-layer"
+          style={{
+            backgroundImage: `url(${currentBeat.image || "/beats-image.png"})`,
+          }}
+        />
+        <div className="ambient-gradient-overlay" />
+      </div>
+
       {/* 9:16 Portrait Reel Viewport */}
       <div
         className="beat-reel-viewport"
         style={{
           position: "relative",
-          width: "100%",
+          width: isFullscreen ? "auto" : "100%",
+          height: isFullscreen ? "100vh" : "auto",
           aspectRatio: "9 / 16",
-          maxHeight: "82vh",
+          maxHeight: isFullscreen ? "100vh" : "82vh",
+          maxWidth: isFullscreen ? "100vw" : "100%",
           margin: "0 auto",
-          borderRadius: "16px",
+          borderRadius: isFullscreen ? "0" : "16px",
           overflow: "hidden",
           background: "#080808",
-          boxShadow:
-            "0 24px 60px rgba(0,0,0,0.8), 0 0 30px rgba(223, 194, 125, 0.15)",
-          border: "1px solid rgba(223, 194, 125, 0.3)",
+          boxShadow: isFullscreen
+            ? "0 0 80px rgba(0,0,0,0.9)"
+            : "0 24px 60px rgba(0,0,0,0.8), 0 0 30px rgba(223, 194, 125, 0.15)",
+          border: isFullscreen ? "none" : "1px solid rgba(223, 194, 125, 0.3)",
+          zIndex: 1,
         }}
       >
         {/* Background Visualizer / GIF / Video */}
@@ -382,6 +455,9 @@ function BeatReelPlayer({
             right: 0,
             padding: "16px 16px 8px",
             zIndex: 10,
+            opacity: isFullscreen && !showControls ? 0 : 1,
+            pointerEvents: isFullscreen && !showControls ? "none" : "auto",
+            transition: "opacity 0.25s ease",
           }}
         >
           {/* Interactive Seek Scrubber with Draggable Handle (Req #5) */}
@@ -452,10 +528,10 @@ function BeatReelPlayer({
               />
               {playbackMode === "full"
                 ? `${formatClock(elapsedSeconds)} / ${formatClock(effectiveDuration)} Full`
-                : `${formatClock(elapsedSeconds)} / 1:00 Preview`}
+                : `${formatClock(elapsedSeconds)} / 0:45 Preview`}
             </span>
 
-            {/* 1 Min / Full Track Toggle inside Reel */}
+            {/* 45 Sec / Full Track Toggle inside Reel (Req #2) */}
             <div
               role="group"
               aria-label="Playback duration mode"
@@ -469,13 +545,13 @@ function BeatReelPlayer({
             >
               <button
                 type="button"
-                onClick={() => onChangePlaybackMode("1min")}
-                aria-pressed={playbackMode === "1min"}
+                onClick={() => onChangePlaybackMode("45sec")}
+                aria-pressed={playbackMode !== "full"}
                 style={{
                   border: "none",
                   background:
-                    playbackMode === "1min" ? "var(--gold)" : "transparent",
-                  color: playbackMode === "1min" ? "#050507" : "#d8d3c8",
+                    playbackMode !== "full" ? "var(--gold)" : "transparent",
+                  color: playbackMode !== "full" ? "#050507" : "#d8d3c8",
                   fontSize: "10px",
                   fontWeight: 700,
                   padding: "3px 8px",
@@ -483,7 +559,7 @@ function BeatReelPlayer({
                   cursor: "pointer",
                 }}
               >
-                1 MIN
+                45 SEC
               </button>
               <button
                 type="button"
@@ -505,13 +581,44 @@ function BeatReelPlayer({
               </button>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.75)" }}>
                 {currentIndex + 1}/{beats.length}
               </span>
               <button
                 type="button"
-                onClick={onExitReel}
+                onClick={() => {
+                  setIsFullscreen((prev) => !prev);
+                  setShowControls(true);
+                }}
+                style={{
+                  background: "rgba(0,0,0,0.6)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  color: isFullscreen ? "var(--gold)" : "#fff",
+                  borderRadius: "50%",
+                  width: "28px",
+                  height: "28px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                }}
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Immersive Fullscreen"}
+                aria-label={isFullscreen ? "Exit Fullscreen" : "Immersive Fullscreen"}
+              >
+                {isFullscreen ? <ExitFullscreenIcon size={14} /> : <FullscreenIcon size={14} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isFullscreen) {
+                    setIsFullscreen(false);
+                    setShowControls(true);
+                  } else {
+                    onExitReel && onExitReel();
+                  }
+                }}
                 style={{
                   background: "rgba(0,0,0,0.6)",
                   border: "1px solid rgba(255,255,255,0.2)",
@@ -525,8 +632,8 @@ function BeatReelPlayer({
                   cursor: "pointer",
                   fontSize: "13px",
                 }}
-                title="Exit Reel Mode"
-                aria-label="Exit Reel Mode"
+                title={isFullscreen ? "Exit Fullscreen" : "Exit Reel Mode"}
+                aria-label={isFullscreen ? "Exit Fullscreen" : "Exit Reel Mode"}
               >
                 ✕
               </button>
@@ -534,12 +641,12 @@ function BeatReelPlayer({
           </div>
         </div>
 
-        {/* Center Tap to Play/Pause Area */}
+        {/* Center Tap to Play/Pause Area & Immersive Fullscreen Area (Req #1) */}
         <div
-          onClick={() => onPlay(currentBeat)}
+          onClick={handleMediaClick}
           style={{
             position: "absolute",
-            inset: "80px 0 210px 0",
+            inset: "70px 0 200px 0",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -549,6 +656,10 @@ function BeatReelPlayer({
         >
           {(!isPlaying || isLoading) && (
             <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlay(currentBeat);
+              }}
               style={{
                 width: "64px",
                 height: "64px",
@@ -572,6 +683,31 @@ function BeatReelPlayer({
           )}
         </div>
 
+        {/* Minimal Tap Hint in Fullscreen mode when chrome is hidden */}
+        {isFullscreen && !showControls && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "24px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 12,
+              background: "rgba(0,0,0,0.7)",
+              border: "1px solid rgba(223,194,125,0.3)",
+              color: "var(--gold)",
+              borderRadius: "999px",
+              padding: "6px 14px",
+              fontSize: "11px",
+              pointerEvents: "none",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Tap to reveal controls
+          </div>
+        )}
+
         {/* Bottom Reel Content & Interactive Controls */}
         <div
           style={{
@@ -584,6 +720,9 @@ function BeatReelPlayer({
             display: "flex",
             flexDirection: "column",
             gap: "12px",
+            opacity: isFullscreen && !showControls ? 0 : 1,
+            pointerEvents: isFullscreen && !showControls ? "none" : "auto",
+            transition: "opacity 0.25s ease",
           }}
         >
           {/* Req #15: Genre stacked above Price, both centered */}
@@ -1716,7 +1855,11 @@ export default function BeatsPage() {
               aria-label="Select currency for beat licensing"
             >
               {supportedCurrencies.map((c) => (
-                <option key={c.code} value={c.code}>
+                <option
+                  key={c.code}
+                  value={c.code}
+                  style={{ background: "#0b0b10", color: "#f5f3ef" }}
+                >
                   {c.label}
                 </option>
               ))}

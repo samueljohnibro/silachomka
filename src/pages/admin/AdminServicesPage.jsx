@@ -21,9 +21,10 @@ const PAYMENT_STATUS_OPTIONS = [
 ];
 
 export default function AdminServicesPage() {
-  const [activeTab, setActiveTab] = useState("orders"); // 'orders' | 'services'
+  const [activeTab, setActiveTab] = useState("orders"); // 'orders' | 'services' | 'schedule'
   const [orders, setOrders] = useState([]);
   const [services, setServices] = useState([]);
+  const [availabilityList, setAvailabilityList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -41,6 +42,13 @@ export default function AdminServicesPage() {
   const [editingService, setEditingService] = useState(null);
   const [isSavingService, setIsSavingService] = useState(false);
   const [serviceSaveError, setServiceSaveError] = useState(null);
+
+  // Studio Availability Management (Req #10)
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState(null);
+  const [newDateInput, setNewDateInput] = useState("");
+  const [newSlotsInput, setNewSlotsInput] = useState("10:00 AM, 02:00 PM, 06:00 PM");
+  const [newNotesInput, setNewNotesInput] = useState("");
 
   const fetchOrders = async () => {
     try {
@@ -66,12 +74,93 @@ export default function AdminServicesPage() {
     }
   };
 
+  const fetchAvailability = async () => {
+    try {
+      const res = await fetch("/api/admin/services/availability");
+      if (res.ok) {
+        const data = await res.json();
+        setAvailabilityList(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch admin availability:", err);
+    }
+  };
+
   useEffect(() => {
     setIsLoading(true);
-    Promise.all([fetchOrders(), fetchServices()]).finally(() => {
+    Promise.all([fetchOrders(), fetchServices(), fetchAvailability()]).finally(() => {
       setIsLoading(false);
     });
   }, []);
+
+  const handleAddOrUpdateAvailability = async (e) => {
+    e?.preventDefault();
+    if (!newDateInput || !/^\d{4}-\d{2}-\d{2}$/.test(newDateInput)) {
+      setAvailabilityError("Please enter or select a valid date in YYYY-MM-DD format.");
+      return;
+    }
+    const slots = newSlotsInput
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (slots.length === 0) {
+      setAvailabilityError("Please specify at least one time slot (e.g. 10:00 AM, 02:00 PM).");
+      return;
+    }
+    setIsSavingAvailability(true);
+    setAvailabilityError(null);
+    try {
+      const res = await fetch("/api/admin/services/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dateStr: newDateInput,
+          slots,
+          isClosed: false,
+          notes: newNotesInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save date availability");
+      setNewDateInput("");
+      setNewNotesInput("");
+      await fetchAvailability();
+    } catch (err) {
+      setAvailabilityError(err.message || "Failed to save availability");
+    } finally {
+      setIsSavingAvailability(false);
+    }
+  };
+
+  const handleToggleCloseDate = async (item) => {
+    try {
+      await fetch("/api/admin/services/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dateStr: item.dateStr,
+          slots: item.slots,
+          isClosed: !item.isClosed,
+          notes: item.notes || "",
+        }),
+      });
+      await fetchAvailability();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteDate = async (dateStr) => {
+    if (!window.confirm(`Delete availability record for ${dateStr}?`)) return;
+    try {
+      await fetch(`/api/admin/services/availability/${encodeURIComponent(dateStr)}`, {
+        method: "DELETE",
+      });
+      await fetchAvailability();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const filteredOrders = orders.filter((o) => {
     if (statusFilter !== "ALL" && o.orderStatus !== statusFilter) return false;
@@ -272,6 +361,19 @@ export default function AdminServicesPage() {
           >
             Services Catalogue ({services.length})
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("schedule")}
+            className={`studio-pill-btn ${activeTab === "schedule" ? "active" : ""}`}
+            style={{
+              background: activeTab === "schedule" ? "var(--gold)" : "transparent",
+              color: activeTab === "schedule" ? "#000" : "var(--muted)",
+              fontWeight: 700,
+              border: "none",
+            }}
+          >
+            Studio Availability ({availabilityList.length})
+          </button>
         </div>
       </div>
 
@@ -411,7 +513,7 @@ export default function AdminServicesPage() {
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === "services" ? (
         /* =========================================================
            SERVICES CATALOGUE TAB
            ========================================================= */
@@ -459,6 +561,242 @@ export default function AdminServicesPage() {
               </button>
             </div>
           ))}
+        </div>
+      ) : (
+        /* =========================================================
+           STUDIO AVAILABILITY & SCHEDULING TAB (REQ #10)
+           ========================================================= */
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          {/* Information & Default State Notice */}
+          <div
+            style={{
+              padding: "18px 22px",
+              background: "rgba(223, 194, 125, 0.08)",
+              border: "1px solid rgba(223, 194, 125, 0.3)",
+              borderRadius: "10px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "12px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                🔒 Strict Scheduling Authority (WAT)
+              </span>
+              <span style={{ fontSize: "11px", background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", padding: "2px 8px", borderRadius: "999px", fontWeight: 700 }}>
+                Default: ALL DATES UNAVAILABLE
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: "13px", color: "var(--text)", lineHeight: 1.5 }}>
+              Clients on the public Services page cannot book sessions on any arbitrary date. They can <strong>ONLY</strong> choose dates and time slots you explicitly open below. The Cloudflare Worker API strictly rejects any order containing closed or unlisted studio appointments.
+            </p>
+          </div>
+
+          {/* Open New Date Card */}
+          <div
+            style={{
+              background: "rgba(13, 13, 18, 0.7)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              padding: "24px",
+            }}
+          >
+            <h3 style={{ fontSize: "16px", color: "var(--text-h)", margin: "0 0 14px", fontWeight: 700 }}>
+              + Open Studio Date for Client Bookings
+            </h3>
+
+            {availabilityError && (
+              <div style={{ padding: "10px 14px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "6px", color: "#ef4444", fontSize: "12px", marginBottom: "16px" }}>
+                {availabilityError}
+              </div>
+            )}
+
+            <form onSubmit={handleAddOrUpdateAvailability} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1.5fr auto", gap: "14px", alignItems: "end" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", marginBottom: "6px" }}>
+                  Date (YYYY-MM-DD)
+                </label>
+                <input
+                  type="date"
+                  className="studio-input"
+                  value={newDateInput}
+                  onChange={(e) => setNewDateInput(e.target.value)}
+                  style={{ width: "100%" }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", marginBottom: "6px" }}>
+                  Time Slots (comma-separated, WAT)
+                </label>
+                <input
+                  type="text"
+                  className="studio-input"
+                  placeholder="e.g. 10:00 AM, 02:00 PM, 06:00 PM"
+                  value={newSlotsInput}
+                  onChange={(e) => setNewSlotsInput(e.target.value)}
+                  style={{ width: "100%" }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", marginBottom: "6px" }}>
+                  Studio Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  className="studio-input"
+                  placeholder="e.g. Vocal Recording Block"
+                  value={newNotesInput}
+                  onChange={(e) => setNewNotesInput(e.target.value)}
+                  style={{ width: "100%" }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSavingAvailability}
+                className="primary-button"
+                style={{
+                  height: "40px",
+                  padding: "0 22px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: isSavingAvailability ? "wait" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isSavingAvailability ? "Saving..." : "Open Date"}
+              </button>
+            </form>
+          </div>
+
+          {/* Configured Dates List */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <h3 style={{ fontSize: "16px", color: "var(--text-h)", margin: 0, fontWeight: 700 }}>
+              Configured Studio Dates ({availabilityList.length})
+            </h3>
+
+            {availabilityList.length === 0 ? (
+              <div className="admin-empty-card" style={{ padding: "40px 20px", textAlign: "center" }}>
+                <p style={{ margin: "0 0 6px", color: "var(--text)", fontWeight: 600 }}>
+                  No Studio Dates Currently Open
+                </p>
+                <p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>
+                  All dates are unavailable by default. Use the form above to open dates and configure appointment time slots for client sessions.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px" }}>
+                {availabilityList.map((item) => {
+                  const slots = Array.isArray(item.slots) ? item.slots : [];
+                  return (
+                    <div
+                      key={item.dateStr}
+                      style={{
+                        background: "rgba(13, 13, 18, 0.7)",
+                        border: item.isClosed
+                          ? "1px solid rgba(239, 68, 68, 0.3)"
+                          : "1px solid rgba(223, 194, 125, 0.3)",
+                        borderRadius: "8px",
+                        padding: "18px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "12px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--text-h)" }}>
+                            {item.dateStr}
+                          </span>
+                          {item.notes && (
+                            <span style={{ display: "block", fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>
+                              {item.notes}
+                            </span>
+                          )}
+                        </div>
+
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: 800,
+                            letterSpacing: "0.08em",
+                            padding: "3px 10px",
+                            borderRadius: "999px",
+                            background: item.isClosed ? "rgba(239, 68, 68, 0.15)" : "rgba(52, 211, 153, 0.15)",
+                            color: item.isClosed ? "#ef4444" : "#34d399",
+                            border: item.isClosed ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(52, 211, 153, 0.3)",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {item.isClosed ? "Closed" : "Open for Bookings"}
+                        </span>
+                      </div>
+
+                      {/* Slots */}
+                      <div>
+                        <span style={{ display: "block", fontSize: "11px", color: "var(--muted)", marginBottom: "6px", textTransform: "uppercase" }}>
+                          Available Time Slots ({slots.length}):
+                        </span>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                          {slots.map((s, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                color: "var(--gold)",
+                                background: "rgba(223, 194, 125, 0.12)",
+                                border: "1px solid rgba(223, 194, 125, 0.25)",
+                                borderRadius: "4px",
+                                padding: "2px 8px",
+                              }}
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCloseDate(item)}
+                          className="studio-pill-btn"
+                          style={{
+                            fontSize: "11px",
+                            color: item.isClosed ? "#34d399" : "#ef4444",
+                            borderColor: item.isClosed ? "rgba(52, 211, 153, 0.3)" : "rgba(239, 68, 68, 0.3)",
+                          }}
+                        >
+                          {item.isClosed ? "Re-open Date" : "Close Date"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDate(item.dateStr)}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#e57373",
+                            fontSize: "12px",
+                            cursor: "pointer",
+                            padding: "4px 8px",
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -32,7 +32,7 @@ import {
   getBeatSource,
 } from "../data/credits";
 
-const PREVIEW_LENGTH = 60;
+const PREVIEW_LENGTH = 45;
 
 export default function BeatDetailPage() {
   const { id } = useParams();

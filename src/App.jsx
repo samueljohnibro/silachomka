@@ -203,13 +203,12 @@ function SiteHeader({
             </Link>
           </nav>
 
-          <Link
-            className="header-label"
-            to="/"
-            aria-label="Return to silachomka"
+          <span
+            className="header-brand-badge"
+            aria-label="chomkaMUSIC brand tag"
           >
             chomkaMUSIC™
-          </Link>
+          </span>
 
           {/* Mobile Hamburger Button */}
           <button
@@ -319,13 +318,12 @@ function SiteHeader({
           </Link>
         </nav>
 
-        <a
-          className="header-label"
-          href="#top"
-          aria-label="silachomka"
+        <span
+          className="header-brand-badge"
+          aria-label="chomkaMUSIC brand tag"
         >
           chomkaMUSIC™
-        </a>
+        </span>
 
         {/* Mobile Hamburger Button */}
         <button
@@ -1335,6 +1333,151 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
 }
 
 /* =========================================================
+   GALLERY CARD MEDIA (CINEMATIC CROSSFADE FOR CAROUSELS - REQ #8)
+   ========================================================= */
+
+function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
+  const slides = useMemo(() => {
+    if (!Array.isArray(post.slides) || post.slides.length <= 1) return [];
+    return post.slides
+      .map((s) => (typeof s === "string" ? s : s?.src || s?.asset))
+      .filter(Boolean);
+  }, [post.slides]);
+
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    if (slides.length > 1) {
+      return Math.floor(Math.random() * slides.length);
+    }
+    return 0;
+  });
+
+  useEffect(() => {
+    if (!isCarousel || slides.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % slides.length);
+    }, 7000);
+    return () => clearInterval(interval);
+  }, [isCarousel, slides.length]);
+
+  if (isCarousel && slides.length > 1) {
+    return (
+      <div
+        className="gallery-card-image"
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+        }}
+      >
+        {slides.map((src, idx) => {
+          const isSlideVideo =
+            typeof src === "string" &&
+            (src.startsWith("data:video") ||
+              src.endsWith(".mp4") ||
+              src.endsWith(".webm") ||
+              src.endsWith(".mov"));
+          const isCurrent = idx === currentIndex;
+          return isSlideVideo ? (
+            <div
+              key={idx}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                opacity: isCurrent ? 1 : 0,
+                transition: "opacity 1.8s ease-in-out",
+                zIndex: isCurrent ? 2 : 1,
+                pointerEvents: "none",
+              }}
+            >
+              <GalleryCardVideo
+                src={src}
+                title={post.title || "Archive video"}
+                className="gallery-card-image"
+              />
+            </div>
+          ) : (
+            <img
+              key={idx}
+              src={src}
+              alt={`${post.title || "Archive item"} slide ${idx + 1}`}
+              className="gallery-card-image"
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                opacity: isCurrent ? 1 : 0,
+                transition: "opacity 1.8s ease-in-out",
+                zIndex: isCurrent ? 2 : 1,
+              }}
+              loading="lazy"
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (primarySrc) {
+    return isVideo ? (
+      <GalleryCardVideo
+        src={primarySrc}
+        title={post.title || "Archive video"}
+        className="gallery-card-image"
+      />
+    ) : (
+      <img
+        src={primarySrc}
+        alt={post.title || "Archive item"}
+        className="gallery-card-image"
+        loading="lazy"
+      />
+    );
+  }
+
+  return (
+    <div
+      className="gallery-card-image"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "linear-gradient(145deg, #121218 0%, #09090d 100%)",
+        color: "var(--gold)",
+        padding: "20px",
+        textAlign: "center",
+      }}
+    >
+      <span
+        style={{
+          fontSize: "11px",
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          fontWeight: 700,
+        }}
+      >
+        {post.externalSocialPlatform || post.external_social_platform || "Social Archive"}
+      </span>
+      <span
+        style={{
+          fontSize: "13px",
+          color: "var(--text)",
+          marginTop: "6px",
+          fontWeight: 600,
+        }}
+      >
+        {post.title || "View Post"}
+      </span>
+    </div>
+  );
+}
+
+/* =========================================================
    GALLERY SECTION (INSTAGRAM-STYLE VISUAL ARCHIVE)
    ========================================================= */
 
@@ -1479,43 +1622,12 @@ function GallerySection() {
               aria-label={`Open ${post.title || "archive post"}`}
             >
               <div className="gallery-card-frame">
-                {primarySrc ? (
-                  isVideo ? (
-                    <GalleryCardVideo
-                      src={primarySrc}
-                      title={post.title || "Archive video"}
-                      className="gallery-card-image"
-                    />
-                  ) : (
-                    <img
-                      src={primarySrc}
-                      alt={post.title || "Archive item"}
-                      className="gallery-card-image"
-                      loading="lazy"
-                    />
-                  )
-                ) : (
-                  <div
-                    className="gallery-card-image"
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "linear-gradient(145deg, #121218 0%, #09090d 100%)",
-                      color: "var(--gold)",
-                      padding: "20px",
-                      textAlign: "center",
-                    }}
-                  >
-                    <span style={{ fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 700 }}>
-                      {post.externalSocialPlatform || post.external_social_platform || "Social Archive"}
-                    </span>
-                    <span style={{ fontSize: "13px", color: "var(--text)", marginTop: "6px", fontWeight: 600 }}>
-                      {post.title || "View Post"}
-                    </span>
-                  </div>
-                )}
+                <GalleryCardMedia
+                  post={post}
+                  primarySrc={primarySrc}
+                  isVideo={isVideo}
+                  isCarousel={isCarousel}
+                />
 
                 {/* Media Type Badges in Top-Right */}
                 {isCarousel && (
@@ -2083,6 +2195,13 @@ function App() {
   
           <Route
             path="/beats/:id"
+            element={
+              <BeatDetailRoute />
+            }
+          />
+
+          <Route
+            path="/beat/:id"
             element={
               <BeatDetailRoute />
             }

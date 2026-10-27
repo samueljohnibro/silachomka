@@ -69,6 +69,40 @@ export default function GalleryPostModal({
   const touchStartXRef = useRef(null);
   const touchDeltaXRef = useRef(0);
   const [isSwiping, setIsSwiping] = useState(false);
+  const isAnimatingRef = useRef(false);
+
+  const goToSlide = useCallback((targetIndex) => {
+    if (isAnimatingRef.current) return;
+    isAnimatingRef.current = true;
+    setActiveSlide(targetIndex);
+    setTimeout(() => {
+      isAnimatingRef.current = false;
+    }, 460);
+  }, []);
+
+  const handlePrevSlide = useCallback((e) => {
+    if (e) e.stopPropagation();
+    if (isAnimatingRef.current) return;
+    setActiveSlide((prev) => {
+      isAnimatingRef.current = true;
+      setTimeout(() => {
+        isAnimatingRef.current = false;
+      }, 460);
+      return prev > 0 ? prev - 1 : effectiveSlides.length - 1;
+    });
+  }, [effectiveSlides.length]);
+
+  const handleNextSlide = useCallback((e) => {
+    if (e) e.stopPropagation();
+    if (isAnimatingRef.current) return;
+    setActiveSlide((prev) => {
+      isAnimatingRef.current = true;
+      setTimeout(() => {
+        isAnimatingRef.current = false;
+      }, 460);
+      return prev < effectiveSlides.length - 1 ? prev + 1 : 0;
+    });
+  }, [effectiveSlides.length]);
 
   const handleTouchStart = (e) => {
     if (!e.touches?.[0]) return;
@@ -89,9 +123,9 @@ export default function GalleryPostModal({
     touchStartXRef.current = null;
     touchDeltaXRef.current = 0;
     if (delta < -40) {
-      setActiveSlide((prev) => (prev < effectiveSlides.length - 1 ? prev + 1 : 0));
+      handleNextSlide();
     } else if (delta > 40) {
-      setActiveSlide((prev) => (prev > 0 ? prev - 1 : effectiveSlides.length - 1));
+      handlePrevSlide();
     }
   };
   const [prevPostId, setPrevPostId] = useState(post?.id);
@@ -313,7 +347,7 @@ export default function GalleryPostModal({
                   className="gallery-carousel-track"
                   style={{
                     transform: `translateX(-${activeSlide * 100}%)`,
-                    transition: isSwiping ? "none" : "transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)",
+                    transition: isSwiping ? "none" : "transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)",
                   }}
                 >
                   {effectiveSlides.map((slide, idx) => {
@@ -330,7 +364,8 @@ export default function GalleryPostModal({
                             src={slide.src}
                             alt={`${post.title || "Gallery post"} slide ${idx + 1}`}
                             className="gallery-modal-image"
-                            loading={idx === 0 ? "eager" : "lazy"}
+                            loading="eager"
+                            decoding="async"
                           />
                         )}
                       </div>
@@ -339,16 +374,11 @@ export default function GalleryPostModal({
                 </div>
               </div>
 
-              {/* Carousel Navigation Arrows */}
+              {/* Carousel Navigation Arrows with Animation Lockout (Req #3) */}
               <button
                 type="button"
                 className="carousel-slide-btn carousel-prev"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveSlide((prev) =>
-                    prev > 0 ? prev - 1 : effectiveSlides.length - 1
-                  );
-                }}
+                onClick={handlePrevSlide}
                 aria-label="Previous slide"
               >
                 ‹
@@ -357,12 +387,7 @@ export default function GalleryPostModal({
               <button
                 type="button"
                 className="carousel-slide-btn carousel-next"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveSlide((prev) =>
-                    prev < effectiveSlides.length - 1 ? prev + 1 : 0
-                  );
-                }}
+                onClick={handleNextSlide}
                 aria-label="Next slide"
               >
                 ›
@@ -379,7 +404,7 @@ export default function GalleryPostModal({
                     }`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveSlide(idx);
+                      goToSlide(idx);
                     }}
                     aria-label={`Go to slide ${idx + 1}`}
                   />
