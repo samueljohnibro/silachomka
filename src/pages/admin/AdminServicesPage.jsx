@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { LoadingSpinner } from "../../components/Icons";
+import { formatLongDate } from "../../utils/dateFormatter";
+import { uploadWithProgress, formatBytes } from "../../utils/uploadWithProgress";
 import "./admin.css";
 
 const STATUS_OPTIONS = [
@@ -20,6 +22,376 @@ const PAYMENT_STATUS_OPTIONS = [
   "REFUNDED",
 ];
 
+const PRESET_TIME_SLOTS = [
+  "09:00 AM",
+  "09:30 AM",
+  "10:00 AM",
+  "10:30 AM",
+  "11:00 AM",
+  "11:30 AM",
+  "12:00 PM",
+  "12:30 PM",
+  "01:00 PM",
+  "01:30 PM",
+  "02:00 PM",
+  "02:30 PM",
+  "03:00 PM",
+  "03:30 PM",
+  "04:00 PM",
+  "04:30 PM",
+  "05:00 PM",
+  "05:30 PM",
+  "06:00 PM",
+  "06:30 PM",
+  "07:00 PM",
+  "07:30 PM",
+  "08:00 PM",
+];
+
+const SERVICE_CATEGORIES = [
+  "PRODUCTION",
+  "MIXING",
+  "MASTERING",
+  "RECORDING",
+  "COLLABORATION",
+];
+
+/* =========================================================
+   CUSTOM THEMED TIME SLOT PICKER (REQ #9)
+   Eliminates raw OS time inputs; luxury dark/gold aesthetic
+   ========================================================= */
+function ThemedTimeSlotPicker({ slots, onAddSlot, onRemoveSlot }) {
+  const [selectedPreset, setSelectedPreset] = useState(PRESET_TIME_SLOTS[2]); // 10:00 AM
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        Active Time Slots ({slots.length})
+      </label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", minHeight: "32px", alignItems: "center" }}>
+        {slots.length === 0 ? (
+          <span style={{ fontSize: "12px", color: "var(--muted)", fontStyle: "italic" }}>
+            No slots configured (clients cannot book this date)
+          </span>
+        ) : (
+          slots.map((slot, idx) => (
+            <span
+              key={idx}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 12px",
+                background: "rgba(223, 194, 125, 0.15)",
+                border: "1px solid var(--gold)",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: 700,
+                color: "var(--gold)",
+              }}
+            >
+              {slot}
+              <button
+                type="button"
+                onClick={() => onRemoveSlot(idx)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--muted)",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  lineHeight: 1,
+                  padding: "0 2px",
+                }}
+                aria-label={`Remove slot ${slot}`}
+              >
+                ×
+              </button>
+            </span>
+          ))
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "4px" }}>
+        <select
+          value={selectedPreset}
+          onChange={(e) => setSelectedPreset(e.target.value)}
+          className="studio-input"
+          style={{ height: "38px", padding: "0 10px", fontSize: "12px", width: "160px" }}
+        >
+          {PRESET_TIME_SLOTS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => {
+            if (selectedPreset && !slots.includes(selectedPreset)) {
+              onAddSlot(selectedPreset);
+            }
+          }}
+          className="studio-pill-btn"
+          style={{ height: "38px", padding: "0 16px", fontSize: "12px", fontWeight: 700 }}
+        >
+          + Add Slot
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   INTERACTIVE MONTHLY STUDIO CALENDAR (REQ #11)
+   ========================================================= */
+function StudioMonthlyCalendar({ availabilityList, onSelectDate, selectedDate }) {
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
+  const startOffset = (firstDayIndex + 6) % 7; // Monday-first offset
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const goToday = () => setCurrentDate(new Date());
+
+  const availMap = useMemo(() => {
+    const map = new Map();
+    for (const item of availabilityList) {
+      if (item?.dateStr) {
+        map.set(item.dateStr, item);
+      }
+    }
+    return map;
+  }, [availabilityList]);
+
+  const days = [];
+  for (let i = 0; i < startOffset; i++) {
+    days.push(null);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    days.push({ dayNumber: d, dateStr });
+  }
+
+  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  return (
+    <div
+      style={{
+        background: "rgba(10, 8, 16, 0.75)",
+        border: "1px solid var(--border)",
+        borderRadius: "12px",
+        padding: "24px",
+      }}
+    >
+      {/* Calendar Header with Controls */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}
+      >
+        <div>
+          <h3 style={{ margin: 0, fontSize: "20px", color: "var(--text-h)", fontWeight: 800 }}>
+            {monthNames[month]} {year}
+          </h3>
+          <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            Studio Booking Schedule · Closed by Default
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={prevMonth}
+            className="studio-pill-btn"
+            style={{ padding: "6px 14px", fontSize: "12px" }}
+            aria-label="Previous month"
+          >
+            ← Prev
+          </button>
+          <button
+            type="button"
+            onClick={goToday}
+            className="studio-pill-btn"
+            style={{ padding: "6px 14px", fontSize: "12px" }}
+          >
+            Current Month
+          </button>
+          <button
+            type="button"
+            onClick={nextMonth}
+            className="studio-pill-btn"
+            style={{ padding: "6px 14px", fontSize: "12px" }}
+            aria-label="Next month"
+          >
+            Next →
+          </button>
+        </div>
+      </div>
+
+      {/* Weekdays Header */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gap: "8px",
+          textAlign: "center",
+          marginBottom: "10px",
+        }}
+      >
+        {weekdays.map((w) => (
+          <div
+            key={w}
+            style={{
+              fontSize: "11px",
+              fontWeight: 700,
+              color: "var(--gold)",
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+            }}
+          >
+            {w}
+          </div>
+        ))}
+      </div>
+
+      {/* Day Cells Grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gap: "8px",
+        }}
+      >
+        {days.map((cell, idx) => {
+          if (!cell) {
+            return (
+              <div
+                key={`empty-${idx}`}
+                style={{
+                  minHeight: "78px",
+                  opacity: 0.1,
+                  background: "rgba(255, 255, 255, 0.02)",
+                  borderRadius: "6px",
+                }}
+              />
+            );
+          }
+          const item = availMap.get(cell.dateStr);
+          const isOpen =
+            item && !item.isClosed && Array.isArray(item.slots) && item.slots.length > 0;
+          const isSelected = selectedDate === cell.dateStr;
+
+          return (
+            <div
+              key={cell.dateStr}
+              onClick={() => onSelectDate(cell.dateStr, item)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectDate(cell.dateStr, item);
+                }
+              }}
+              style={{
+                minHeight: "78px",
+                padding: "8px",
+                borderRadius: "8px",
+                background: isSelected
+                  ? "rgba(223, 194, 125, 0.22)"
+                  : isOpen
+                  ? "rgba(16, 40, 24, 0.65)"
+                  : "rgba(18, 14, 24, 0.45)",
+                border: isSelected
+                  ? "2px solid var(--gold)"
+                  : isOpen
+                  ? "1px solid rgba(52, 211, 153, 0.45)"
+                  : "1px solid rgba(255, 255, 255, 0.06)",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <span
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: 800,
+                    color: isSelected ? "var(--gold)" : "var(--text-h)",
+                  }}
+                >
+                  {cell.dayNumber}
+                </span>
+                {isOpen ? (
+                  <span
+                    style={{
+                      fontSize: "9px",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      background: "rgba(52, 211, 153, 0.25)",
+                      color: "#34d399",
+                      fontWeight: 800,
+                    }}
+                  >
+                    OPEN ({item.slots.length})
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      fontSize: "9px",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                      background: "rgba(239, 68, 68, 0.15)",
+                      color: "#ef4444",
+                      fontWeight: 700,
+                    }}
+                  >
+                    CLOSED
+                  </span>
+                )}
+              </div>
+              {item?.notes ? (
+                <span
+                  style={{
+                    fontSize: "10px",
+                    color: "var(--muted)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {item.notes}
+                </span>
+              ) : (
+                <span style={{ fontSize: "9px", color: "var(--muted)", opacity: 0.6 }}>
+                  {isOpen ? `${item.slots[0] || ""}...` : "Unavailable"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminServicesPage() {
   const [activeTab, setActiveTab] = useState("orders"); // 'orders' | 'services' | 'schedule'
   const [orders, setOrders] = useState([]);
@@ -34,21 +406,47 @@ export default function AdminServicesPage() {
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [orderSaveError, setOrderSaveError] = useState(null);
 
-  // Deliverable Upload state
+  // Deliverable Upload state (with accurate progress, Req #14)
   const [isUploadingDeliverable, setIsUploadingDeliverable] = useState(false);
+  const [deliverableProgress, setDeliverableProgress] = useState(null);
   const [deliverableError, setDeliverableError] = useState(null);
 
-  // Service Edit Modal
+  // Service Edit & Create Modals (Req #12)
   const [editingService, setEditingService] = useState(null);
   const [isSavingService, setIsSavingService] = useState(false);
   const [serviceSaveError, setServiceSaveError] = useState(null);
 
-  // Studio Availability Management (Req #10)
+  const [isCreatingService, setIsCreatingService] = useState(false);
+  const [isSubmittingNewService, setIsSubmittingNewService] = useState(false);
+  const [createServiceError, setCreateServiceError] = useState(null);
+  const [newService, setNewService] = useState({
+    title: "",
+    slug: "",
+    tagline: "",
+    description: "",
+    category: "PRODUCTION",
+    basePriceNgn: "",
+    isHourly: false,
+    hourlyRateNgn: "",
+    turnaroundDays: 3,
+    sortOrder: 10,
+    isActive: true,
+    deliverablesText: "",
+  });
+
+  // Studio Availability Management (Req #9 & Req #11)
   const [isSavingAvailability, setIsSavingAvailability] = useState(false);
   const [availabilityError, setAvailabilityError] = useState(null);
-  const [newDateInput, setNewDateInput] = useState("");
-  const [newSlotsInput, setNewSlotsInput] = useState("10:00 AM, 02:00 PM, 06:00 PM");
-  const [newNotesInput, setNewNotesInput] = useState("");
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [selectedDaySlots, setSelectedDaySlots] = useState([
+    "10:00 AM",
+    "02:00 PM",
+    "06:00 PM",
+  ]);
+  const [selectedDayIsClosed, setSelectedDayIsClosed] = useState(true);
+  const [selectedDayNotes, setSelectedDayNotes] = useState("");
 
   const fetchOrders = async () => {
     try {
@@ -93,37 +491,44 @@ export default function AdminServicesPage() {
     });
   }, []);
 
-  const handleAddOrUpdateAvailability = async (e) => {
-    e?.preventDefault();
-    if (!newDateInput || !/^\d{4}-\d{2}-\d{2}$/.test(newDateInput)) {
-      setAvailabilityError("Please enter or select a valid date in YYYY-MM-DD format.");
-      return;
+  // When a day on the calendar is selected
+  const handleSelectCalendarDate = useCallback((dateStr, existingItem) => {
+    setSelectedCalendarDate(dateStr);
+    if (existingItem) {
+      setSelectedDayIsClosed(Boolean(existingItem.isClosed));
+      setSelectedDaySlots(
+        Array.isArray(existingItem.slots) && existingItem.slots.length > 0
+          ? [...existingItem.slots]
+          : ["10:00 AM", "02:00 PM", "06:00 PM"]
+      );
+      setSelectedDayNotes(existingItem.notes || "");
+    } else {
+      // Unconfigured = Closed by default
+      setSelectedDayIsClosed(true);
+      setSelectedDaySlots(["10:00 AM", "02:00 PM", "06:00 PM"]);
+      setSelectedDayNotes("");
     }
-    const slots = newSlotsInput
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (slots.length === 0) {
-      setAvailabilityError("Please specify at least one time slot (e.g. 10:00 AM, 02:00 PM).");
-      return;
-    }
+    setAvailabilityError(null);
+  }, []);
+
+  const handleSaveDayAvailability = async () => {
+    if (!selectedCalendarDate) return;
     setIsSavingAvailability(true);
     setAvailabilityError(null);
+
     try {
       const res = await fetch("/api/admin/services/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dateStr: newDateInput,
-          slots,
-          isClosed: false,
-          notes: newNotesInput.trim(),
+          dateStr: selectedCalendarDate,
+          slots: selectedDayIsClosed ? [] : selectedDaySlots,
+          isClosed: selectedDayIsClosed,
+          notes: selectedDayNotes.trim(),
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save date availability");
-      setNewDateInput("");
-      setNewNotesInput("");
+      if (!res.ok) throw new Error(data.error || "Failed to save availability");
       await fetchAvailability();
     } catch (err) {
       setAvailabilityError(err.message || "Failed to save availability");
@@ -132,49 +537,23 @@ export default function AdminServicesPage() {
     }
   };
 
-  const handleToggleCloseDate = async (item) => {
-    try {
-      await fetch("/api/admin/services/availability", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dateStr: item.dateStr,
-          slots: item.slots,
-          isClosed: !item.isClosed,
-          notes: item.notes || "",
-        }),
-      });
-      await fetchAvailability();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDeleteDate = async (dateStr) => {
-    if (!window.confirm(`Delete availability record for ${dateStr}?`)) return;
+  const handleDeleteDayAvailability = async (dateStr) => {
+    if (!dateStr) return;
+    setIsSavingAvailability(true);
     try {
       await fetch(`/api/admin/services/availability/${encodeURIComponent(dateStr)}`, {
         method: "DELETE",
       });
+      setSelectedDayIsClosed(true);
       await fetchAvailability();
     } catch (err) {
-      console.error(err);
+      setAvailabilityError(err.message);
+    } finally {
+      setIsSavingAvailability(false);
     }
   };
 
-  const filteredOrders = orders.filter((o) => {
-    if (statusFilter !== "ALL" && o.orderStatus !== statusFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchNum = o.orderNumber?.toLowerCase().includes(q);
-      const matchName = o.customerName?.toLowerCase().includes(q);
-      const matchEmail = o.customerEmail?.toLowerCase().includes(q);
-      const matchService = o.serviceTitle?.toLowerCase().includes(q);
-      if (!matchNum && !matchName && !matchEmail && !matchService) return false;
-    }
-    return true;
-  });
-
+  // Order management
   const handleOpenEditOrder = (order) => {
     setEditingOrder({
       ...order,
@@ -203,7 +582,6 @@ export default function AdminServicesPage() {
         body: JSON.stringify({
           orderStatus: editingOrder.orderStatus,
           paymentStatus: editingOrder.paymentStatus,
-          totalAmountNgn: editingOrder.totalAmountNgn,
           agreedDeadline: deadlineIso,
           deadlineTimezone: editingOrder.deadlineTimezone || "WAT",
           adminNotes: editingOrder.adminNotes,
@@ -222,24 +600,24 @@ export default function AdminServicesPage() {
     }
   };
 
+  // Deliverables upload with real byte-level progress (Req #14)
   const handleDeliverableUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploadingDeliverable(true);
     setDeliverableError(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
+    setDeliverableProgress({ percent: 0, loadedFormatted: "0 B", totalFormatted: formatBytes(file.size) });
 
     try {
-      const res = await fetch("/api/services/upload", {
-        method: "POST",
-        body: formData,
+      const data = await uploadWithProgress({
+        url: "/api/services/upload",
+        file,
+        onProgress: (p) => setDeliverableProgress(p),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || data.error || "File upload failed");
+
+      if (!data || !data.success) {
+        throw new Error(data?.message || data?.error || "File upload failed");
       }
 
       setEditingOrder((prev) => ({
@@ -247,6 +625,7 @@ export default function AdminServicesPage() {
         deliverables: [
           ...prev.deliverables,
           {
+            id: data.file.id,
             name: data.file.name,
             size: data.file.size,
             type: data.file.type,
@@ -255,8 +634,10 @@ export default function AdminServicesPage() {
           },
         ],
       }));
+      setDeliverableProgress(null);
     } catch (err) {
       setDeliverableError(err.message);
+      setDeliverableProgress(null);
     } finally {
       setIsUploadingDeliverable(false);
       e.target.value = "";
@@ -270,6 +651,7 @@ export default function AdminServicesPage() {
     }));
   };
 
+  // Services Catalogue CRUD (Req #12)
   const handleOpenEditService = (service) => {
     setEditingService({
       ...service,
@@ -296,6 +678,7 @@ export default function AdminServicesPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          slug: editingService.slug,
           title: editingService.title,
           tagline: editingService.tagline,
           description: editingService.description,
@@ -304,6 +687,7 @@ export default function AdminServicesPage() {
           isHourly: editingService.isHourly,
           hourlyRateNgn: editingService.hourlyRateNgn,
           turnaroundDays: Number(editingService.turnaroundDays),
+          sortOrder: Number(editingService.sortOrder ?? 10),
           isActive: editingService.isActive,
           deliverables,
         }),
@@ -320,160 +704,262 @@ export default function AdminServicesPage() {
     }
   };
 
-  return (
-    <div className="admin-page-container">
-      {/* Header & Tabs */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
-        <div>
-          <h1 className="admin-page-title" style={{ margin: "0 0 6px" }}>
-            Studio Services & Orders
-          </h1>
-          <p style={{ color: "var(--muted)", fontSize: "13px", margin: 0 }}>
-            Manage client studio bookings, stem files, milestones, deadlines (WAT), and configure service pricing.
-          </p>
-        </div>
+  const handleCreateService = async (e) => {
+    e.preventDefault();
+    if (!newService.title.trim()) {
+      setCreateServiceError("Service title is required");
+      return;
+    }
+    setIsSubmittingNewService(true);
+    setCreateServiceError(null);
 
-        {/* Tab Toggle */}
-        <div style={{ display: "flex", background: "rgba(255, 255, 255, 0.05)", padding: "4px", borderRadius: "8px", gap: "4px" }}>
-          <button
-            type="button"
-            onClick={() => setActiveTab("orders")}
-            className={`studio-pill-btn ${activeTab === "orders" ? "active" : ""}`}
-            style={{
-              background: activeTab === "orders" ? "var(--gold)" : "transparent",
-              color: activeTab === "orders" ? "#000" : "var(--muted)",
-              fontWeight: 700,
-              border: "none",
-            }}
-          >
-            Client Orders ({orders.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("services")}
-            className={`studio-pill-btn ${activeTab === "services" ? "active" : ""}`}
-            style={{
-              background: activeTab === "services" ? "var(--gold)" : "transparent",
-              color: activeTab === "services" ? "#000" : "var(--muted)",
-              fontWeight: 700,
-              border: "none",
-            }}
-          >
-            Services Catalogue ({services.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("schedule")}
-            className={`studio-pill-btn ${activeTab === "schedule" ? "active" : ""}`}
-            style={{
-              background: activeTab === "schedule" ? "var(--gold)" : "transparent",
-              color: activeTab === "schedule" ? "#000" : "var(--muted)",
-              fontWeight: 700,
-              border: "none",
-            }}
-          >
-            Studio Availability ({availabilityList.length})
-          </button>
-        </div>
+    try {
+      const deliverables = newService.deliverablesText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const res = await fetch("/api/admin/services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...newService,
+          turnaroundDays: Number(newService.turnaroundDays),
+          sortOrder: Number(newService.sortOrder ?? 10),
+          deliverables,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create service");
+
+      await fetchServices();
+      setIsCreatingService(false);
+      setNewService({
+        title: "",
+        slug: "",
+        tagline: "",
+        description: "",
+        category: "PRODUCTION",
+        basePriceNgn: "",
+        isHourly: false,
+        hourlyRateNgn: "",
+        turnaroundDays: 3,
+        sortOrder: 10,
+        isActive: true,
+        deliverablesText: "",
+      });
+    } catch (err) {
+      setCreateServiceError(err.message);
+    } finally {
+      setIsSubmittingNewService(false);
+    }
+  };
+
+  const handleDeleteService = async (id, title) => {
+    if (!window.confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/services/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete service");
+      await fetchServices();
+    } catch (err) {
+      alert(err.message || "Failed to delete service");
+    }
+  };
+
+  // Filtered orders
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const matchesStatus =
+        statusFilter === "ALL" || o.orderStatus === statusFilter;
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (o.orderNumber && o.orderNumber.toLowerCase().includes(q)) ||
+        (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+        (o.customerEmail && o.customerEmail.toLowerCase().includes(q)) ||
+        (o.serviceTitle && o.serviceTitle.toLowerCase().includes(q));
+      return matchesStatus && matchesSearch;
+    });
+  }, [orders, statusFilter, searchQuery]);
+
+  return (
+    <div className="admin-services-page" style={{ padding: "32px 6vw 120px", maxWidth: "1280px", margin: "0 auto" }}>
+      {/* Refined Header Typography & Navigation (Req #9) */}
+      <div style={{ marginBottom: "28px" }}>
+        <p className="eyebrow" style={{ color: "var(--gold)", margin: "0 0 6px", fontSize: "11px", letterSpacing: "0.14em" }}>
+          STUDIO OPERATIONS & ARCHIVE
+        </p>
+        <h1 style={{ fontSize: "28px", color: "var(--text-h)", margin: "0 0 8px", fontWeight: 800 }}>
+          Services & Studio Management
+        </h1>
+        <p style={{ color: "var(--muted)", margin: 0, fontSize: "14px", lineHeight: 1.5 }}>
+          Manage client orders, track delivery milestones, curate service catalogue offerings, and set strict studio booking availability.
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          borderBottom: "1px solid var(--border)",
+          paddingBottom: "14px",
+          marginBottom: "28px",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab("orders")}
+          className={`studio-pill-btn ${activeTab === "orders" ? "is-active" : ""}`}
+          style={{ fontSize: "13px", padding: "8px 18px", fontWeight: 700 }}
+        >
+          Client Orders ({orders.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("services")}
+          className={`studio-pill-btn ${activeTab === "services" ? "is-active" : ""}`}
+          style={{ fontSize: "13px", padding: "8px 18px", fontWeight: 700 }}
+        >
+          Services Catalogue ({services.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("schedule")}
+          className={`studio-pill-btn ${activeTab === "schedule" ? "is-active" : ""}`}
+          style={{ fontSize: "13px", padding: "8px 18px", fontWeight: 700 }}
+        >
+          Studio Availability ({availabilityList.length})
+        </button>
       </div>
 
       {isLoading ? (
-        <div style={{ textAlign: "center", padding: "60px 0" }}>
-          <LoadingSpinner size={28} color="var(--gold)" />
-          <p style={{ color: "var(--muted)", fontSize: "13px", marginTop: "12px" }}>Loading studio data...</p>
+        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--gold)" }}>
+          <LoadingSpinner size={32} />
+          <p style={{ marginTop: "14px", color: "var(--muted)", fontSize: "13px" }}>Loading data...</p>
         </div>
       ) : activeTab === "orders" ? (
         /* =========================================================
            ORDERS TAB
            ========================================================= */
         <div>
-          {/* Filters Bar */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {["ALL", "AWAITING_PAYMENT", "PAID", "IN_PROGRESS", "DELIVERED", "COMPLETED"].map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => setStatusFilter(st)}
-                  className="studio-pill-btn"
-                  style={{
-                    background: statusFilter === st ? "rgba(223, 194, 125, 0.15)" : "transparent",
-                    color: statusFilter === st ? "var(--gold)" : "var(--muted)",
-                    borderColor: statusFilter === st ? "var(--gold)" : "var(--border)",
-                    fontSize: "11px",
-                    fontWeight: statusFilter === st ? 700 : 500,
-                  }}
-                >
-                  {st.replace(/_/g, " ")}
-                </button>
-              ))}
+          {/* Controls */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "14px",
+              marginBottom: "20px",
+            }}
+          >
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <input
+                type="text"
+                placeholder="Search orders, clients, email..."
+                className="studio-input"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: "260px" }}
+              />
+              <select
+                className="studio-input"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ width: "160px" }}
+              >
+                <option value="ALL">All Statuses</option>
+                {STATUS_OPTIONS.map((st) => (
+                  <option key={st} value={st}>
+                    {st.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
             </div>
-
-            <input
-              type="text"
-              placeholder="Search by order #, client, email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="studio-input"
-              style={{ width: "240px", height: "34px", fontSize: "12px" }}
-            />
+            <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+              Showing {filteredOrders.length} of {orders.length} orders
+            </span>
           </div>
 
           {filteredOrders.length === 0 ? (
-            <div className="admin-empty-card" style={{ padding: "48px 20px", textAlign: "center" }}>
-              No service orders found.
+            <div className="admin-empty-card" style={{ padding: "50px 20px", textAlign: "center" }}>
+              <p style={{ margin: "0 0 6px", color: "var(--text)", fontWeight: 600 }}>No client orders found</p>
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "13px" }}>
+                {searchQuery || statusFilter !== "ALL"
+                  ? "Try clearing search filters."
+                  : "Client orders placed on the /services page will appear here."}
+              </p>
             </div>
           ) : (
-            <div className="admin-table-wrapper" style={{ overflowX: "auto" }}>
-              <table className="admin-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left" }}>
-                    <th style={{ padding: "14px", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase" }}>Order #</th>
-                    <th style={{ padding: "14px", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase" }}>Client</th>
-                    <th style={{ padding: "14px", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase" }}>Service</th>
-                    <th style={{ padding: "14px", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase" }}>Amount</th>
-                    <th style={{ padding: "14px", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase" }}>Status</th>
-                    <th style={{ padding: "14px", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase" }}>Deadline (WAT)</th>
-                    <th style={{ padding: "14px", textAlign: "right", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase" }}>Action</th>
+                  <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--muted)", fontSize: "11px", textTransform: "uppercase" }}>
+                    <th style={{ padding: "12px 14px" }}>Order #</th>
+                    <th style={{ padding: "12px 14px" }}>Client</th>
+                    <th style={{ padding: "12px 14px" }}>Services</th>
+                    <th style={{ padding: "12px 14px" }}>Amount</th>
+                    <th style={{ padding: "12px 14px" }}>Payment</th>
+                    <th style={{ padding: "12px 14px" }}>Status</th>
+                    <th style={{ padding: "12px 14px" }}>Agreed Deadline</th>
+                    <th style={{ padding: "12px 14px", textAlign: "right" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredOrders.map((o) => (
-                    <tr key={o.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <tr
+                      key={o.id}
+                      style={{
+                        borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                        transition: "background 0.15s ease",
+                      }}
+                    >
                       <td style={{ padding: "14px", fontWeight: 700, color: "var(--gold)", fontSize: "13px" }}>
-                        {o.orderNumber}
+                        {o.orderNumber || o.id.slice(0, 8)}
                       </td>
                       <td style={{ padding: "14px" }}>
-                        <div style={{ color: "var(--text-h)", fontWeight: 600, fontSize: "13px" }}>{o.customerName}</div>
-                        <div style={{ color: "var(--muted)", fontSize: "11px" }}>{o.customerEmail}</div>
+                        <div style={{ fontWeight: 600, color: "var(--text-h)", fontSize: "13px" }}>
+                          {o.customerName || "Anonymous"}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--muted)" }}>{o.customerEmail}</div>
                       </td>
-                      <td style={{ padding: "14px", color: "var(--text-p)", fontSize: "13px" }}>
-                        {o.serviceTitle}
-                        {o.configuration?.hours && (
-                          <span style={{ fontSize: "11px", color: "var(--muted)", display: "block" }}>
-                            {o.configuration.hours}h Booked
-                          </span>
-                        )}
+                      <td style={{ padding: "14px", fontSize: "13px", color: "var(--text)" }}>
+                        {o.serviceTitle || o.serviceSlug || "Studio Package"}
                       </td>
                       <td style={{ padding: "14px", fontWeight: 700, color: "var(--text-h)", fontSize: "13px" }}>
-                        {o.totalAmountNgn ? `₦${Number(o.totalAmountNgn).toLocaleString("en-US")}` : "Quote TBD"}
+                        {o.totalAmountNgn !== null
+                          ? `₦${Number(o.totalAmountNgn).toLocaleString("en-US")}`
+                          : "TBD (Quote)"}
                       </td>
                       <td style={{ padding: "14px" }}>
                         <span
                           style={{
-                            display: "inline-block",
+                            fontSize: "11px",
                             padding: "3px 8px",
-                            borderRadius: "12px",
-                            fontSize: "10px",
+                            borderRadius: "4px",
                             fontWeight: 700,
-                            letterSpacing: "0.06em",
-                            textTransform: "uppercase",
                             background:
-                              o.orderStatus === "COMPLETED" || o.orderStatus === "DELIVERED"
-                                ? "rgba(16, 185, 129, 0.15)"
-                                : o.orderStatus === "IN_PROGRESS"
-                                ? "rgba(56, 189, 248, 0.15)"
-                                : "rgba(223, 194, 125, 0.15)",
+                              o.paymentStatus === "PAID"
+                                ? "rgba(52, 211, 153, 0.15)"
+                                : "rgba(239, 68, 68, 0.15)",
+                            color: o.paymentStatus === "PAID" ? "#34d399" : "#ef4444",
+                          }}
+                        >
+                          {o.paymentStatus}
+                        </span>
+                      </td>
+                      <td style={{ padding: "14px" }}>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            fontWeight: 700,
+                            background: "rgba(223, 194, 125, 0.12)",
                             color:
                               o.orderStatus === "COMPLETED" || o.orderStatus === "DELIVERED"
                                 ? "#34d399"
@@ -515,58 +1001,107 @@ export default function AdminServicesPage() {
         </div>
       ) : activeTab === "services" ? (
         /* =========================================================
-           SERVICES CATALOGUE TAB
+           SERVICES CATALOGUE TAB (FULL CRUD, REQ #12)
            ========================================================= */
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "20px" }}>
-          {services.map((s) => (
-            <div
-              key={s.id}
-              style={{
-                background: "rgba(13, 13, 18, 0.7)",
-                border: "1px solid var(--border)",
-                borderRadius: "10px",
-                padding: "20px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
+        <div>
+          {/* Header Action Bar */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "20px",
+              flexWrap: "wrap",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--text-h)", fontWeight: 700 }}>
+                Active Offerings ({services.length})
+              </h3>
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
+                Curate studio offerings, base prices, hourly billing, and deliverables.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsCreatingService(true)}
+              className="primary-button"
+              style={{ padding: "8px 20px", fontSize: "13px", fontWeight: 700 }}
             >
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "10px", color: "var(--gold)", textTransform: "uppercase", fontWeight: 700 }}>
-                    {s.category}
-                  </span>
-                  <span style={{ fontSize: "11px", color: s.isActive ? "#34d399" : "#ef4444" }}>
-                    {s.isActive ? "● Active" : "○ Inactive"}
-                  </span>
+              + Create New Service
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "20px" }}>
+            {services.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  background: "rgba(13, 13, 18, 0.7)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "10px",
+                  padding: "20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  gap: "16px",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "10px", color: "var(--gold)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.08em" }}>
+                      {s.category} · #{s.sortOrder ?? 0}
+                    </span>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: s.isActive ? "#34d399" : "#ef4444" }}>
+                      {s.isActive ? "● Active" : "○ Inactive"}
+                    </span>
+                  </div>
+                  <h3 style={{ fontSize: "18px", color: "var(--text-h)", margin: "0 0 6px", fontWeight: 700 }}>
+                    {s.title}
+                  </h3>
+                  <p style={{ color: "var(--muted)", fontSize: "12px", lineHeight: 1.5, margin: "0 0 14px" }}>
+                    {s.tagline || s.description}
+                  </p>
+                  <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--gold)", marginBottom: "8px" }}>
+                    {s.basePriceNgn !== null
+                      ? `₦${Number(s.isHourly ? s.hourlyRateNgn : s.basePriceNgn).toLocaleString("en-US")}${s.isHourly ? " / hr" : ""}`
+                      : "Price Upon Request (TBD)"}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--muted)" }}>
+                    Turnaround: ~{s.turnaroundDays} business days
+                  </div>
                 </div>
-                <h3 style={{ fontSize: "17px", color: "var(--text-h)", margin: "0 0 6px" }}>{s.title}</h3>
-                <p style={{ color: "var(--muted)", fontSize: "12px", lineHeight: 1.5, margin: "0 0 16px" }}>
-                  {s.tagline || s.description}
-                </p>
-                <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--gold)", marginBottom: "14px" }}>
-                  {s.basePriceNgn !== null
-                    ? `₦${Number(s.isHourly ? s.hourlyRateNgn : s.basePriceNgn).toLocaleString("en-US")}${s.isHourly ? " / hr" : ""}`
-                    : "Price Upon Request (TBD)"}
+
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditService(s)}
+                    className="studio-pill-btn"
+                    style={{ flex: 1, textAlign: "center", fontSize: "12px" }}
+                  >
+                    Edit Details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteService(s.id, s.title)}
+                    className="cookie-btn cookie-btn-reject"
+                    style={{ padding: "6px 12px", fontSize: "12px" }}
+                    title="Delete service"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => handleOpenEditService(s)}
-                className="studio-pill-btn"
-                style={{ width: "100%", textAlign: "center", fontSize: "12px" }}
-              >
-                Edit Service Details & Price
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       ) : (
         /* =========================================================
-           STUDIO AVAILABILITY & SCHEDULING TAB (REQ #10)
+           STUDIO AVAILABILITY & SCHEDULING TAB (REQ #9 & #11)
+           Interactive Themed Monthly Calendar + Day Inspector
            ========================================================= */
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
           {/* Information & Default State Notice */}
           <div
             style={{
@@ -588,228 +1123,167 @@ export default function AdminServicesPage() {
               </span>
             </div>
             <p style={{ margin: 0, fontSize: "13px", color: "var(--text)", lineHeight: 1.5 }}>
-              Clients on the public Services page cannot book sessions on any arbitrary date. They can <strong>ONLY</strong> choose dates and time slots you explicitly open below. The Cloudflare Worker API strictly rejects any order containing closed or unlisted studio appointments.
+              Clients on the public Services page cannot book sessions on any arbitrary date. They can <strong>ONLY</strong> choose dates and time slots you explicitly open below. Click any date on the calendar to open or close it.
             </p>
           </div>
 
-          {/* Open New Date Card */}
-          <div
-            style={{
-              background: "rgba(13, 13, 18, 0.7)",
-              border: "1px solid var(--border)",
-              borderRadius: "10px",
-              padding: "24px",
-            }}
-          >
-            <h3 style={{ fontSize: "16px", color: "var(--text-h)", margin: "0 0 14px", fontWeight: 700 }}>
-              + Open Studio Date for Client Bookings
-            </h3>
+          {/* Interactive Monthly Calendar + Inspector Grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "24px", alignItems: "start" }}>
+            {/* Left: Themed Monthly Calendar */}
+            <StudioMonthlyCalendar
+              availabilityList={availabilityList}
+              selectedDate={selectedCalendarDate}
+              onSelectDate={handleSelectCalendarDate}
+            />
 
-            {availabilityError && (
-              <div style={{ padding: "10px 14px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "6px", color: "#ef4444", fontSize: "12px", marginBottom: "16px" }}>
-                {availabilityError}
-              </div>
-            )}
-
-            <form onSubmit={handleAddOrUpdateAvailability} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1.5fr auto", gap: "14px", alignItems: "end" }}>
+            {/* Right: Selected Day Inspector Card */}
+            <div
+              style={{
+                background: "rgba(13, 13, 18, 0.8)",
+                border: "1px solid var(--border)",
+                borderRadius: "12px",
+                padding: "24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "18px",
+              }}
+            >
               <div>
-                <label style={{ display: "block", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", marginBottom: "6px" }}>
-                  Date (YYYY-MM-DD)
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Date Inspector
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "10px",
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: "999px",
+                      background: selectedDayIsClosed ? "rgba(239, 68, 68, 0.15)" : "rgba(52, 211, 153, 0.15)",
+                      color: selectedDayIsClosed ? "#ef4444" : "#34d399",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {selectedDayIsClosed ? "CLOSED" : "OPEN FOR BOOKINGS"}
+                  </span>
+                </div>
+                <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--text-h)", fontWeight: 800 }}>
+                  {formatLongDate(selectedCalendarDate)}
+                </h3>
+                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                  ISO: {selectedCalendarDate}
+                </span>
+              </div>
+
+              {availabilityError && (
+                <div style={{ padding: "10px 14px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "6px", color: "#ef4444", fontSize: "12px" }}>
+                  {availabilityError}
+                </div>
+              )}
+
+              {/* Status Toggle Button */}
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
+                  Booking Status
                 </label>
-                <input
-                  type="date"
-                  className="studio-input"
-                  value={newDateInput}
-                  onChange={(e) => setNewDateInput(e.target.value)}
-                  style={{ width: "100%" }}
-                  required
-                />
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDayIsClosed(false)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 14px",
+                      borderRadius: "6px",
+                      border: !selectedDayIsClosed ? "1px solid #34d399" : "1px solid var(--border)",
+                      background: !selectedDayIsClosed ? "rgba(52, 211, 153, 0.2)" : "transparent",
+                      color: !selectedDayIsClosed ? "#34d399" : "var(--muted)",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✓ Open Studio
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDayIsClosed(true)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 14px",
+                      borderRadius: "6px",
+                      border: selectedDayIsClosed ? "1px solid #ef4444" : "1px solid var(--border)",
+                      background: selectedDayIsClosed ? "rgba(239, 68, 68, 0.2)" : "transparent",
+                      color: selectedDayIsClosed ? "#ef4444" : "var(--muted)",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✕ Set Closed
+                  </button>
+                </div>
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", marginBottom: "6px" }}>
-                  Time Slots (comma-separated, WAT)
-                </label>
-                <input
-                  type="text"
-                  className="studio-input"
-                  placeholder="e.g. 10:00 AM, 02:00 PM, 06:00 PM"
-                  value={newSlotsInput}
-                  onChange={(e) => setNewSlotsInput(e.target.value)}
-                  style={{ width: "100%" }}
-                  required
+              {/* Themed Time Slots Picker (Req #9) */}
+              {!selectedDayIsClosed && (
+                <ThemedTimeSlotPicker
+                  slots={selectedDaySlots}
+                  onAddSlot={(newSlot) => setSelectedDaySlots((prev) => [...prev, newSlot])}
+                  onRemoveSlot={(idx) => setSelectedDaySlots((prev) => prev.filter((_, i) => i !== idx))}
                 />
-              </div>
+              )}
 
+              {/* Notes */}
               <div>
-                <label style={{ display: "block", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", marginBottom: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
                   Studio Notes (Optional)
                 </label>
                 <input
                   type="text"
                   className="studio-input"
                   placeholder="e.g. Vocal Recording Block"
-                  value={newNotesInput}
-                  onChange={(e) => setNewNotesInput(e.target.value)}
+                  value={selectedDayNotes}
+                  onChange={(e) => setSelectedDayNotes(e.target.value)}
                   style={{ width: "100%" }}
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={isSavingAvailability}
-                className="primary-button"
-                style={{
-                  height: "40px",
-                  padding: "0 22px",
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  cursor: isSavingAvailability ? "wait" : "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {isSavingAvailability ? "Saving..." : "Open Date"}
-              </button>
-            </form>
-          </div>
-
-          {/* Configured Dates List */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <h3 style={{ fontSize: "16px", color: "var(--text-h)", margin: 0, fontWeight: 700 }}>
-              Configured Studio Dates ({availabilityList.length})
-            </h3>
-
-            {availabilityList.length === 0 ? (
-              <div className="admin-empty-card" style={{ padding: "40px 20px", textAlign: "center" }}>
-                <p style={{ margin: "0 0 6px", color: "var(--text)", fontWeight: 600 }}>
-                  No Studio Dates Currently Open
-                </p>
-                <p style={{ margin: 0, color: "var(--muted)", fontSize: "12px" }}>
-                  All dates are unavailable by default. Use the form above to open dates and configure appointment time slots for client sessions.
-                </p>
+              {/* Action Buttons */}
+              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                <button
+                  type="button"
+                  onClick={handleSaveDayAvailability}
+                  disabled={isSavingAvailability}
+                  className="primary-button"
+                  style={{ flex: 1, padding: "10px", fontSize: "13px", fontWeight: 700 }}
+                >
+                  {isSavingAvailability ? "Saving..." : "Save Availability"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteDayAvailability(selectedCalendarDate)}
+                  disabled={isSavingAvailability}
+                  className="cookie-btn cookie-btn-reject"
+                  style={{ padding: "10px 14px", fontSize: "12px" }}
+                  title="Reset date configuration back to default closed"
+                >
+                  Reset
+                </button>
               </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px" }}>
-                {availabilityList.map((item) => {
-                  const slots = Array.isArray(item.slots) ? item.slots : [];
-                  return (
-                    <div
-                      key={item.dateStr}
-                      style={{
-                        background: "rgba(13, 13, 18, 0.7)",
-                        border: item.isClosed
-                          ? "1px solid rgba(239, 68, 68, 0.3)"
-                          : "1px solid rgba(223, 194, 125, 0.3)",
-                        borderRadius: "8px",
-                        padding: "18px",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "12px",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--text-h)" }}>
-                            {item.dateStr}
-                          </span>
-                          {item.notes && (
-                            <span style={{ display: "block", fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>
-                              {item.notes}
-                            </span>
-                          )}
-                        </div>
-
-                        <span
-                          style={{
-                            fontSize: "10px",
-                            fontWeight: 800,
-                            letterSpacing: "0.08em",
-                            padding: "3px 10px",
-                            borderRadius: "999px",
-                            background: item.isClosed ? "rgba(239, 68, 68, 0.15)" : "rgba(52, 211, 153, 0.15)",
-                            color: item.isClosed ? "#ef4444" : "#34d399",
-                            border: item.isClosed ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(52, 211, 153, 0.3)",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          {item.isClosed ? "Closed" : "Open for Bookings"}
-                        </span>
-                      </div>
-
-                      {/* Slots */}
-                      <div>
-                        <span style={{ display: "block", fontSize: "11px", color: "var(--muted)", marginBottom: "6px", textTransform: "uppercase" }}>
-                          Available Time Slots ({slots.length}):
-                        </span>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                          {slots.map((s, idx) => (
-                            <span
-                              key={idx}
-                              style={{
-                                fontSize: "11px",
-                                fontWeight: 600,
-                                color: "var(--gold)",
-                                background: "rgba(223, 194, 125, 0.12)",
-                                border: "1px solid rgba(223, 194, 125, 0.25)",
-                                borderRadius: "4px",
-                                padding: "2px 8px",
-                              }}
-                            >
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleCloseDate(item)}
-                          className="studio-pill-btn"
-                          style={{
-                            fontSize: "11px",
-                            color: item.isClosed ? "#34d399" : "#ef4444",
-                            borderColor: item.isClosed ? "rgba(52, 211, 153, 0.3)" : "rgba(239, 68, 68, 0.3)",
-                          }}
-                        >
-                          {item.isClosed ? "Re-open Date" : "Close Date"}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteDate(item.dateStr)}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "#e57373",
-                            fontSize: "12px",
-                            cursor: "pointer",
-                            padding: "4px 8px",
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}
 
       {/* =========================================================
-          ORDER EDIT MODAL
-          ========================================================= */}
-      {editingOrder && (
+         CREATE NEW SERVICE MODAL (REQ #12)
+         ========================================================= */}
+      {isCreatingService && (
         <div
-          className="admin-modal-backdrop"
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0, 0, 0, 0.8)",
+            background: "rgba(0, 0, 0, 0.85)",
             backdropFilter: "blur(10px)",
             zIndex: 9999,
             display: "flex",
@@ -817,7 +1291,7 @@ export default function AdminServicesPage() {
             justifyContent: "center",
             padding: "20px",
           }}
-          onClick={() => setEditingOrder(null)}
+          onClick={() => setIsCreatingService(false)}
         >
           <div
             className="admin-modal"
@@ -825,7 +1299,7 @@ export default function AdminServicesPage() {
               background: "#0c0c10",
               border: "1px solid var(--border)",
               borderRadius: "14px",
-              maxWidth: "680px",
+              maxWidth: "580px",
               width: "100%",
               maxHeight: "90vh",
               overflowY: "auto",
@@ -834,252 +1308,182 @@ export default function AdminServicesPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <div>
-                <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: 700, textTransform: "uppercase" }}>
-                  MANAGE ORDER
-                </span>
-                <h2 style={{ fontSize: "20px", color: "var(--text-h)", margin: "4px 0 0" }}>
-                  {editingOrder.orderNumber} — {editingOrder.serviceTitle}
-                </h2>
-              </div>
+              <h2 style={{ fontSize: "20px", color: "var(--text-h)", margin: 0, fontWeight: 700 }}>
+                + Add New Service Offering
+              </h2>
               <button
                 type="button"
-                onClick={() => setEditingOrder(null)}
+                onClick={() => setIsCreatingService(false)}
                 style={{ background: "transparent", border: "none", color: "var(--muted)", fontSize: "20px", cursor: "pointer" }}
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSaveOrder} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {/* Order Status & Payment Status */}
+            <form onSubmit={handleCreateService} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                  Service Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Stem Mastering"
+                  className="studio-input"
+                  value={newService.title}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    const autoSlug = t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+                    setNewService((prev) => ({ ...prev, title: t, slug: prev.slug || autoSlug }));
+                  }}
+                />
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
                   <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                    Order Status
+                    URL Slug *
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. stem-mastering"
                     className="studio-input"
-                    value={editingOrder.orderStatus}
-                    onChange={(e) => setEditingOrder({ ...editingOrder, orderStatus: e.target.value })}
-                  >
-                    {STATUS_OPTIONS.map((st) => (
-                      <option key={st} value={st}>
-                        {st.replace(/_/g, " ")}
-                      </option>
-                    ))}
-                  </select>
+                    value={newService.slug}
+                    onChange={(e) => setNewService({ ...newService, slug: e.target.value })}
+                  />
                 </div>
                 <div>
                   <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                    Payment Status
+                    Category
                   </label>
                   <select
                     className="studio-input"
-                    value={editingOrder.paymentStatus}
-                    onChange={(e) => setEditingOrder({ ...editingOrder, paymentStatus: e.target.value })}
+                    value={newService.category}
+                    onChange={(e) => setNewService({ ...newService, category: e.target.value })}
                   >
-                    {PAYMENT_STATUS_OPTIONS.map((pst) => (
-                      <option key={pst} value={pst}>
-                        {pst.replace(/_/g, " ")}
+                    {SERVICE_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              {/* Price & Deadline */}
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                  Tagline / Conversational Prompt
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Precision audio mastering for multitrack stems"
+                  className="studio-input"
+                  value={newService.tagline}
+                  onChange={(e) => setNewService({ ...newService, tagline: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                  Full Description
+                </label>
+                <textarea
+                  className="studio-input"
+                  rows={3}
+                  placeholder="Detailed description of studio engineering and delivery..."
+                  value={newService.description}
+                  onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+                />
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
                   <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                    Total Amount (NGN)
+                    Base Price (NGN) — Blank for TBD
                   </label>
                   <input
                     type="number"
                     className="studio-input"
-                    placeholder="Enter amount in NGN"
-                    value={editingOrder.totalAmountNgn || ""}
-                    onChange={(e) =>
-                      setEditingOrder({
-                        ...editingOrder,
-                        totalAmountNgn: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
+                    placeholder="e.g. 50000"
+                    value={newService.basePriceNgn}
+                    onChange={(e) => setNewService({ ...newService, basePriceNgn: e.target.value })}
                   />
                 </div>
                 <div>
                   <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                    Agreed Deadline (WAT)
+                    Turnaround (Days)
                   </label>
                   <input
-                    type="datetime-local"
+                    type="number"
+                    required
                     className="studio-input"
-                    value={editingOrder.agreedDeadlineDate || ""}
-                    onChange={(e) =>
-                      setEditingOrder({ ...editingOrder, agreedDeadlineDate: e.target.value })
-                    }
+                    value={newService.turnaroundDays}
+                    onChange={(e) => setNewService({ ...newService, turnaroundDays: e.target.value })}
                   />
                 </div>
               </div>
 
-              {/* Multi-Service Items (Req #20 & #31) */}
-              {Array.isArray(editingOrder.items) && editingOrder.items.length > 0 && (
-                <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border)", borderRadius: "8px", padding: "14px" }}>
-                  <span style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: "8px" }}>
-                    Selected Services & Configuration ({editingOrder.items.length})
-                  </span>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {editingOrder.items.map((it, idx) => (
-                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "6px" }}>
-                        <div>
-                          <strong style={{ color: "var(--text-h)" }}>{it.title || it.slug}</strong>
-                          {it.configuration?.hours && <span style={{ color: "var(--muted)", marginLeft: "6px" }}>({it.configuration.hours}h)</span>}
-                          {it.configuration?.genre && <span style={{ color: "var(--muted)", marginLeft: "6px" }}>• {it.configuration.genre}</span>}
-                          {it.configuration?.notes && <div style={{ fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>"{it.configuration.notes}"</div>}
-                        </div>
-                        <span style={{ color: "var(--gold)", fontWeight: 700 }}>
-                          {it.calculatedPriceNgn !== null ? `₦${Number(it.calculatedPriceNgn).toLocaleString()}` : "Price TBD"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Client Project Message (Req #23 & #31) */}
-              {editingOrder.customerMessage && (
-                <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border)", borderRadius: "8px", padding: "14px" }}>
-                  <span style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: "4px" }}>
-                    Client Project Message
-                  </span>
-                  <p style={{ margin: 0, fontSize: "12px", color: "var(--text-p)", fontStyle: "italic", lineHeight: 1.5 }}>
-                    "{editingOrder.customerMessage}"
-                  </p>
-                </div>
-              )}
-
-              {/* Client Stems / Uploads */}
-              <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border)", borderRadius: "8px", padding: "14px" }}>
-                <span style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: "6px" }}>
-                  Client Uploaded Files ({editingOrder.clientFiles?.length || 0})
-                </span>
-                {Array.isArray(editingOrder.clientFiles) && editingOrder.clientFiles.length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {editingOrder.clientFiles.map((f, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
-                        <span>🎵 {f.name} ({(Number(f.size) / (1024 * 1024)).toFixed(1)}MB)</span>
-                        <a href={f.url} download target="_blank" rel="noopener noreferrer" style={{ color: "var(--gold)", textDecoration: "none" }}>
-                          Download ↓
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <span style={{ fontSize: "12px", color: "var(--muted)" }}>No client files uploaded.</span>
-                )}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <input
+                  type="checkbox"
+                  id="newIsHourly"
+                  checked={newService.isHourly}
+                  onChange={(e) => setNewService({ ...newService, isHourly: e.target.checked })}
+                />
+                <label htmlFor="newIsHourly" style={{ fontSize: "13px", color: "var(--text)", cursor: "pointer" }}>
+                  Billed hourly (e.g. In-studio recording)
+                </label>
               </div>
 
-              {/* Deliverables Upload Section */}
-              <div style={{ background: "rgba(16, 185, 129, 0.04)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "8px", padding: "14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <div>
-                    <span style={{ fontSize: "11px", color: "#34d399", textTransform: "uppercase", fontWeight: 700, display: "block" }}>
-                      Final Deliverables for Client ({editingOrder.deliverables?.length || 0})
-                    </span>
-                    <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                      Uploaded deliverables are downloadable by client once marked DELIVERED.
-                    </span>
-                  </div>
-                  <label
-                    className="studio-pill-btn"
-                    style={{
-                      cursor: isUploadingDeliverable ? "not-allowed" : "pointer",
-                      fontSize: "11px",
-                      background: "#34d399",
-                      color: "#050507",
-                      fontWeight: 700,
-                      border: "none",
-                    }}
-                  >
-                    {isUploadingDeliverable ? "Uploading..." : "+ Upload File"}
-                    <input
-                      type="file"
-                      accept="audio/*,.zip,.rar"
-                      onChange={handleDeliverableUpload}
-                      disabled={isUploadingDeliverable}
-                      style={{ display: "none" }}
-                    />
+              {newService.isHourly && (
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                    Hourly Rate (NGN)
                   </label>
+                  <input
+                    type="number"
+                    className="studio-input"
+                    placeholder="e.g. 25000"
+                    value={newService.hourlyRateNgn}
+                    onChange={(e) => setNewService({ ...newService, hourlyRateNgn: e.target.value })}
+                  />
                 </div>
+              )}
 
-                {deliverableError && (
-                  <div style={{ color: "#ef4444", fontSize: "11px", marginBottom: "6px" }}>{deliverableError}</div>
-                )}
-
-                {editingOrder.deliverables?.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "10px" }}>
-                    {editingOrder.deliverables.map((d, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          background: "rgba(0, 0, 0, 0.4)",
-                          padding: "6px 12px",
-                          borderRadius: "4px",
-                          fontSize: "12px",
-                        }}
-                      >
-                        <span>✓ {d.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeDeliverable(idx)}
-                          style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "13px" }}
-                        >
-                          ✕ Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Private Admin Notes */}
               <div>
                 <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                  Private Admin Notes (Internal Only)
+                  Deliverables (One per line)
                 </label>
                 <textarea
                   className="studio-input"
-                  rows={2}
-                  placeholder="Private production notes, vocal settings, reference checks..."
-                  value={editingOrder.adminNotes || ""}
-                  onChange={(e) => setEditingOrder({ ...editingOrder, adminNotes: e.target.value })}
+                  rows={3}
+                  placeholder="Master WAV File&#10;Tracked-out Stems&#10;Instrumental Mix"
+                  value={newService.deliverablesText}
+                  onChange={(e) => setNewService({ ...newService, deliverablesText: e.target.value })}
                 />
               </div>
 
-              {orderSaveError && (
-                <div style={{ color: "#ef4444", fontSize: "12px" }}>{orderSaveError}</div>
+              {createServiceError && (
+                <div style={{ color: "#ef4444", fontSize: "12px" }}>{createServiceError}</div>
               )}
 
-              {/* Actions */}
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
                 <button
                   type="button"
-                  onClick={() => setEditingOrder(null)}
+                  onClick={() => setIsCreatingService(false)}
                   className="cookie-btn cookie-btn-reject"
-                  disabled={isSavingOrder}
+                  disabled={isSubmittingNewService}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isSavingOrder}
+                  disabled={isSubmittingNewService}
                   className="primary-button"
-                  style={{ minWidth: "120px" }}
+                  style={{ minWidth: "140px" }}
                 >
-                  {isSavingOrder ? <LoadingSpinner size={16} color="#000" /> : "Save Order"}
+                  {isSubmittingNewService ? <LoadingSpinner size={16} color="#000" /> : "Create Service"}
                 </button>
               </div>
             </form>
@@ -1088,15 +1492,14 @@ export default function AdminServicesPage() {
       )}
 
       {/* =========================================================
-          SERVICE EDIT MODAL
-          ========================================================= */}
+         EDIT SERVICE MODAL
+         ========================================================= */}
       {editingService && (
         <div
-          className="admin-modal-backdrop"
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0, 0, 0, 0.8)",
+            background: "rgba(0, 0, 0, 0.85)",
             backdropFilter: "blur(10px)",
             zIndex: 9999,
             display: "flex",
@@ -1121,7 +1524,7 @@ export default function AdminServicesPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <h2 style={{ fontSize: "20px", color: "var(--text-h)", margin: 0 }}>
+              <h2 style={{ fontSize: "20px", color: "var(--text-h)", margin: 0, fontWeight: 700 }}>
                 Edit {editingService.title}
               </h2>
               <button
@@ -1162,12 +1565,42 @@ export default function AdminServicesPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
                   <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                    Base Price (NGN) — Leave blank for TBD / Quote
+                    Category
+                  </label>
+                  <select
+                    className="studio-input"
+                    value={editingService.category}
+                    onChange={(e) => setEditingService({ ...editingService, category: e.target.value })}
+                  >
+                    {SERVICE_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                    Sort Order
                   </label>
                   <input
                     type="number"
                     className="studio-input"
-                    placeholder="e.g. 80000 (or blank for TBD)"
+                    value={editingService.sortOrder ?? 10}
+                    onChange={(e) => setEditingService({ ...editingService, sortOrder: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                    Base Price (NGN) — Blank for TBD
+                  </label>
+                  <input
+                    type="number"
+                    className="studio-input"
+                    placeholder="e.g. 80000"
                     value={editingService.basePriceNgn ?? ""}
                     onChange={(e) =>
                       setEditingService({
@@ -1190,6 +1623,38 @@ export default function AdminServicesPage() {
                   />
                 </div>
               </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <input
+                  type="checkbox"
+                  id="editIsHourly"
+                  checked={editingService.isHourly}
+                  onChange={(e) => setEditingService({ ...editingService, isHourly: e.target.checked })}
+                />
+                <label htmlFor="editIsHourly" style={{ fontSize: "13px", color: "var(--text)", cursor: "pointer" }}>
+                  Billed hourly (e.g. In-studio vocal recording)
+                </label>
+              </div>
+
+              {editingService.isHourly && (
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                    Hourly Rate (NGN)
+                  </label>
+                  <input
+                    type="number"
+                    className="studio-input"
+                    placeholder="e.g. 25000"
+                    value={editingService.hourlyRateNgn ?? ""}
+                    onChange={(e) =>
+                      setEditingService({
+                        ...editingService,
+                        hourlyRateNgn: e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+              )}
 
               <div>
                 <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
@@ -1235,6 +1700,218 @@ export default function AdminServicesPage() {
                   style={{ minWidth: "120px" }}
                 >
                   {isSavingService ? <LoadingSpinner size={16} color="#000" /> : "Save Service"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+         EDIT ORDER MODAL (DELIVERABLES UPLOAD WITH PROGRESS, REQ #14)
+         ========================================================= */}
+      {editingOrder && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.85)",
+            backdropFilter: "blur(10px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+          onClick={() => setEditingOrder(null)}
+        >
+          <div
+            className="admin-modal"
+            style={{
+              background: "#0c0c10",
+              border: "1px solid var(--border)",
+              borderRadius: "14px",
+              maxWidth: "680px",
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              padding: "28px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <h2 style={{ fontSize: "20px", color: "var(--text-h)", margin: 0, fontWeight: 700 }}>
+                  Manage Order: {editingOrder.orderNumber || editingOrder.id.slice(0, 8)}
+                </h2>
+                <span style={{ fontSize: "12px", color: "var(--gold)" }}>
+                  {editingOrder.serviceTitle || editingOrder.serviceSlug}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                style={{ background: "transparent", border: "none", color: "var(--muted)", fontSize: "20px", cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOrder} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                    Order Status
+                  </label>
+                  <select
+                    className="studio-input"
+                    value={editingOrder.orderStatus}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, orderStatus: e.target.value })}
+                  >
+                    {STATUS_OPTIONS.map((st) => (
+                      <option key={st} value={st}>
+                        {st.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                    Payment Status
+                  </label>
+                  <select
+                    className="studio-input"
+                    value={editingOrder.paymentStatus}
+                    onChange={(e) => setEditingOrder({ ...editingOrder, paymentStatus: e.target.value })}
+                  >
+                    {PAYMENT_STATUS_OPTIONS.map((pst) => (
+                      <option key={pst} value={pst}>
+                        {pst.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Deadline */}
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                  Agreed Milestone / Delivery Deadline
+                </label>
+                <input
+                  type="datetime-local"
+                  className="studio-input"
+                  value={editingOrder.agreedDeadlineDate || ""}
+                  onChange={(e) => setEditingOrder({ ...editingOrder, agreedDeadlineDate: e.target.value })}
+                />
+              </div>
+
+              {/* Deliverables Upload (Req #14: uploadWithProgress) */}
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "14px" }}>
+                <label style={{ fontSize: "11px", color: "var(--gold)", textTransform: "uppercase", display: "block", marginBottom: "6px", fontWeight: 700 }}>
+                  Order Deliverables & Master Files
+                </label>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "10px" }}>
+                  <label
+                    className="studio-pill-btn"
+                    style={{
+                      cursor: isUploadingDeliverable ? "wait" : "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {isUploadingDeliverable ? <LoadingSpinner size={14} /> : "+ Upload Deliverable File"}
+                    <input
+                      type="file"
+                      onChange={handleDeliverableUpload}
+                      disabled={isUploadingDeliverable}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                  {isUploadingDeliverable && deliverableProgress && (
+                    <span style={{ fontSize: "12px", color: "var(--gold)" }}>
+                      {deliverableProgress.percent}% ({deliverableProgress.loadedFormatted} / {deliverableProgress.totalFormatted})
+                    </span>
+                  )}
+                </div>
+
+                {isUploadingDeliverable && deliverableProgress && (
+                  <div style={{ width: "100%", height: "4px", background: "rgba(255, 255, 255, 0.1)", borderRadius: "2px", overflow: "hidden", marginBottom: "10px" }}>
+                    <div style={{ width: `${deliverableProgress.percent}%`, height: "100%", background: "var(--gold)", transition: "width 0.1s linear" }} />
+                  </div>
+                )}
+
+                {deliverableError && (
+                  <div style={{ color: "#ef4444", fontSize: "12px", marginBottom: "8px" }}>
+                    {deliverableError}
+                  </div>
+                )}
+
+                {editingOrder.deliverables && editingOrder.deliverables.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {editingOrder.deliverables.map((d, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          background: "rgba(0, 0, 0, 0.4)",
+                          padding: "6px 12px",
+                          borderRadius: "4px",
+                          fontSize: "12px",
+                        }}
+                      >
+                        <span>✓ {d.name} {d.size ? `(${formatBytes(d.size)})` : ""}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeDeliverable(idx)}
+                          style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "13px" }}
+                        >
+                          ✕ Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Private Admin Notes */}
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                  Private Admin Notes (Internal Only)
+                </label>
+                <textarea
+                  className="studio-input"
+                  rows={3}
+                  value={editingOrder.adminNotes || ""}
+                  onChange={(e) => setEditingOrder({ ...editingOrder, adminNotes: e.target.value })}
+                />
+              </div>
+
+              {orderSaveError && (
+                <div style={{ color: "#ef4444", fontSize: "12px" }}>{orderSaveError}</div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingOrder(null)}
+                  className="cookie-btn cookie-btn-reject"
+                  disabled={isSavingOrder}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingOrder}
+                  className="primary-button"
+                  style={{ minWidth: "120px" }}
+                >
+                  {isSavingOrder ? <LoadingSpinner size={16} color="#000" /> : "Save Order"}
                 </button>
               </div>
             </form>

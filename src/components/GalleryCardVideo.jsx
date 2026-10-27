@@ -1,15 +1,16 @@
 import React, { useRef, useEffect } from "react";
 
 /**
- * GalleryCardVideo (Stage 30 — Req #8, #9, #10)
+ * GalleryCardVideo (Stage 34 — Req #5)
  *
- * Provides Instagram-like muted viewport autoplay for public gallery videos:
- * - Autoplays when >=50% visible in the viewport.
- * - Pauses when scrolled out of view.
- * - Picks a random playable starting position once per viewport entry.
- * - Preloads metadata and immediately seeks to first frame to eliminate black placeholder.
- * - Strict muted and playsInline compliance to avoid browser autoplay policy rejections.
+ * Provides Instagram-like muted viewport autoplay with a 5-second random snippet window:
+ * - Plays a random 5-second snippet starting at a random timestamp with at least 5s remaining.
+ * - When the 5-second snippet concludes, smoothly loops or picks another random 5-second window.
+ * - Autoplays strictly muted and playsInline.
+ * - Pauses automatically when scrolled out of view.
  */
+const SNIPPET_DURATION = 5.0;
+
 export default function GalleryCardVideo({
   src,
   poster,
@@ -17,25 +18,69 @@ export default function GalleryCardVideo({
   title = "Gallery Video",
 }) {
   const videoRef = useRef(null);
-  const hasSelectedRandomStart = useRef(false);
+  const snippetStartRef = useRef(0);
+  const snippetEndRef = useRef(SNIPPET_DURATION);
+  const isSettingTimeRef = useRef(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Reset random start flag on src change
-    hasSelectedRandomStart.current = false;
-
-    const handleLoadedMetadata = () => {
-      // Seek slightly past 0 to ensure the browser decodes and paints the first video frame
-      if (video.currentTime === 0) {
+    const setupRandomSnippet = () => {
+      const dur = video.duration;
+      if (Number.isFinite(dur) && dur > SNIPPET_DURATION + 0.2) {
+        const maxStart = Math.max(0, dur - SNIPPET_DURATION);
+        const randomStart = Math.random() * maxStart;
+        snippetStartRef.current = randomStart;
+        snippetEndRef.current = randomStart + SNIPPET_DURATION;
         try {
+          isSettingTimeRef.current = true;
+          video.currentTime = randomStart;
+        } catch {}
+      } else if (Number.isFinite(dur) && dur > 0) {
+        snippetStartRef.current = 0;
+        snippetEndRef.current = dur;
+        try {
+          isSettingTimeRef.current = true;
           video.currentTime = 0.1;
         } catch {}
       }
     };
 
+    const handleLoadedMetadata = () => {
+      setupRandomSnippet();
+    };
+
+    const handleTimeUpdate = () => {
+      if (isSettingTimeRef.current) {
+        isSettingTimeRef.current = false;
+        return;
+      }
+      const dur = video.duration;
+      if (!Number.isFinite(dur)) return;
+
+      if (video.currentTime >= snippetEndRef.current) {
+        // Pick next 5s snippet or loop
+        if (dur > 5.2) {
+          const maxStart = dur - 5.0;
+          const nextStart = Math.random() * maxStart;
+          snippetStartRef.current = nextStart;
+          snippetEndRef.current = nextStart + 5.0;
+          try {
+            isSettingTimeRef.current = true;
+            video.currentTime = nextStart;
+          } catch {}
+        } else {
+          try {
+            isSettingTimeRef.current = true;
+            video.currentTime = 0;
+          } catch {}
+        }
+      }
+    };
+
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    video.addEventListener("timeupdate", handleTimeUpdate);
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -43,28 +88,15 @@ export default function GalleryCardVideo({
           if (!videoRef.current) return;
           const v = videoRef.current;
 
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.45) {
-            // Req #10: Pick a random playable start position once upon entering viewport
-            if (!hasSelectedRandomStart.current && Number.isFinite(v.duration) && v.duration > 3) {
-              try {
-                const maxStart = Math.max(0.5, v.duration - 2);
-                const randomTime = 0.5 + Math.random() * (maxStart - 0.5);
-                v.currentTime = Math.round(randomTime * 10) / 10;
-              } catch {}
-              hasSelectedRandomStart.current = true;
-            }
-
-            v.play().catch(() => {
-              // Browser autoplay restrictions handled safely
-            });
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+            v.play().catch(() => {});
           } else {
-            // Pause when out of view
             v.pause();
           }
         });
       },
       {
-        threshold: [0, 0.45, 0.8],
+        threshold: [0, 0.35, 0.8],
       }
     );
 
@@ -73,6 +105,7 @@ export default function GalleryCardVideo({
     return () => {
       observer.disconnect();
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.removeEventListener("timeupdate", handleTimeUpdate);
     };
   }, [src]);
 
@@ -83,8 +116,7 @@ export default function GalleryCardVideo({
       poster={poster || undefined}
       muted
       playsInline
-      loop
-      preload="auto"
+      preload="metadata"
       className={className}
       aria-label={title}
       style={{

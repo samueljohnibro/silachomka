@@ -830,10 +830,45 @@ app.get('/api/social-links', async (c) => {
 // ------------------------------------------
 // Gallery
 // ------------------------------------------
+function normalizeGalleryCategory(raw) {
+  if (!raw) return { slug: 'portraits-style', label: 'Portraits & Style' };
+  const str = String(raw).trim();
+  const lower = str.toLowerCase();
+
+  if (lower === 'portraits' || lower === 'portraits-style' || lower.includes('portrait')) {
+    return { slug: 'portraits-style', label: 'Portraits & Style' };
+  }
+  if (lower === 'freestyles' || lower === 'freestyles-covers' || lower.includes('freestyle') || lower.includes('cover')) {
+    return { slug: 'freestyles-covers', label: 'Freestyles & Covers' };
+  }
+  if (lower === 'bts' || lower === 'studio' || lower === 'studio-bts' || lower.includes('bts')) {
+    return { slug: 'bts', label: 'Studio & BTS' };
+  }
+  if (lower === 'releases' || lower.includes('release')) {
+    return { slug: 'releases', label: 'Releases' };
+  }
+  if (lower === 'videos' || lower.includes('video')) {
+    return { slug: 'videos', label: 'Videos' };
+  }
+
+  const slug = lower.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+  const label = str.charAt(0).toUpperCase() + str.slice(1);
+  return { slug, label };
+}
+
 app.get('/api/gallery/categories', async (c) => {
   const sql = c.get('sql')
   const rows = await sql`SELECT slug, label FROM gallery_categories ORDER BY label ASC`
-  return c.json(rows)
+  const labelMap = new Map()
+  for (const row of rows) {
+    if (!row || !row.label) continue
+    const norm = normalizeGalleryCategory(row.label || row.slug)
+    if (!labelMap.has(norm.label.toLowerCase())) {
+      labelMap.set(norm.label.toLowerCase(), norm)
+    }
+  }
+  const deduped = Array.from(labelMap.values()).sort((a, b) => a.label.localeCompare(b.label))
+  return c.json(deduped)
 })
 
 app.get('/api/gallery', async (c) => {

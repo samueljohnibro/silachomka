@@ -120,7 +120,7 @@ async function run() {
   console.log('\n--- 8. Gallery Grid Slow Crossfade (Req #8) ---');
   assert(appCode.includes('GalleryCardMedia'), 'GalleryCardMedia component extracted for public grid presentation');
   assert(appCode.includes('transition: "opacity 1.8s ease-in-out"') || appCode.includes('opacity 1.8s'), '1.8s opacity crossfade transition implemented');
-  assert(appCode.includes('setInterval') && appCode.includes('7000'), '7-second slow carousel rotation interval configured');
+  assert((appCode.includes('setInterval') && appCode.includes('7000')) || (appCode.includes('setInterval') && appCode.includes('rotationDuration')), 'Slow carousel rotation interval configured (per-card schedule)');
   assert(appCode.includes('Math.random() * slides.length'), 'Random starting slide index selected to eliminate uniform card synchrony');
 
   // -------------------------------------------------------------

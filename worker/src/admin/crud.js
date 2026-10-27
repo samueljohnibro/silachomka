@@ -646,10 +646,45 @@ function detectSocialPlatform(url, explicitPlatform) {
   return null
 }
 
+function normalizeGalleryCategory(raw) {
+  if (!raw) return { slug: 'portraits-style', label: 'Portraits & Style' };
+  const str = String(raw).trim();
+  const lower = str.toLowerCase();
+
+  if (lower === 'portraits' || lower === 'portraits-style' || lower.includes('portrait')) {
+    return { slug: 'portraits-style', label: 'Portraits & Style' };
+  }
+  if (lower === 'freestyles' || lower === 'freestyles-covers' || lower.includes('freestyle') || lower.includes('cover')) {
+    return { slug: 'freestyles-covers', label: 'Freestyles & Covers' };
+  }
+  if (lower === 'bts' || lower === 'studio' || lower === 'studio-bts' || lower.includes('bts')) {
+    return { slug: 'bts', label: 'Studio & BTS' };
+  }
+  if (lower === 'releases' || lower.includes('release')) {
+    return { slug: 'releases', label: 'Releases' };
+  }
+  if (lower === 'videos' || lower.includes('video')) {
+    return { slug: 'videos', label: 'Videos' };
+  }
+
+  const slug = lower.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+  const label = str.charAt(0).toUpperCase() + str.slice(1);
+  return { slug, label };
+}
+
 adminApp.get('/gallery-categories', async (c) => {
   const sql = c.get('sql')
   const rows = await sql`SELECT slug, label FROM gallery_categories ORDER BY label ASC`
-  return c.json(rows)
+  const labelMap = new Map()
+  for (const row of rows) {
+    if (!row || !row.label) continue
+    const norm = normalizeGalleryCategory(row.label || row.slug)
+    if (!labelMap.has(norm.label.toLowerCase())) {
+      labelMap.set(norm.label.toLowerCase(), norm)
+    }
+  }
+  const deduped = Array.from(labelMap.values()).sort((a, b) => a.label.localeCompare(b.label))
+  return c.json(deduped)
 })
 
 adminApp.post('/gallery-categories', async (c) => {
@@ -657,12 +692,10 @@ adminApp.post('/gallery-categories', async (c) => {
   const body = await c.req.json()
   const rawLabel = (body.label || body.name || '').trim()
   if (!rawLabel) return c.json({ error: 'Category label is required' }, 400)
-  const slug = (body.slug || rawLabel).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-  if (!slug) return c.json({ error: 'Invalid category slug' }, 400)
-  const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1)
+  const norm = normalizeGalleryCategory(rawLabel)
   const rows = await sql`
     INSERT INTO gallery_categories (slug, label)
-    VALUES (${slug}, ${label})
+    VALUES (${norm.slug}, ${norm.label})
     ON CONFLICT (slug) DO UPDATE SET label = EXCLUDED.label
     RETURNING slug, label
   `
@@ -715,19 +748,15 @@ adminApp.post('/gallery-posts', async (c) => {
   // Derive canonical display date automatically
   const canonicalDisplayDate = formatCanonicalDate(body.post_date) || body.display_date || null
 
-  // Ensure category is persisted to gallery_categories
-  const rawCat = (body.category || 'portraits').trim()
-  const catSlug = rawCat.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-  const catLabel = rawCat.charAt(0).toUpperCase() + rawCat.slice(1)
-  if (catSlug) {
-    try {
-      await sql`
-        INSERT INTO gallery_categories (slug, label)
-        VALUES (${catSlug}, ${catLabel})
-        ON CONFLICT (slug) DO NOTHING
-      `
-    } catch {}
-  }
+  // Ensure category is normalized and persisted to gallery_categories
+  const normCat = normalizeGalleryCategory(body.category)
+  try {
+    await sql`
+      INSERT INTO gallery_categories (slug, label)
+      VALUES (${normCat.slug}, ${normCat.label})
+      ON CONFLICT (slug) DO UPDATE SET label = EXCLUDED.label
+    `
+  } catch {}
 
   const extSocialUrl = body.external_social_url ? String(body.external_social_url).trim() : null
   const extSocialPlatform = detectSocialPlatform(extSocialUrl, body.external_social_platform)
@@ -735,7 +764,7 @@ adminApp.post('/gallery-posts', async (c) => {
   try {
     const rows = await sql`
       INSERT INTO gallery_posts (slug, title, caption, category, post_type, primary_asset_id, related_release_id, related_track_id, related_beat_id, legacy_link, external_social_url, external_social_platform, tags, post_date, display_date, status, scheduled_at)
-      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${catSlug || 'portraits'}, ${inferredPostType}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${extSocialUrl}, ${extSocialPlatform}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
+      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${normCat.slug}, ${inferredPostType}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${extSocialUrl}, ${extSocialPlatform}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
       RETURNING *
     `
 
@@ -786,19 +815,15 @@ adminApp.put('/gallery-posts/:id', async (c) => {
   // Derive canonical display date automatically from post_date
   const canonicalDisplayDate = formatCanonicalDate(up.post_date) || up.display_date || null
 
-  // Ensure category is persisted to gallery_categories
-  const rawCat = (up.category || 'portraits').trim()
-  const catSlug = rawCat.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-  const catLabel = rawCat.charAt(0).toUpperCase() + rawCat.slice(1)
-  if (catSlug) {
-    try {
-      await sql`
-        INSERT INTO gallery_categories (slug, label)
-        VALUES (${catSlug}, ${catLabel})
-        ON CONFLICT (slug) DO NOTHING
-      `
-    } catch {}
-  }
+  // Ensure category is normalized and persisted to gallery_categories
+  const normCat = normalizeGalleryCategory(up.category)
+  try {
+    await sql`
+      INSERT INTO gallery_categories (slug, label)
+      VALUES (${normCat.slug}, ${normCat.label})
+      ON CONFLICT (slug) DO UPDATE SET label = EXCLUDED.label
+    `
+  } catch {}
 
   // Primary asset fallback to first slide if carousel
   let primaryAssetId = up.primary_asset_id || null
@@ -818,7 +843,7 @@ adminApp.put('/gallery-posts/:id', async (c) => {
         slug = ${up.slug},
         title = ${up.title || null},
         caption = ${up.caption || null},
-        category = ${catSlug || 'portraits'},
+        category = ${normCat.slug},
         post_type = ${inferredPostType},
         primary_asset_id = ${primaryAssetId},
         related_release_id = ${up.related_release_id || null},
@@ -1509,6 +1534,42 @@ adminApp.get('/services', async (c) => {
   return c.json(rows)
 })
 
+adminApp.post('/services', async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json().catch(() => ({}))
+  const title = String(body.title || '').trim()
+  if (!title) return c.json({ error: 'Title is required' }, 400)
+  const slug = String(body.slug || title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+  if (!slug) return c.json({ error: 'Valid slug is required' }, 400)
+
+  const basePrice = body.basePriceNgn !== undefined && body.basePriceNgn !== null && body.basePriceNgn !== '' ? Number(body.basePriceNgn) : null
+  const hourlyRate = body.hourlyRateNgn !== undefined && body.hourlyRateNgn !== null && body.hourlyRateNgn !== '' ? Number(body.hourlyRateNgn) : null
+  const deliverables = Array.isArray(body.deliverables) ? body.deliverables : []
+  const category = String(body.category || 'PRODUCTION').toUpperCase()
+  const isHourly = Boolean(body.isHourly)
+  const turnaroundDays = body.turnaroundDays ? Number(body.turnaroundDays) : 3
+  const sortOrder = body.sortOrder !== undefined ? Number(body.sortOrder) : 99
+  const isActive = body.isActive !== false
+
+  const rows = await sql`
+    INSERT INTO music_services (
+      slug, title, tagline, description, category,
+      base_price_ngn, is_hourly, hourly_rate_ngn, deliverables,
+      turnaround_days, sort_order, is_active, created_at, updated_at
+    ) VALUES (
+      ${slug}, ${title}, ${body.tagline || null}, ${body.description || null}, ${category},
+      ${basePrice}, ${isHourly}, ${hourlyRate}, ${JSON.stringify(deliverables)}::jsonb,
+      ${turnaroundDays}, ${sortOrder}, ${isActive}, NOW(), NOW()
+    )
+    RETURNING id, slug, title, tagline, description, category,
+              base_price_ngn as "basePriceNgn", is_hourly as "isHourly",
+              hourly_rate_ngn as "hourlyRateNgn", deliverables,
+              turnaround_days as "turnaroundDays", sort_order as "sortOrder",
+              is_active as "isActive", created_at as "createdAt"
+  `
+  return c.json(rows[0], 201)
+})
+
 adminApp.put('/services/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
@@ -1516,10 +1577,12 @@ adminApp.put('/services/:id', async (c) => {
 
   const basePrice = body.basePriceNgn !== undefined ? (body.basePriceNgn === null || body.basePriceNgn === '' ? null : Number(body.basePriceNgn)) : undefined
   const hourlyRate = body.hourlyRateNgn !== undefined ? (body.hourlyRateNgn === null || body.hourlyRateNgn === '' ? null : Number(body.hourlyRateNgn)) : undefined
+  const sortOrder = body.sortOrder !== undefined ? Number(body.sortOrder) : undefined
 
   const updated = await sql`
     UPDATE music_services
     SET 
+      slug = COALESCE(${body.slug}, slug),
       title = COALESCE(${body.title}, title),
       tagline = COALESCE(${body.tagline}, tagline),
       description = COALESCE(${body.description}, description),
@@ -1529,13 +1592,22 @@ adminApp.put('/services/:id', async (c) => {
       hourly_rate_ngn = CASE WHEN ${hourlyRate !== undefined} THEN ${hourlyRate} ELSE hourly_rate_ngn END,
       deliverables = CASE WHEN ${body.deliverables !== undefined} THEN ${JSON.stringify(body.deliverables)}::jsonb ELSE deliverables END,
       turnaround_days = COALESCE(${body.turnaroundDays}, turnaround_days),
+      sort_order = CASE WHEN ${sortOrder !== undefined} THEN ${sortOrder} ELSE sort_order END,
       is_active = COALESCE(${body.isActive}, is_active),
       updated_at = NOW()
     WHERE id = ${id}
-    RETURNING id, slug, title, base_price_ngn as "basePriceNgn", is_active as "isActive"
+    RETURNING id, slug, title, base_price_ngn as "basePriceNgn", is_hourly as "isHourly", hourly_rate_ngn as "hourlyRateNgn", deliverables, turnaround_days as "turnaroundDays", sort_order as "sortOrder", is_active as "isActive"
   `
   if (updated.length === 0) return c.json({ error: 'Service not found' }, 404)
   return c.json(updated[0])
+})
+
+adminApp.delete('/services/:id', async (c) => {
+  const sql = c.get('sql')
+  const id = c.req.param('id')
+  const rows = await sql`DELETE FROM music_services WHERE id = ${id} RETURNING id, slug, title`
+  if (rows.length === 0) return c.json({ error: 'Service not found' }, 404)
+  return c.json({ success: true, service: rows[0] })
 })
 
 // ------------------------------------------

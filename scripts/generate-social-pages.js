@@ -361,6 +361,18 @@ async function generateSocialPages() {
   await writeFile(baseHtmlPath, homeHtml, "utf8");
   await writePage(["beats"], withSocialMetadata(homeHtml, createBeatHubMetadata()));
   await writePage(
+    ["services"],
+    withSocialMetadata(homeHtml, {
+      title: "Chomka Studio Services | silachomka",
+      description:
+        "Professional music production, custom beats, mixing & mastering, vocal recording, sound design, and studio audio engineering by silachomka at Chomka Studio.",
+      canonicalPath: "/services",
+      type: "website",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Chomka Studio Services | silachomka",
+    })
+  );
+  await writePage(
     ["studio"],
     withSocialMetadata(homeHtml, {
       title: "chomkaMUSIC™ Studio Publishing",
@@ -464,8 +476,75 @@ async function generateSocialPages() {
     ),
   ]);
 
+  // Generate XML Sitemap with Google Image extensions (Req #15 & #16)
+  const staticRoutes = [
+    { loc: `${siteUrl}/`, changefreq: "daily", priority: "1.0" },
+    { loc: `${siteUrl}/beats`, changefreq: "weekly", priority: "0.9" },
+    { loc: `${siteUrl}/services`, changefreq: "weekly", priority: "0.9" },
+    { loc: `${siteUrl}/studio`, changefreq: "monthly", priority: "0.7" },
+    { loc: `${siteUrl}/privacy`, changefreq: "yearly", priority: "0.3" },
+    { loc: `${siteUrl}/cookies`, changefreq: "yearly", priority: "0.3" },
+    { loc: `${siteUrl}/terms`, changefreq: "yearly", priority: "0.3" },
+  ];
+
+  let sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  sitemapXml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
+
+  for (const route of staticRoutes) {
+    sitemapXml += `  <url>\n    <loc>${route.loc}</loc>\n    <changefreq>${route.changefreq}</changefreq>\n    <priority>${route.priority}</priority>\n  </url>\n`;
+  }
+
+  for (const rel of canonicalReleases) {
+    const url = `${siteUrl}/release/${encodeURIComponent(rel.slug.trim())}`;
+    const coverUrl = rel.cover || rel.image ? toAbsoluteUrl(rel.cover || rel.image) : null;
+    sitemapXml += `  <url>\n    <loc>${url}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n`;
+    if (coverUrl) {
+      sitemapXml += `    <image:image>\n      <image:loc>${escapeHtml(coverUrl)}</image:loc>\n      <image:title>${escapeHtml(rel.title)} Cover Art</image:title>\n    </image:image>\n`;
+    }
+    sitemapXml += `  </url>\n`;
+  }
+
+  for (const beat of canonicalBeats) {
+    const url = `${siteUrl}/beat/${encodeURIComponent(beat.id.trim())}`;
+    const beatImg = beat.image ? toAbsoluteUrl(beat.image) : null;
+    sitemapXml += `  <url>\n    <loc>${url}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n`;
+    if (beatImg) {
+      sitemapXml += `    <image:image>\n      <image:loc>${escapeHtml(beatImg)}</image:loc>\n      <image:title>${escapeHtml(beat.title)} Beat Artwork</image:title>\n    </image:image>\n`;
+    }
+    sitemapXml += `  </url>\n`;
+  }
+
+  for (const post of canonicalGallery) {
+    const url = `${siteUrl}/gallery/${encodeURIComponent(post.id.trim())}`;
+    const postTitle = escapeHtml(post.title || post.caption || "Silachomka Visual Archive");
+    const rawImages = [
+      post.ogImage,
+      post.image,
+      post.src,
+      post.asset,
+      ...(Array.isArray(post.slides) ? post.slides : []),
+    ]
+      .map((s) => (typeof s === "string" ? s : s?.src || s?.asset))
+      .filter((s) => typeof s === "string" && (/\.(jpg|jpeg|png|webp|avif)/i.test(s) || s.startsWith("/api/media/asset/")));
+
+    const uniqueImgs = Array.from(new Set(rawImages)).map((u) => toAbsoluteUrl(u));
+
+    sitemapXml += `  <url>\n    <loc>${url}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n`;
+    for (const imgUrl of uniqueImgs) {
+      sitemapXml += `    <image:image>\n      <image:loc>${escapeHtml(imgUrl)}</image:loc>\n      <image:title>${postTitle}</image:title>\n    </image:image>\n`;
+    }
+    sitemapXml += `  </url>\n`;
+  }
+
+  sitemapXml += `</urlset>\n`;
+
+  const sitemapDistPath = path.join(outputDirectory, "sitemap.xml");
+  const sitemapPublicPath = path.join(rootDirectory, "public", "sitemap.xml");
+  await writeFile(sitemapDistPath, sitemapXml, "utf8");
+  await writeFile(sitemapPublicPath, sitemapXml, "utf8");
+
   console.log(
-    `Generated crawler-visible metadata for 1 beat hub, ${canonicalBeats.length} beats, ${canonicalGallery.length} gallery posts, and ${canonicalReleases.length} releases.`
+    `Generated crawler-visible metadata and XML Sitemap for 1 beat hub, ${canonicalBeats.length} beats, ${canonicalGallery.length} gallery posts, and ${canonicalReleases.length} releases.`
   );
 
   if (fallbackImageRoutes.length > 0) {

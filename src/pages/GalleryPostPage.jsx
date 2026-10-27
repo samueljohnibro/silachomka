@@ -106,6 +106,27 @@ export default function GalleryPostPage() {
     );
   }
 
+  const postImage = rasterImage(post);
+  const galleryJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ImageObject",
+    name: post.title || post.caption || "Visual Archive Post",
+    description: (post.caption || `${post.title} — a visual archive post by silachomka.`).trim(),
+    contentUrl: postImage.startsWith("http") ? postImage : `https://silachomka.vercel.app${postImage}`,
+    thumbnailUrl: postImage.startsWith("http") ? postImage : `https://silachomka.vercel.app${postImage}`,
+    datePublished: post.date || post.post_date,
+    author: {
+      "@type": "Person",
+      name: "silachomka",
+      url: "https://silachomka.vercel.app",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "chomkaMUSIC™",
+      url: "https://silachomka.vercel.app",
+    },
+  };
+
   return (
     <main className="gallery-post-page">
       <SeoHead
@@ -117,8 +138,9 @@ export default function GalleryPostPage() {
           .trim()
           .slice(0, 280)}
         path={`/gallery/${post.id}`}
-        image={rasterImage(post)}
+        image={postImage}
         imageAlt={`${post.title || post.caption || "Visual Archive"} — silachomka visual archive`}
+        jsonLd={galleryJsonLd}
       />
       <Link className="release-breadcrumb" to="/#gallery">
         ← All Gallery

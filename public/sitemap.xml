@@ -1,0 +1,475 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://silachomka.vercel.app/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beats</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/services</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/studio</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/cookies</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/fridaythe13th</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/skazz084berg-fridaythe13th.jpg</image:loc>
+      <image:title>FRIDAYTHE13TH Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/sobobo</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/hunchoa-sobobo.jpg</image:loc>
+      <image:title>SOBOBO Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/oya-now-henny</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/084berg-oyanow.jpg</image:loc>
+      <image:title>OYA NOW + HENNY Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/twen</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/skazz-twen.jpg</image:loc>
+      <image:title>TWÈN Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/the-imposter-package</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/kaayo-theimposterpackage.jpg</image:loc>
+      <image:title>THE IMPOSTER PACKAGE Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/hyperdrive-ingress-zone</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/k4my-hyperdriveingresszone.jpg</image:loc>
+      <image:title>HYPERDRIVE: INGRËSS ZONE Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/despicable</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/bojaak-despicable.jpg</image:loc>
+      <image:title>DESPICABLE Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/thursday</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/mlt-thursday.jpg</image:loc>
+      <image:title>THURSDAY Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/speciaal</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/bojaak-speciaal.jpg</image:loc>
+      <image:title>SPECIAAL Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/noisemaker</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/noisemaker.jpg</image:loc>
+      <image:title>NOISEMAKER Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/item5</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/item5.jpg</image:loc>
+      <image:title>ITEM5 Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/kpe-for-me</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/kpeforme.jpg</image:loc>
+      <image:title>KPE FOR ME Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/kiss-and-tell</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/kiss-and-tell.jpg</image:loc>
+      <image:title>KISS &amp; TELL Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/dont-play-silachomka</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/dont-play-silachomka.jpg</image:loc>
+      <image:title>DON&#39;T PLAY SILACHOMKA Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/savage</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/savage.jpg</image:loc>
+      <image:title>SAVAGE. Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/huh-wys</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/huh-wys.jpg</image:loc>
+      <image:title>HUH. (WYS?) Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/atrocity</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/atrocity.jpg</image:loc>
+      <image:title>ATROCITY. Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/baby</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/baby.jpg</image:loc>
+      <image:title>BABY. Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/horus</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/covers/horus.jpg</image:loc>
+      <image:title>HORUS. Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/release/pipedown</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/f54cb3b5-00ed-4166-a615-b7255627d4e9</image:loc>
+      <image:title>pipedown Cover Art</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/shine</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/shine.jpg</image:loc>
+      <image:title>SHINE Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/john-stewart</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/john-stewart.jpg</image:loc>
+      <image:title>JOHN STEWART Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/faces</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/faces.jpg</image:loc>
+      <image:title>FACES Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/chinese-empathy</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/chinese-empathy.jpg</image:loc>
+      <image:title>CHINESE EMPATHY Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/overdose</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/overdose.jpg</image:loc>
+      <image:title>OVERDOSE Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/validation</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/validation.jpg</image:loc>
+      <image:title>VALIDATION Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/smile</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/smile.jpg</image:loc>
+      <image:title>SMILE Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/hubert</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/hubert.jpg</image:loc>
+      <image:title>HUBERT Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/fanguan</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/fanguan.jpg</image:loc>
+      <image:title>FÀNGUÀN Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/congo</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/congo.jpg</image:loc>
+      <image:title>CONGO Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/want</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/beats/want.jpg</image:loc>
+      <image:title>WANT Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/beat/police</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/63f35054-8f10-44b8-b8b5-a616d1daff7b</image:loc>
+      <image:title>POLICE Beat Artwork</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/gallery/silacohmka-s-20th-birthday-celebration</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/96fcc277-0bc8-472a-ba3a-b5e776a8a223</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/b82cebd3-b4ad-47f4-bd81-63c10c6ffe6b</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/7b538d66-a1ab-4915-91f9-0fb0c2cf8c7c</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/a5d56589-d193-4174-8ed4-5c1fc570df73</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/295f7064-7ffa-4a21-8123-14dd49fa2558</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/a1f77516-3521-4a98-9f42-5caa849f3ac5</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/72a96056-7ee3-4c54-a87e-6b531eb2d705</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/3032193d-1319-4d82-993e-d9babc89867e</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/d86c0143-27d9-47f8-a743-64e9bb64ba25</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/1cfd47a1-5bd4-4209-8972-32d5cfb81c0c</image:loc>
+      <image:title>silacohmka&#39;s 20th birthday celebration</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/gallery/silachomka-s-20th-birthday</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/5cd59db2-0637-4b74-a954-49a805e08bee</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/0d15e7a4-572d-407e-b6ce-b2b2616174f0</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/ad04478f-693e-4b14-bfa4-92d9a40029cc</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/87633246-6255-4c83-883a-fdc4ee0ca472</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/8c028624-4b0d-41a2-bce3-e77a94bd06aa</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/29e1698d-c05b-426f-9f03-d433dfd5e533</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/50d67132-a114-420c-a43c-d5e76b4e2f4f</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/19997b12-8445-49bc-a206-f184d87d237d</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/0331d06b-9d4c-4a2c-8565-73147aa63937</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/5231eda3-22fe-47e1-944e-fdf6931fa38a</image:loc>
+      <image:title>silachomka&#39;s 20th birthday!</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/gallery/post-2022-07-10-carousel-tvjb2</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/f595f4f0-de49-49e8-ac17-f548bcb5a7ed</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/f21892fc-6061-4f17-9bc0-709acb57d952</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/d74edcc1-5e62-40c3-9e5e-e4c5a8d82974</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/4fff2df6-d305-47e9-9c12-3d7235af239e</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/5f845b25-f911-4436-b68f-6abb886a70ca</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/0d55ec8e-724e-4fbe-a8bd-f27203bbaa37</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/605105a8-bd1b-4d1c-8e5d-f556b96ac8d8</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/f1e8c3f3-a09e-4a0e-86ab-1edbd99356d0</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/a1c4e986-c492-4dd2-a1a9-3566e89b5aa3</image:loc>
+      <image:title>silachomka&#39;s 20th birthday</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/gallery/post-2021-03-30-video-8cq2i</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/21c94e03-c177-4cad-af22-1778c313d1c3</image:loc>
+      <image:title>silachomka - What&#39;s Next Cover by Drake</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://silachomka.vercel.app/gallery/silachomka-what-s-next-cover-by-drake</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <image:image>
+      <image:loc>https://silachomka.vercel.app/api/media/asset/8f5dd3f9-94d3-470d-ba20-865720aa9266</image:loc>
+      <image:title>silachomka - What&#39;s Next Cover by Drake</image:title>
+    </image:image>
+  </url>
+</urlset>

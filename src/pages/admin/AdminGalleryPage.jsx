@@ -82,7 +82,17 @@ const AdminGalleryPage = () => {
       setMediaAssets(mediaData);
       setReleases(releasesData);
       setTracks(tracksData);
-      setCategories(categoriesData);
+      const uniqueCats = [];
+      const seenLabels = new Set();
+      for (const cat of Array.isArray(categoriesData) ? categoriesData : []) {
+        if (!cat || !cat.label) continue;
+        const key = cat.label.trim().toLowerCase();
+        if (!seenLabels.has(key)) {
+          seenLabels.add(key);
+          uniqueCats.push({ ...cat, label: cat.label.trim() });
+        }
+      }
+      setCategories(uniqueCats);
       if (socialsData) {
         const allLinks = [
           ...(Array.isArray(socialsData.artist) ? socialsData.artist : []),

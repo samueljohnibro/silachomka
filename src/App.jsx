@@ -1351,18 +1351,61 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
     return 0;
   });
 
+  const cardRef = useRef(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isInView, setIsInView] = useState(true);
+
+  // Independent non-synchronized schedule per card (Req #2):
+  // 6500ms + random offset between 0 and 3000ms
+  const rotationDuration = useRef(
+    6500 + Math.floor(Math.random() * 3000)
+  ).current;
+
+  // Staggered initial delay so cards never rotate in sync
+  const initialDelay = useRef(
+    500 + Math.floor(Math.random() * 2500)
+  ).current;
+
   useEffect(() => {
-    if (!isCarousel || slides.length <= 1) return;
-    const interval = setInterval(() => {
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(entry.isIntersecting);
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isCarousel || slides.length <= 1 || isPaused || !isInView) return;
+
+    let intervalId;
+    const timeoutId = setTimeout(() => {
       setCurrentIndex((prev) => (prev + 1) % slides.length);
-    }, 7000);
-    return () => clearInterval(interval);
-  }, [isCarousel, slides.length]);
+      intervalId = setInterval(() => {
+        setCurrentIndex((prev) => (prev + 1) % slides.length);
+      }, rotationDuration);
+    }, initialDelay);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isCarousel, slides.length, isPaused, isInView, rotationDuration, initialDelay]);
 
   if (isCarousel && slides.length > 1) {
     return (
       <div
+        ref={cardRef}
         className="gallery-card-image"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onFocus={() => setIsPaused(true)}
+        onBlur={() => setIsPaused(false)}
+        tabIndex={0}
         style={{
           position: "relative",
           width: "100%",
@@ -1498,41 +1541,67 @@ function GallerySection() {
       .catch(() => {});
   }, []);
 
+  const normalizeCat = (c) => {
+    if (!c) return "";
+    const s = String(c).trim().toLowerCase();
+    if (s === "portraits" || s === "portraits-style" || s.includes("portrait")) return "portraits-style";
+    if (s === "freestyles" || s === "freestyles-covers" || s.includes("freestyle") || s.includes("cover")) return "freestyles-covers";
+    if (s === "bts" || s === "studio" || s === "studio-bts" || s.includes("bts")) return "bts";
+    if (s === "releases" || s.includes("release")) return "releases";
+    if (s === "videos" || s.includes("video")) return "videos";
+    return s.replace(/[^a-z0-9]+/g, "-");
+  };
+
   const categories = useMemo(() => {
+    const labelMap = new Map();
     const base = [
       { id: "all", label: "All Posts" },
       { id: "releases", label: "Releases" },
-      { id: "freestyles", label: "Freestyles & Covers" },
-      { id: "portraits", label: "Portraits & Style" },
+      { id: "freestyles-covers", label: "Freestyles & Covers" },
+      { id: "portraits-style", label: "Portraits & Style" },
       { id: "videos", label: "Videos" },
       { id: "bts", label: "Studio & BTS" },
     ];
-    const existingIds = new Set(base.map((c) => c.id));
-    const merged = [...base];
+    for (const b of base) {
+      labelMap.set(b.label.toLowerCase(), b);
+    }
     for (const c of dbCategories) {
-      if (!existingIds.has(c.id)) {
-        existingIds.add(c.id);
-        merged.push(c);
+      if (!c || !c.label) continue;
+      const key = c.label.trim().toLowerCase();
+      if (!labelMap.has(key)) {
+        labelMap.set(key, { id: c.id || c.slug, label: c.label.trim() });
       }
     }
     if (Array.isArray(gallery)) {
       for (const item of gallery) {
-        if (item.category && !existingIds.has(item.category)) {
-          existingIds.add(item.category);
-          merged.push({
-            id: item.category,
-            label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
-          });
+        if (!item.category) continue;
+        const norm = normalizeCat(item.category);
+        const label =
+          norm === "portraits-style"
+            ? "Portraits & Style"
+            : norm === "freestyles-covers"
+            ? "Freestyles & Covers"
+            : norm === "bts"
+            ? "Studio & BTS"
+            : norm === "releases"
+            ? "Releases"
+            : norm === "videos"
+            ? "Videos"
+            : item.category.trim().charAt(0).toUpperCase() + item.category.trim().slice(1);
+        const key = label.toLowerCase();
+        if (!labelMap.has(key)) {
+          labelMap.set(key, { id: norm, label });
         }
       }
     }
-    return merged;
+    return Array.from(labelMap.values());
   }, [dbCategories, gallery]);
 
   const filteredPosts = useMemo(() => {
     const list = Array.isArray(gallery) ? gallery : [];
     if (activeCategory === "all") return list;
-    return list.filter((item) => item.category === activeCategory);
+    const targetNorm = normalizeCat(activeCategory);
+    return list.filter((item) => normalizeCat(item.category) === targetNorm);
   }, [activeCategory, gallery]);
 
   const activeIndex = useMemo(() => {
@@ -1903,6 +1972,43 @@ function HomePage() {
     [sortedReleases]
   );
 
+  const homeJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Person",
+        "@id": "https://silachomka.vercel.app/#person",
+        name: "silachomka",
+        alternateName: "Samuel John-Ibro",
+        url: "https://silachomka.vercel.app",
+        image: "https://silachomka.vercel.app/og-image.png",
+        sameAs: [
+          "https://www.instagram.com/silachomka/?__pwa=1",
+          "https://x.com/silachomka",
+          "https://www.threads.net/@silachomka",
+          "https://www.tiktok.com/@silachomka",
+          "https://www.youtube.com/@silachomka",
+        ],
+        jobTitle: "Recording Artist, Music Producer & Audio Engineer",
+      },
+      {
+        "@type": "MusicGroup",
+        "@id": "https://silachomka.vercel.app/#musicgroup",
+        name: "chomkaMUSIC™",
+        url: "https://silachomka.vercel.app",
+        logo: "https://silachomka.vercel.app/silachomka.com-logo.png",
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://silachomka.vercel.app/#website",
+        url: "https://silachomka.vercel.app",
+        name: "silachomka",
+        description:
+          "Official artist website of silachomka. Music, visuals, beat store, and studio services — part of chomkaMUSIC™ and Chomka Nation.",
+      },
+    ],
+  };
+
   return (
     <>
       <SeoHead
@@ -1911,6 +2017,7 @@ function HomePage() {
         path="/"
         image="/og-image.png"
         imageAlt="silachomka official logo"
+        jsonLd={homeJsonLd}
       />
       <SiteHeader />
 

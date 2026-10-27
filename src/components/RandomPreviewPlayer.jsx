@@ -141,6 +141,19 @@ export default function RandomPreviewPlayer({
     const audio = audioRef.current;
     if (!audio) return;
 
+    if (isLoading) {
+      autoPlayPendingRef.current = false;
+      try {
+        audio.pause();
+        audio.src = "";
+        audio.load();
+      } catch {}
+      setIsLoading(false);
+      setIsPlaying(false);
+      setError(null);
+      return;
+    }
+
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
+import { uploadWithProgress, formatBytes } from "../utils/uploadWithProgress";
 import {
   LoadingSpinner,
   RightArrowIcon,
@@ -149,6 +150,7 @@ export default function ServicesPage() {
   // Attached files (stems, references, beats)
   const [clientFiles, setClientFiles] = useState([]);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [uploadError, setUploadError] = useState(null);
 
   // Order submission & payment states
@@ -417,7 +419,7 @@ export default function ServicesPage() {
       };
     }, [selectedServices, configurations]);
 
-  // File Upload Handler (Up to 100MB via /api/services/upload)
+  // File Upload Handler (Up to 100MB via /api/services/upload with accurate progress)
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -428,25 +430,30 @@ export default function ServicesPage() {
     }
 
     setIsUploadingFile(true);
+    setUploadProgress({
+      percent: 0,
+      loaded: 0,
+      total: file.size,
+      loadedFormatted: "0 B",
+      totalFormatted: formatBytes(file.size),
+    });
     setUploadError(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const res = await fetch("/api/services/upload", {
-        method: "POST",
-        body: formData,
+      const data = await uploadWithProgress({
+        url: "/api/services/upload",
+        file,
+        onProgress: (p) => setUploadProgress(p),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "File upload failed");
+      if (!data || !data.success) {
+        throw new Error(data?.error || "File upload failed");
       }
       setClientFiles((prev) => [...prev, data.file]);
     } catch (err) {
       setUploadError(err.message || "Failed to upload file");
     } finally {
       setIsUploadingFile(false);
+      setUploadProgress(null);
       e.target.value = "";
     }
   };
@@ -604,9 +611,37 @@ export default function ServicesPage() {
       }}
     >
       <SeoHead
-        title="Studio Services & Production | silachomka"
+        title="Chomka Studio Services | silachomka"
         description="Book professional music production, vocal recording, mixing, mastering, and artist collaborations directly with Chomka Music Studio."
-        canonicalUrl="/services"
+        path="/services"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Service",
+          name: "Chomka Studio Services",
+          serviceType: "Music Production & Audio Engineering",
+          provider: {
+            "@type": "Person",
+            name: "silachomka",
+            url: "https://silachomka.vercel.app",
+          },
+          url: "https://silachomka.vercel.app/services",
+          description:
+            "Professional music production, vocal recording, mixing, mastering, and custom beat licensing by silachomka at Chomka Studio.",
+          hasOfferCatalog: {
+            "@type": "OfferCatalog",
+            name: "Chomka Studio Audio Services",
+            itemListElement: activeServiceList.map((svc) => ({
+              "@type": "Offer",
+              itemOffered: {
+                "@type": "Service",
+                name: svc.title,
+                description: svc.description || svc.tagline,
+              },
+              price: svc.basePriceNgn || svc.hourlyRateNgn || "TBD",
+              priceCurrency: "NGN",
+            })),
+          },
+        }}
       />
 
       <div style={{ maxWidth: "840px", margin: "0 auto" }}>
@@ -961,89 +996,26 @@ export default function ServicesPage() {
                     background: "rgba(8, 8, 12, 0.98)",
                     border: "1px solid rgba(223, 194, 125, 0.35)",
                     borderRadius: "10px",
-                    padding: "16px",
+                    padding: "0",
                     display: "flex",
                     flexDirection: "column",
-                    gap: "10px",
                     boxShadow: "0 16px 40px rgba(0, 0, 0, 0.8)",
                     animation: "fadeIn 0.2s ease-out",
-                    maxHeight: "440px",
-                    overflowY: "auto",
+                    maxHeight: "480px",
+                    overflow: "hidden",
                   }}
                 >
-                  {activeServiceList.map((svc) => {
-                    const isSelected = selectedSlugs.includes(svc.slug);
-                    return (
-                      <button
-                        key={svc.slug}
-                        type="button"
-                        onClick={() => toggleService(svc.slug)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          textAlign: "left",
-                          padding: "14px 18px",
-                          borderRadius: "8px",
-                          border: isSelected
-                            ? "1px solid var(--gold)"
-                            : "1px solid rgba(255, 255, 255, 0.08)",
-                          background: isSelected
-                            ? "rgba(223, 194, 125, 0.12)"
-                            : "rgba(15, 15, 22, 0.6)",
-                          cursor: "pointer",
-                          transition: "all 0.15s ease",
-                          gap: "16px",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
-                          <div
-                            style={{
-                              width: "20px",
-                              height: "20px",
-                              borderRadius: "4px",
-                              border: isSelected
-                                ? "1px solid var(--gold)"
-                                : "1px solid rgba(255, 255, 255, 0.25)",
-                              background: isSelected ? "var(--gold)" : "transparent",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              flexShrink: 0,
-                            }}
-                          >
-                            {isSelected && <CheckIcon size={13} color="#050507" />}
-                          </div>
-                          <div>
-                            <p style={{ margin: "0 0 2px", fontSize: "14px", fontWeight: 600, color: isSelected ? "var(--text)" : "#e0e0e0" }}>
-                              {svc.title}
-                            </p>
-                            <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)" }}>
-                              "{svc.prompt}" · {svc.tagline}
-                            </p>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right", flexShrink: 0 }}>
-                          <span style={{ fontSize: "13px", fontWeight: 700, color: isSelected ? "var(--gold)" : "var(--muted)" }}>
-                            {svc.basePriceNgn === null
-                              ? "Price Upon Request"
-                              : svc.isHourly
-                              ? `₦${(svc.hourlyRateNgn || 25000).toLocaleString()}/hr`
-                              : `₦${svc.basePriceNgn.toLocaleString()}`}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {/* Active Running Total & Selected Chips Inside Open Dropdown (Req #9) */}
+                  {/* Pinned Sticky Running Total Header (Req #13) */}
                   <div
                     style={{
-                      background: "rgba(18, 14, 28, 0.9)",
-                      border: "1px solid rgba(223, 194, 125, 0.3)",
-                      borderRadius: "8px",
-                      padding: "12px 14px",
-                      marginTop: "6px",
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 10,
+                      background: "rgba(14, 11, 20, 0.98)",
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
+                      borderBottom: "1px solid rgba(223, 194, 125, 0.3)",
+                      padding: "14px 18px",
                       display: "flex",
                       flexDirection: "column",
                       gap: "8px",
@@ -1074,7 +1046,7 @@ export default function ServicesPage() {
                         <span
                           style={{
                             fontFamily: "var(--font-display)",
-                            fontSize: "18px",
+                            fontSize: "20px",
                             fontWeight: 800,
                             color: "var(--gold)",
                           }}
@@ -1139,6 +1111,156 @@ export default function ServicesPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  {/* Scrollable Service Items List */}
+                  <div
+                    style={{
+                      overflowY: "auto",
+                      padding: "14px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                    }}
+                  >
+                    {activeServiceList.map((svc) => {
+                      const isSelected = selectedSlugs.includes(svc.slug);
+                      const hours = configurations[svc.slug]?.hours || 2;
+                      const calculatedPrice = svc.isHourly
+                        ? hours * (svc.hourlyRateNgn || 25000)
+                        : svc.basePriceNgn;
+
+                      return (
+                        <button
+                          key={svc.slug}
+                          type="button"
+                          onClick={() => toggleService(svc.slug)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            textAlign: "left",
+                            padding: "14px 18px",
+                            borderRadius: "8px",
+                            border: isSelected
+                              ? "1px solid var(--gold)"
+                              : "1px solid rgba(255, 255, 255, 0.08)",
+                            background: isSelected
+                              ? "rgba(223, 194, 125, 0.12)"
+                              : "rgba(15, 15, 22, 0.6)",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease",
+                            gap: "16px",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: "220px" }}>
+                            <div
+                              style={{
+                                width: "20px",
+                                height: "20px",
+                                borderRadius: "4px",
+                                border: isSelected
+                                  ? "1px solid var(--gold)"
+                                  : "1px solid rgba(255, 255, 255, 0.25)",
+                                background: isSelected ? "var(--gold)" : "transparent",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyCenter: "center",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {isSelected && <CheckIcon size={13} color="#050507" />}
+                            </div>
+                            <div>
+                              <p style={{ margin: "0 0 2px", fontSize: "14px", fontWeight: 600, color: isSelected ? "var(--text)" : "#e0e0e0" }}>
+                                {svc.title}
+                              </p>
+                              <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)" }}>
+                                "{svc.prompt}" · {svc.tagline}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0, marginLeft: "auto" }}>
+                            {/* Immediate Duration Stepper for Voice Recording / Hourly (Req #13) */}
+                            {isSelected && (svc.isHourly || svc.slug === "voice-recording") && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  background: "rgba(5, 5, 8, 0.9)",
+                                  border: "1px solid var(--gold)",
+                                  borderRadius: "6px",
+                                  padding: "3px 8px",
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const cur = configurations[svc.slug]?.hours || 2;
+                                    if (cur > 1) updateConfig(svc.slug, "hours", cur - 1);
+                                  }}
+                                  style={{
+                                    background: "none",
+                                    border: "none",
+                                    color: "var(--gold)",
+                                    fontSize: "14px",
+                                    fontWeight: 800,
+                                    cursor: "pointer",
+                                    padding: "0 4px",
+                                    lineHeight: 1,
+                                  }}
+                                  aria-label="Decrease hours"
+                                >
+                                  -
+                                </button>
+                                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", minWidth: "38px", textAlign: "center" }}>
+                                  {hours} hrs
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const cur = configurations[svc.slug]?.hours || 2;
+                                    updateConfig(svc.slug, "hours", cur + 1);
+                                  }}
+                                  style={{
+                                    background: "none",
+                                    border: "none",
+                                    color: "var(--gold)",
+                                    fontSize: "14px",
+                                    fontWeight: 800,
+                                    cursor: "pointer",
+                                    padding: "0 4px",
+                                    lineHeight: 1,
+                                  }}
+                                  aria-label="Increase hours"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )}
+
+                            <div style={{ textAlign: "right" }}>
+                              <span style={{ fontSize: "13px", fontWeight: 700, color: isSelected ? "var(--gold)" : "var(--muted)" }}>
+                                {svc.basePriceNgn === null
+                                  ? "Price Upon Request"
+                                  : `₦${calculatedPrice.toLocaleString()}`}
+                              </span>
+                              {svc.isHourly && (
+                                <span style={{ display: "block", fontSize: "10px", color: "var(--muted)" }}>
+                                  (₦{(svc.hourlyRateNgn || 25000).toLocaleString()}/hr)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -2157,15 +2279,15 @@ export default function ServicesPage() {
                 )}
               </div>
 
-              {/* Active Uploading Indicator (Req #11) */}
+              {/* Active Uploading Indicator with Real Byte Progress (Req #14) */}
               {isUploadingFile && (
                 <div
                   style={{
                     marginTop: "14px",
                     display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                    padding: "10px 14px",
+                    flexDirection: "column",
+                    gap: "8px",
+                    padding: "12px 14px",
                     background: "rgba(223, 194, 125, 0.08)",
                     border: "1px dashed var(--gold)",
                     borderRadius: "6px",
@@ -2173,14 +2295,41 @@ export default function ServicesPage() {
                     color: "var(--gold)",
                   }}
                 >
-                  <LoadingSpinner size={16} color="var(--gold)" />
-                  <div style={{ flex: 1 }}>
-                    <span style={{ fontWeight: 700 }}>Uploading studio asset...</span>
-                    <span style={{ display: "block", fontSize: "11px", color: "var(--muted)" }}>
-                      Streaming securely to Chomka Studio Cloud Storage
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <LoadingSpinner size={16} color="var(--gold)" />
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: 700 }}>Uploading studio asset...</span>
+                      <span style={{ display: "block", fontSize: "11px", color: "var(--muted)" }}>
+                        {uploadProgress
+                          ? `${uploadProgress.loadedFormatted} of ${uploadProgress.totalFormatted} transferred (${uploadProgress.percent}%)`
+                          : "Streaming securely to Chomka Studio Cloud Storage"}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: "12px", fontWeight: 800 }}>
+                      {uploadProgress ? `${uploadProgress.percent}%` : "In Progress"}
                     </span>
                   </div>
-                  <span style={{ fontSize: "11px", fontWeight: 700 }}>In Progress</span>
+
+                  {uploadProgress && (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "4px",
+                        background: "rgba(255, 255, 255, 0.1)",
+                        borderRadius: "2px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${uploadProgress.percent}%`,
+                          height: "100%",
+                          background: "var(--gold)",
+                          transition: "width 0.2s ease-out",
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

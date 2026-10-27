@@ -1,13 +1,13 @@
 /**
- * Canonical Gallery Date Formatter
+ * Unified Human-Readable Date Formatter
  * 
  * Formats any raw date, ISO timestamp, or date string into human-readable canonical format:
- * "Saturday, March 20, 2021"
+ * "Monday, October 20, 2022" ([Weekday], [Month] [Day], [Year])
  * 
  * Strictly prevents raw ISO strings like "2021-03-20T00:00:00.000Z" from displaying.
  */
-export function formatGalleryDate(rawDate) {
-  if (!rawDate) return "";
+export function formatLongDate(rawDate, fallback = "") {
+  if (!rawDate) return fallback;
 
   // If already formatted like "Saturday, March 20, 2021", return directly
   if (
@@ -18,8 +18,8 @@ export function formatGalleryDate(rawDate) {
   }
 
   try {
-    const str = typeof rawDate === "string" ? rawDate.split("T")[0].split(" ")[0] : "";
-    const parts = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const str = typeof rawDate === "string" ? rawDate.split("T")[0].split(" ")[0].trim() : "";
+    const parts = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     if (parts) {
       const year = parseInt(parts[1], 10);
       const month = parseInt(parts[2], 10) - 1;
@@ -34,7 +34,7 @@ export function formatGalleryDate(rawDate) {
       });
     }
 
-    const d = new Date(rawDate);
+    const d = rawDate instanceof Date ? rawDate : new Date(rawDate);
     if (!isNaN(d.getTime())) {
       return d.toLocaleDateString("en-US", {
         weekday: "long",
@@ -45,8 +45,26 @@ export function formatGalleryDate(rawDate) {
       });
     }
 
-    return String(rawDate);
+    return fallback || String(rawDate);
   } catch {
-    return String(rawDate);
+    return fallback || String(rawDate);
+  }
+}
+
+export const formatGalleryDate = formatLongDate;
+
+export function formatShortDate(rawDate, fallback = "") {
+  if (!rawDate) return fallback;
+  try {
+    const d = rawDate instanceof Date ? rawDate : new Date(rawDate);
+    if (isNaN(d.getTime())) return fallback || String(rawDate);
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  } catch {
+    return fallback || String(rawDate);
   }
 }

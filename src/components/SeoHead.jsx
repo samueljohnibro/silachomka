@@ -46,6 +46,7 @@ export default function SeoHead({
   icon,
   type = "website",
   audio = null,
+  jsonLd = null,
 }) {
   const canonical = toAbsolute(path);
   const imageUrl = toAbsolute(image);
@@ -62,6 +63,7 @@ export default function SeoHead({
     upsertMetaTag("name", "description", description);
     upsertMetaTag("property", "og:type", type);
     upsertMetaTag("property", "og:url", canonical);
+    upsertMetaTag("property", "og:site_name", "silachomka");
     upsertMetaTag("property", "og:title", title);
     upsertMetaTag("property", "og:description", description);
     upsertMetaTag("property", "og:image", imageUrl);
@@ -78,7 +80,17 @@ export default function SeoHead({
     if (canonicalEl) {
       canonicalEl.setAttribute("href", canonical);
     }
-  }, [title, description, canonical, imageUrl, alt, type, audioUrl]);
+    if (jsonLd) {
+      let script = document.head.querySelector('script[data-schema="true"]');
+      if (!script) {
+        script = document.createElement("script");
+        script.setAttribute("type", "application/ld+json");
+        script.setAttribute("data-schema", "true");
+        document.head.appendChild(script);
+      }
+      script.textContent = JSON.stringify(jsonLd);
+    }
+  }, [title, description, canonical, imageUrl, alt, type, audioUrl, jsonLd]);
 
   return (
     <Helmet>
@@ -104,6 +116,11 @@ export default function SeoHead({
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={imageUrl} />
       <meta name="twitter:image:alt" content={alt} />
+      {jsonLd && (
+        <script type="application/ld+json" data-schema="true">
+          {JSON.stringify(jsonLd)}
+        </script>
+      )}
     </Helmet>
   );
 }

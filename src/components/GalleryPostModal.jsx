@@ -71,6 +71,68 @@ export default function GalleryPostModal({
   const [isSwiping, setIsSwiping] = useState(false);
   const isAnimatingRef = useRef(false);
 
+  // Normalize slides whether they are strings or slide objects ({ asset, src, slideType, isVideo, mimeType, assetType })
+  const rawSlides = useMemo(() => {
+    if (!post) return [];
+    return Array.isArray(post.slideObjects) && post.slideObjects.length > 0
+      ? post.slideObjects
+      : Array.isArray(post.slides)
+      ? post.slides
+      : [];
+  }, [post]);
+
+  const normalizedSlides = useMemo(() => {
+    return rawSlides
+      .map((s) => {
+        if (typeof s === "string") {
+          const isVid = isVideoSrc(s, null, post, rawSlides.length);
+          return { src: s, slideType: isVid ? "video" : "image", isVideo: isVid };
+        }
+        const url = s?.src || s?.asset || "";
+        const isVid = isVideoSrc(url, s, post, rawSlides.length);
+        return { ...s, src: url, slideType: isVid ? "video" : "image", isVideo: isVid };
+      })
+      .filter((s) => Boolean(s.src));
+  }, [rawSlides, post]);
+
+  const primaryMediaUrl =
+    post?.src || post?.asset || post?.videoSrc || normalizedSlides[0]?.src || "";
+
+  const effectiveSlides = useMemo(() => {
+    if (normalizedSlides.length > 0) return normalizedSlides;
+    if (primaryMediaUrl) {
+      return [
+        {
+          src: primaryMediaUrl,
+          slideType: isVideoSrc(primaryMediaUrl, null, post, 1) ? "video" : "image",
+          isVideo: isVideoSrc(primaryMediaUrl, null, post, 1),
+        },
+      ];
+    }
+    return [];
+  }, [normalizedSlides, primaryMediaUrl, post]);
+
+  const isCarousel =
+    (post?.type === "carousel" || effectiveSlides.length > 1) &&
+    effectiveSlides.length > 1;
+
+  const activeSlideObj = isCarousel
+    ? effectiveSlides[activeSlide] || effectiveSlides[0]
+    : effectiveSlides[0] || { src: primaryMediaUrl };
+
+  const currentSlideSrc = activeSlideObj?.src || primaryMediaUrl;
+
+  const currentIsVideo =
+    isVideoSrc(currentSlideSrc, activeSlideObj, post, effectiveSlides.length) ||
+    post?.slideTypes?.[activeSlide] === "video";
+
+  const ambientImageSrc = !currentIsVideo ? currentSlideSrc : post?.ogImage || post?.image || null;
+
+  // Reset active slide on post change
+  useEffect(() => {
+    setActiveSlide(0);
+  }, [post?.id]);
+
   const goToSlide = useCallback((targetIndex) => {
     if (isAnimatingRef.current) return;
     isAnimatingRef.current = true;
@@ -82,7 +144,7 @@ export default function GalleryPostModal({
 
   const handlePrevSlide = useCallback((e) => {
     if (e) e.stopPropagation();
-    if (isAnimatingRef.current) return;
+    if (isAnimatingRef.current || effectiveSlides.length === 0) return;
     setActiveSlide((prev) => {
       isAnimatingRef.current = true;
       setTimeout(() => {
@@ -94,7 +156,7 @@ export default function GalleryPostModal({
 
   const handleNextSlide = useCallback((e) => {
     if (e) e.stopPropagation();
-    if (isAnimatingRef.current) return;
+    if (isAnimatingRef.current || effectiveSlides.length === 0) return;
     setActiveSlide((prev) => {
       isAnimatingRef.current = true;
       setTimeout(() => {
@@ -128,15 +190,10 @@ export default function GalleryPostModal({
       handlePrevSlide();
     }
   };
-  const [prevPostId, setPrevPostId] = useState(post?.id);
+
   const [socialOptions, setSocialOptions] = useState(
     cachedSocialLinks || FALLBACK_GALLERY_SOCIALS
   );
-
-  if (post?.id !== prevPostId) {
-    setPrevPostId(post?.id);
-    setActiveSlide(0);
-  }
 
   // Fetch gallery-eligible social links once and cache
   useEffect(() => {
@@ -209,66 +266,29 @@ export default function GalleryPostModal({
         }
       }
     },
-    [onClose, onPrev, onNext, hasPrev, hasNext]
+    [onClose, onPrev, onNext, hasPrev, hasNext, isCarousel, effectiveSlides.length]
   );
 
+  // Body scroll lock on modal mount / clean restore on unmount
+  useEffect(() => {
+    if (embedded) return undefined;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow || "";
+    };
+  }, [embedded]);
+
+  // Keydown listener
   useEffect(() => {
     if (embedded) return undefined;
     window.addEventListener("keydown", handleKeyDown);
-    document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
     };
   }, [handleKeyDown, embedded]);
 
   if (!post) return null;
-
-  // Normalize slides whether they are strings or slide objects ({ asset, src, slideType, isVideo, mimeType, assetType })
-  const rawSlides =
-    Array.isArray(post.slideObjects) && post.slideObjects.length > 0
-      ? post.slideObjects
-      : Array.isArray(post.slides)
-      ? post.slides
-      : [];
-  const normalizedSlides = rawSlides
-    .map((s) => {
-      if (typeof s === "string") {
-        const isVid = isVideoSrc(s, null, post, rawSlides.length);
-        return { src: s, slideType: isVid ? "video" : "image", isVideo: isVid };
-      }
-      const url = s?.src || s?.asset || "";
-      const isVid = isVideoSrc(url, s, post, rawSlides.length);
-      return { ...s, src: url, slideType: isVid ? "video" : "image", isVideo: isVid };
-    })
-    .filter((s) => Boolean(s.src));
-
-  const primaryMediaUrl =
-    post.src || post.asset || post.videoSrc || normalizedSlides[0]?.src || "";
-  const effectiveSlides =
-    normalizedSlides.length > 0
-      ? normalizedSlides
-      : primaryMediaUrl
-      ? [
-          {
-            src: primaryMediaUrl,
-            slideType: isVideoSrc(primaryMediaUrl, null, post, 1) ? "video" : "image",
-            isVideo: isVideoSrc(primaryMediaUrl, null, post, 1),
-          },
-        ]
-      : [];
-
-  const isCarousel =
-    (post.type === "carousel" || effectiveSlides.length > 1) &&
-    effectiveSlides.length > 1;
-  const activeSlideObj = isCarousel
-    ? effectiveSlides[activeSlide] || effectiveSlides[0]
-    : effectiveSlides[0] || { src: primaryMediaUrl };
-  const currentSlideSrc = activeSlideObj?.src || primaryMediaUrl;
-  const currentIsVideo =
-    isVideoSrc(currentSlideSrc, activeSlideObj, post, effectiveSlides.length) ||
-    post.slideTypes?.[activeSlide] === "video";
-  const ambientImageSrc = !currentIsVideo ? currentSlideSrc : post.ogImage || post.image || null;
 
   const externalSocialUrl = post.externalSocialUrl || post.external_social_url || null;
   const externalSocialPlatform = post.externalSocialPlatform || post.external_social_platform || null;

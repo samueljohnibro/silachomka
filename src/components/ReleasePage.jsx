@@ -90,7 +90,7 @@ function getSpotifyEmbedUrl(url) {
    TRACK ROW COMPONENT (EXPANDABLE WITH PRODUCER CREDIT)
    ========================================================= */
 
-export function TrackRow({ track, index, isExpanded, onToggle, isUnreleased = false }) {
+export function TrackRow({ track, release = null, index, isExpanded, onToggle, isUnreleased = false }) {
   const [localExpanded, setLocalExpanded] = useState(false);
   const trackPlatforms = isUnreleased ? {} : track.platforms || {};
 
@@ -145,7 +145,7 @@ export function TrackRow({ track, index, isExpanded, onToggle, isUnreleased = fa
           <div className="track-dropdown-producer">
             Produced by{" "}
             <strong style={{ color: "var(--gold)" }}>
-              {getTrackProducerString(track)}
+              {getTrackProducerString(track, release)}
             </strong>
           </div>
           <div className="track-platform-grid">
@@ -421,6 +421,43 @@ export default function ReleasePage({ release: propRelease }) {
   const countdownMinutes = Math.floor((timeDiff / 1000 / 60) % 60);
   const countdownSeconds = Math.floor((timeDiff / 1000) % 60);
 
+  const albumJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "MusicAlbum",
+    name: release.title,
+    description: socialShareDescription,
+    url: currentUrl,
+    image: release.cover?.startsWith("http")
+      ? release.cover
+      : `https://silachomka.vercel.app${release.cover || "/og-image.png"}`,
+    datePublished: release.date,
+    byArtist: {
+      "@type": "Person",
+      name: "silachomka",
+      url: "https://silachomka.vercel.app",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "chomkaMUSIC™",
+      url: "https://silachomka.vercel.app",
+    },
+    numTracks: tracks.length,
+    track: tracks.map((t, idx) => ({
+      "@type": "MusicRecording",
+      position: idx + 1,
+      name: t.title,
+      duration: t.duration,
+      byArtist: {
+        "@type": "Person",
+        name: "silachomka",
+      },
+      producer: {
+        "@type": "Person",
+        name: getTrackProducerString(t, release),
+      },
+    })),
+  };
+
   return (
     <main className="release-page-view">
       <SeoHead
@@ -430,6 +467,7 @@ export default function ReleasePage({ release: propRelease }) {
         image={release.cover || "/og-image.png"}
         type="music.album"
         imageAlt={`${release.title} official cover art`}
+        jsonLd={albumJsonLd}
       />
 
       {/* Req #12: Smooth, Non-Blocking Entry Animation ("COMING SOON" or "OUT NOW") */}
@@ -750,6 +788,7 @@ export default function ReleasePage({ release: propRelease }) {
                 <TrackRow
                   key={`${track.title}-${index}`}
                   track={track}
+                  release={release}
                   index={index}
                   isUnreleased={isFuture}
                   isExpanded={expandedTrackIdx === index}

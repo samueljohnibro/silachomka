@@ -1326,6 +1326,21 @@ export default function BeatsPage() {
       const currentBeat = activeBeatRef.current;
       const currentlyPlaying = isPlayingRef.current;
 
+      /* Cancel loading active */
+      if (currentBeat?.id === beat.id && loadingBeatId === beat.id) {
+        audioGenerationRef.current += 1;
+        if (currentAudio) {
+          resetAudioElement(currentAudio);
+        }
+        audioRef.current = null;
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setLoadingBeatId(null);
+        cancelProgressAnimation();
+        clearAutoAdvanceTimer();
+        return;
+      }
+
       /* Pause active */
       if (currentBeat?.id === beat.id && currentAudio && currentlyPlaying) {
         currentAudio.pause();

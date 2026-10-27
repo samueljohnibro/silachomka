@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/admin/
+Disallow: /api/services/upload
+Disallow: /api/services/files/
+
+Sitemap: https://silachomka.vercel.app/sitemap.xml
