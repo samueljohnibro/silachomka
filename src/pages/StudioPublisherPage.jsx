@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
+import { formatLongDate } from "../utils/dateFormatter";
 
 const CREATOR_PIN = "chomka2026";
 const STORAGE_KEY = "silachomka_creator_auth";
@@ -70,7 +71,7 @@ export default function StudioPublisherPage() {
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const todayDisplay = useMemo(() => {
     const d = new Date();
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    return formatLongDate(d);
   }, []);
 
   const slugify = (text) =>

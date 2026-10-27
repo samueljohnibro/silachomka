@@ -472,14 +472,23 @@ function ReleaseCard({
   release,
   isLatest = false,
   activeFilter = "all",
+  viewMode = "grid",
 }) {
   const trackCount = getTrackCount(release);
+  const releaseHref = useMemo(() => {
+    const p = new URLSearchParams();
+    if (activeFilter !== "all") p.set("filter", activeFilter);
+    if (viewMode === "list") p.set("view", "list");
+    const qs = p.toString();
+    return `/release/${release.slug}${qs ? "?" + qs : ""}`;
+  }, [release.slug, activeFilter, viewMode]);
 
   return (
     <article className="release-card">
       <Link
         className="release-art"
-        to={`/release/${release.slug}${activeFilter !== 'all' ? '?filter=' + activeFilter : ''}`}
+        to={releaseHref}
+        state={{ fromView: viewMode, fromFilter: activeFilter }}
         aria-label={`Open ${release.title}`}
       >
         {release.cover && (
@@ -538,7 +547,8 @@ function ReleaseCard({
 
         <Link
           className="text-button"
-          to={`/release/${release.slug}${activeFilter !== 'all' ? '?filter=' + activeFilter : ''}`}
+          to={releaseHref}
+          state={{ fromView: viewMode, fromFilter: activeFilter }}
         >
           View release <RightArrowIcon size={16} />
         </Link>
@@ -957,9 +967,42 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeFilter = searchParams.get("filter") || "all";
   const subFilter = searchParams.get("sub") || "";
-  const viewMode = searchParams.get("view") || "grid";
+  
+  // View mode preservation (Stage 35 — Req #1): URL param -> SessionStorage -> Default ("grid")
+  const [viewMode, setViewModeState] = useState(() => {
+    const urlView = searchParams.get("view");
+    if (urlView === "list" || urlView === "grid") return urlView;
+    try {
+      const stored = sessionStorage.getItem("silachomka_music_view");
+      if (stored === "list" || stored === "grid") return stored;
+    } catch {}
+    return "grid";
+  });
+
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [expandedTrackKey, setExpandedTrackKey] = useState(null);
+
+  // Synchronize view mode if URL searchParams change via history/navigation
+  useEffect(() => {
+    const urlView = searchParams.get("view");
+    if (urlView === "list" || urlView === "grid") {
+      setViewModeState(urlView);
+      try {
+        sessionStorage.setItem("silachomka_music_view", urlView);
+      } catch {}
+    } else {
+      // If URL does not have view param, check if sessionStorage remembers "list"
+      try {
+        const stored = sessionStorage.getItem("silachomka_music_view");
+        if (stored === "list") {
+          setViewModeState("list");
+          const p = new URLSearchParams(searchParams);
+          p.set("view", "list");
+          setSearchParams(p, { replace: true, preventScrollReset: true });
+        }
+      } catch {}
+    }
+  }, [searchParams, setSearchParams]);
 
   // Type filters that can be conjoined with SILACHOMKA
   const TYPE_FILTERS = ["singles", "eps", "albums"];
@@ -975,6 +1018,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
     const p = new URLSearchParams(searchParams);
     if (!filter || filter === "all") { p.delete("filter"); p.delete("sub"); }
     else { p.set("filter", filter); if (sub) p.set("sub", sub); else p.delete("sub"); }
+    if (viewMode === "list") p.set("view", "list");
     setSearchParams(p, { replace: true, preventScrollReset: true });
     // Aggressively restore scroll across multiple frames to beat any async scroll resets
     requestAnimationFrame(() => { window.scrollTo(0, scrollY); requestAnimationFrame(() => window.scrollTo(0, scrollY)); });
@@ -1026,6 +1070,10 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
   const setViewMode = (mode) => {
     const scrollY = window.scrollY;
     suppressScroll();
+    setViewModeState(mode);
+    try {
+      sessionStorage.setItem("silachomka_music_view", mode);
+    } catch {}
     const p = new URLSearchParams(searchParams);
     if (mode === "grid") p.delete("view"); else p.set("view", mode);
     setSearchParams(p, { replace: true, preventScrollReset: true });
@@ -1231,6 +1279,7 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
                   release={{ ...release, number: dynamicNumber }}
                   isLatest={activeFilter === "all" && index === 0}
                   activeFilter={activeFilter}
+                  viewMode={viewMode}
                 />
               );
             })}
@@ -1295,7 +1344,18 @@ function MusicSection({ releases: sortedReleases, totalTracks }) {
                         </p>
                       </div>
                     </div>
-                    <Link to={`/release/${release.slug}${activeFilter !== "all" ? "?filter=" + activeFilter : ""}`} className="text-button" style={{ fontSize: "10px" }}>
+                    <Link
+                      to={{
+                        pathname: `/release/${release.slug}`,
+                        search: `?${new URLSearchParams({
+                          ...(activeFilter !== "all" ? { filter: activeFilter } : {}),
+                          view: "list",
+                        }).toString()}`,
+                      }}
+                      state={{ fromView: "list", fromFilter: activeFilter }}
+                      className="text-button"
+                      style={{ fontSize: "10px" }}
+                    >
                       View release <RightArrowIcon size={16} />
                     </Link>
                   </div>

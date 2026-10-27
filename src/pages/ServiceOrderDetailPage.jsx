@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
 import { LoadingSpinner, LeftArrowIcon, RightArrowIcon } from "../components/Icons";
+import { formatLongDate } from "../utils/dateFormatter";
 
 const STATUS_ORDER = [
   "AWAITING_PAYMENT",
@@ -116,14 +117,7 @@ export default function ServiceOrderDetailPage() {
   };
 
   const formattedDeadline = order?.agreedDeadline
-    ? new Date(order.agreedDeadline).toLocaleDateString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZone: "Africa/Lagos", // WAT (UTC+1)
-      }) + ` ${order.deadlineTimezone || "WAT"}`
+    ? `${formatLongDate(order.agreedDeadline)}${order.deadlineTimezone ? ` (${order.deadlineTimezone})` : ""}`
     : null;
 
   return (
@@ -196,7 +190,7 @@ export default function ServiceOrderDetailPage() {
                     </span>
                     <span style={{ color: "var(--border)" }}>•</span>
                     <span style={{ fontSize: "12px", color: "var(--muted)" }}>
-                      {new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      {formatLongDate(order.createdAt)}
                     </span>
                   </div>
                   <h1 style={{ fontSize: "28px", color: "var(--text-h)", margin: "0 0 6px", letterSpacing: "-0.01em" }}>

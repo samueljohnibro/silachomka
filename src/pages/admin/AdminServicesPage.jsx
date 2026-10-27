@@ -973,13 +973,7 @@ export default function AdminServicesPage() {
                       </td>
                       <td style={{ padding: "14px", color: "var(--text-p)", fontSize: "12px" }}>
                         {o.agreedDeadline
-                          ? new Date(o.agreedDeadline).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                              timeZone: "Africa/Lagos",
-                            }) + ` ${o.deadlineTimezone || "WAT"}`
+                          ? formatLongDate(o.agreedDeadline) + (o.deadlineTimezone ? ` (${o.deadlineTimezone})` : "")
                           : <span style={{ color: "var(--muted)" }}>Not set</span>}
                       </td>
                       <td style={{ padding: "14px", textAlign: "right" }}>
@@ -1127,147 +1121,208 @@ export default function AdminServicesPage() {
             </p>
           </div>
 
-          {/* Interactive Monthly Calendar + Inspector Grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: "24px", alignItems: "start" }}>
-            {/* Left: Themed Monthly Calendar */}
+          {/* Interactive Monthly Calendar + Day Inspector (Stage 35 — Polish & Clean Hierarchy) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
+            {/* Top: Themed Monthly Calendar (Spacious & Prominent) */}
             <StudioMonthlyCalendar
               availabilityList={availabilityList}
               selectedDate={selectedCalendarDate}
               onSelectDate={handleSelectCalendarDate}
             />
 
-            {/* Right: Selected Day Inspector Card */}
+            {/* Bottom: Selected Day Inspector Card (Intentional, Balanced Full-Width Layout) */}
             <div
               style={{
-                background: "rgba(13, 13, 18, 0.8)",
+                background: "rgba(13, 13, 18, 0.85)",
                 border: "1px solid var(--border)",
                 borderRadius: "12px",
-                padding: "24px",
+                padding: "clamp(20px, 3vw, 28px)",
                 display: "flex",
                 flexDirection: "column",
-                gap: "18px",
+                gap: "20px",
+                boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
               }}
             >
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                  <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Date Inspector
-                  </span>
+              {/* Card Header: Balanced Title & Centered Status Badge */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "12px",
+                  paddingBottom: "16px",
+                  borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                }}
+              >
+                <div>
                   <span
                     style={{
-                      fontSize: "10px",
-                      fontWeight: 800,
-                      padding: "2px 8px",
-                      borderRadius: "999px",
-                      background: selectedDayIsClosed ? "rgba(239, 68, 68, 0.15)" : "rgba(52, 211, 153, 0.15)",
-                      color: selectedDayIsClosed ? "#ef4444" : "#34d399",
+                      fontSize: "11px",
+                      color: "var(--gold)",
+                      fontWeight: 700,
                       textTransform: "uppercase",
+                      letterSpacing: "0.1em",
+                      display: "block",
+                      marginBottom: "4px",
                     }}
                   >
+                    Studio Date Configuration
+                  </span>
+                  <h3 style={{ margin: 0, fontSize: "clamp(18px, 2.5vw, 22px)", color: "var(--text-h)", fontWeight: 800 }}>
+                    {formatLongDate(selectedCalendarDate)}
+                  </h3>
+                </div>
+
+                {/* Status Indicator (Centered & Aligned) */}
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                      letterSpacing: "0.06em",
+                      padding: "6px 14px",
+                      borderRadius: "999px",
+                      background: selectedDayIsClosed ? "rgba(239, 68, 68, 0.15)" : "rgba(52, 211, 153, 0.15)",
+                      border: selectedDayIsClosed ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid rgba(52, 211, 153, 0.4)",
+                      color: selectedDayIsClosed ? "#ef4444" : "#34d399",
+                      textTransform: "uppercase",
+                      textAlign: "center",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        background: selectedDayIsClosed ? "#ef4444" : "#34d399",
+                        boxShadow: selectedDayIsClosed ? "0 0 6px rgba(239, 68, 68, 0.6)" : "0 0 6px rgba(52, 211, 153, 0.6)",
+                      }}
+                    />
                     {selectedDayIsClosed ? "CLOSED" : "OPEN FOR BOOKINGS"}
                   </span>
                 </div>
-                <h3 style={{ margin: "0 0 4px", fontSize: "18px", color: "var(--text-h)", fontWeight: 800 }}>
-                  {formatLongDate(selectedCalendarDate)}
-                </h3>
-                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                  ISO: {selectedCalendarDate}
-                </span>
               </div>
 
               {availabilityError && (
-                <div style={{ padding: "10px 14px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "6px", color: "#ef4444", fontSize: "12px" }}>
+                <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "6px", color: "#ef4444", fontSize: "12px" }}>
                   {availabilityError}
                 </div>
               )}
 
-              {/* Status Toggle Button */}
-              <div>
-                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
-                  Booking Status
-                </label>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDayIsClosed(false)}
-                    style={{
-                      flex: 1,
-                      padding: "8px 14px",
-                      borderRadius: "6px",
-                      border: !selectedDayIsClosed ? "1px solid #34d399" : "1px solid var(--border)",
-                      background: !selectedDayIsClosed ? "rgba(52, 211, 153, 0.2)" : "transparent",
-                      color: !selectedDayIsClosed ? "#34d399" : "var(--muted)",
-                      fontWeight: 700,
-                      fontSize: "12px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    ✓ Open Studio
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDayIsClosed(true)}
-                    style={{
-                      flex: 1,
-                      padding: "8px 14px",
-                      borderRadius: "6px",
-                      border: selectedDayIsClosed ? "1px solid #ef4444" : "1px solid var(--border)",
-                      background: selectedDayIsClosed ? "rgba(239, 68, 68, 0.2)" : "transparent",
-                      color: selectedDayIsClosed ? "#ef4444" : "var(--muted)",
-                      fontWeight: 700,
-                      fontSize: "12px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    ✕ Set Closed
-                  </button>
+              {/* Status Toggle & Notes Grid */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "20px",
+                }}
+              >
+                {/* Status Toggle */}
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "8px" }}>
+                    Session Availability Status
+                  </label>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDayIsClosed(false)}
+                      style={{
+                        flex: 1,
+                        padding: "10px 16px",
+                        borderRadius: "6px",
+                        border: !selectedDayIsClosed ? "1px solid #34d399" : "1px solid var(--border)",
+                        background: !selectedDayIsClosed ? "rgba(52, 211, 153, 0.2)" : "rgba(255, 255, 255, 0.03)",
+                        color: !selectedDayIsClosed ? "#34d399" : "var(--muted)",
+                        fontWeight: 700,
+                        fontSize: "12px",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      ✓ Open Studio
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDayIsClosed(true)}
+                      style={{
+                        flex: 1,
+                        padding: "10px 16px",
+                        borderRadius: "6px",
+                        border: selectedDayIsClosed ? "1px solid #ef4444" : "1px solid var(--border)",
+                        background: selectedDayIsClosed ? "rgba(239, 68, 68, 0.2)" : "rgba(255, 255, 255, 0.03)",
+                        color: selectedDayIsClosed ? "#ef4444" : "var(--muted)",
+                        fontWeight: 700,
+                        fontSize: "12px",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      ✕ Set Closed
+                    </button>
+                  </div>
+                </div>
+
+                {/* Studio Notes */}
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "8px" }}>
+                    Studio Notes & Label (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    className="studio-input"
+                    placeholder="e.g. Vocal Recording Block / Priority Session"
+                    value={selectedDayNotes}
+                    onChange={(e) => setSelectedDayNotes(e.target.value)}
+                    style={{ width: "100%", height: "40px" }}
+                  />
                 </div>
               </div>
 
-              {/* Themed Time Slots Picker (Req #9) */}
+              {/* Themed Time Slots Picker */}
               {!selectedDayIsClosed && (
-                <ThemedTimeSlotPicker
-                  slots={selectedDaySlots}
-                  onAddSlot={(newSlot) => setSelectedDaySlots((prev) => [...prev, newSlot])}
-                  onRemoveSlot={(idx) => setSelectedDaySlots((prev) => prev.filter((_, i) => i !== idx))}
-                />
+                <div style={{ paddingTop: "6px", borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                  <ThemedTimeSlotPicker
+                    slots={selectedDaySlots}
+                    onAddSlot={(newSlot) => setSelectedDaySlots((prev) => [...prev, newSlot])}
+                    onRemoveSlot={(idx) => setSelectedDaySlots((prev) => prev.filter((_, i) => i !== idx))}
+                  />
+                </div>
               )}
 
-              {/* Notes */}
-              <div>
-                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
-                  Studio Notes (Optional)
-                </label>
-                <input
-                  type="text"
-                  className="studio-input"
-                  placeholder="e.g. Vocal Recording Block"
-                  value={selectedDayNotes}
-                  onChange={(e) => setSelectedDayNotes(e.target.value)}
-                  style={{ width: "100%" }}
-                />
-              </div>
-
               {/* Action Buttons */}
-              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                <button
-                  type="button"
-                  onClick={handleSaveDayAvailability}
-                  disabled={isSavingAvailability}
-                  className="primary-button"
-                  style={{ flex: 1, padding: "10px", fontSize: "13px", fontWeight: 700 }}
-                >
-                  {isSavingAvailability ? "Saving..." : "Save Availability"}
-                </button>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  paddingTop: "14px",
+                  borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                  justifyContent: "flex-end",
+                  flexWrap: "wrap",
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => handleDeleteDayAvailability(selectedCalendarDate)}
                   disabled={isSavingAvailability}
                   className="cookie-btn cookie-btn-reject"
-                  style={{ padding: "10px 14px", fontSize: "12px" }}
+                  style={{ padding: "10px 18px", fontSize: "12px", minWidth: "140px" }}
                   title="Reset date configuration back to default closed"
                 >
-                  Reset
+                  Reset to Closed
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveDayAvailability}
+                  disabled={isSavingAvailability}
+                  className="primary-button"
+                  style={{ padding: "10px 24px", fontSize: "13px", fontWeight: 700, minWidth: "160px" }}
+                >
+                  {isSavingAvailability ? "Saving..." : "Save Availability"}
                 </button>
               </div>
             </div>

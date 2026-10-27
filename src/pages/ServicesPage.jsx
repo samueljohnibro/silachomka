@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
 import { uploadWithProgress, formatBytes } from "../utils/uploadWithProgress";
+import { formatLongDate } from "../utils/dateFormatter";
 import {
   LoadingSpinner,
   RightArrowIcon,
@@ -21,6 +22,7 @@ const CONVERSATIONAL_SERVICES = [
     isHourly: false,
     turnaroundDays: 5,
     tagline: "Custom instrumental tailored to your sonic identity",
+    plainExplanation: "Need an original instrumental? We compose custom melodies, basslines, and drums tailored to your style.",
   },
   {
     slug: "beat-mixing",
@@ -31,6 +33,7 @@ const CONVERSATIONAL_SERVICES = [
     isHourly: false,
     turnaroundDays: 3,
     tagline: "Clarity, punch, and low-end separation for your instrumental",
+    plainExplanation: "Already have a beat? We balance all instruments, tighten the drums, and give your bass punch on all speaker systems.",
   },
   {
     slug: "voice-recording",
@@ -42,6 +45,7 @@ const CONVERSATIONAL_SERVICES = [
     hourlyRateNgn: 25000,
     turnaroundDays: 1,
     tagline: "Professional vocal tracking in a treated studio environment",
+    plainExplanation: "Need studio time to record vocals? You get treated acoustics, high-end condenser mics, and an engineer to direct your takes.",
   },
   {
     slug: "vocal-mixing",
@@ -52,6 +56,7 @@ const CONVERSATIONAL_SERVICES = [
     isHourly: false,
     turnaroundDays: 4,
     tagline: "Tuning, compression, spatial depth, and seamless beat blend",
+    plainExplanation: "Already recorded your vocals? We tune pitches, remove background noise, add reverb/delay, and blend your voice into the music.",
   },
   {
     slug: "full-song-mastering",
@@ -62,6 +67,7 @@ const CONVERSATIONAL_SERVICES = [
     isHourly: false,
     turnaroundDays: 2,
     tagline: "Loudness, dynamic polish, and translation across streaming platforms",
+    plainExplanation: "Is your song finished? Mastering brings your audio to commercial loudness and polish so it competes on Spotify, Apple Music, and radio.",
   },
   {
     slug: "full-song-production",
@@ -72,6 +78,7 @@ const CONVERSATIONAL_SERVICES = [
     isHourly: false,
     turnaroundDays: 10,
     tagline: "Full song arrangement, live instruments, and radio-ready production",
+    plainExplanation: "Have an idea, lyrics, or voice memo? We craft the complete musical arrangement, live instrumentation, tracking, and polish from start to finish.",
   },
   {
     slug: "instrumentalist-collaboration",
@@ -82,6 +89,7 @@ const CONVERSATIONAL_SERVICES = [
     isHourly: false,
     turnaroundDays: 5,
     tagline: "Live guitars, keys, or joint production input on your tracks",
+    plainExplanation: "Want live guitar riffs, electric piano keys, or collaborative production on your track? We record bespoke instrumental layers for you.",
   },
   {
     slug: "recording-mixing-client-beat",
@@ -92,6 +100,7 @@ const CONVERSATIONAL_SERVICES = [
     isHourly: false,
     turnaroundDays: 5,
     tagline: "Integrated vocal tracking and full hybrid mix on your instrumental",
+    plainExplanation: "Have your own beat file and want to record vocals in studio and get the whole song mixed? We handle tracking and the full mixdown.",
   },
   {
     slug: "feature",
@@ -102,8 +111,408 @@ const CONVERSATIONAL_SERVICES = [
     isHourly: false,
     turnaroundDays: 7,
     tagline: "Official guest verse or hook collaboration with silachomka",
+    plainExplanation: "Want silachomka to guest verse, sing a hook, or collaborate on your release? Request artist feature availability and collaboration terms.",
   },
 ];
+
+/* =========================================================
+   PUBLIC THEMED STUDIO CALENDAR (STAGE 35 — REQ #4 & #6)
+   Matches Silachomka dark/gold aesthetic; driven by admin availability
+   ========================================================= */
+function PublicStudioCalendar({
+  studioAvailability = [],
+  selectedDate = "",
+  onSelectDate,
+  selectedTime = "",
+  onSelectTime,
+}) {
+  const [currentDate, setCurrentDate] = useState(() => {
+    if (selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+      const [y, m] = selectedDate.split("-").map(Number);
+      return new Date(y, m - 1, 1);
+    }
+    return new Date();
+  });
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
+  const startOffset = (firstDayIndex + 6) % 7; // Monday-first offset
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const goToday = () => setCurrentDate(new Date());
+
+  // Map of open dates with slots (Default closed in Silachomka)
+  const availMap = useMemo(() => {
+    const map = new Map();
+    for (const item of studioAvailability) {
+      if (item?.dateStr && !item.isClosed && Array.isArray(item.slots) && item.slots.length > 0) {
+        map.set(item.dateStr, item);
+      }
+    }
+    return map;
+  }, [studioAvailability]);
+
+  const days = [];
+  for (let i = 0; i < startOffset; i++) {
+    days.push(null);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    days.push({ dayNumber: d, dateStr });
+  }
+
+  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const activeAvail = selectedDate ? availMap.get(selectedDate) : null;
+  const availableSlots = activeAvail?.slots || [];
+
+  return (
+    <div
+      style={{
+        background: "rgba(10, 8, 16, 0.85)",
+        border: "1px solid var(--border)",
+        borderRadius: "12px",
+        padding: "clamp(18px, 3vw, 28px)",
+        boxShadow: "0 10px 40px rgba(0, 0, 0, 0.4)",
+      }}
+    >
+      {/* Month Navigation Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}
+      >
+        <div>
+          <h3 style={{ margin: 0, fontSize: "clamp(18px, 2.5vw, 22px)", color: "var(--text-h)", fontWeight: 800 }}>
+            {monthNames[month]} {year}
+          </h3>
+          <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            Studio Session Booking Calendar
+          </span>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={prevMonth}
+            className="studio-pill-btn"
+            style={{ padding: "6px 14px", fontSize: "12px", cursor: "pointer" }}
+            aria-label="Previous month"
+          >
+            ← Prev
+          </button>
+          <button
+            type="button"
+            onClick={goToday}
+            className="studio-pill-btn"
+            style={{ padding: "6px 14px", fontSize: "12px", cursor: "pointer" }}
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={nextMonth}
+            className="studio-pill-btn"
+            style={{ padding: "6px 14px", fontSize: "12px", cursor: "pointer" }}
+            aria-label="Next month"
+          >
+            Next →
+          </button>
+        </div>
+      </div>
+
+      {/* Weekdays Row */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gap: "6px",
+          textAlign: "center",
+          marginBottom: "8px",
+        }}
+      >
+        {weekdays.map((w) => (
+          <span
+            key={w}
+            style={{
+              fontSize: "11px",
+              fontWeight: 700,
+              color: "var(--muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              padding: "4px 0",
+            }}
+          >
+            {w}
+          </span>
+        ))}
+      </div>
+
+      {/* Days Grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gap: "6px",
+        }}
+      >
+        {days.map((day, idx) => {
+          if (!day) {
+            return (
+              <div
+                key={`empty-${idx}`}
+                style={{
+                  minHeight: "56px",
+                  background: "transparent",
+                }}
+              />
+            );
+          }
+
+          const isOpen = availMap.has(day.dateStr);
+          const isSelected = selectedDate === day.dateStr;
+          const todayStr = new Date().toISOString().split("T")[0];
+          const isToday = day.dateStr === todayStr;
+
+          return (
+            <button
+              key={day.dateStr}
+              type="button"
+              disabled={!isOpen}
+              onClick={() => {
+                if (isOpen) {
+                  onSelectDate(day.dateStr);
+                  const newSlots = availMap.get(day.dateStr)?.slots || [];
+                  if (!newSlots.includes(selectedTime)) {
+                    onSelectTime(newSlots[0] || "");
+                  }
+                }
+              }}
+              style={{
+                minHeight: "56px",
+                padding: "6px 4px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "4px",
+                borderRadius: "8px",
+                border: isSelected
+                  ? "2px solid var(--gold)"
+                  : isOpen
+                  ? "1px solid rgba(223, 194, 125, 0.45)"
+                  : "1px solid rgba(255, 255, 255, 0.04)",
+                background: isSelected
+                  ? "var(--gold)"
+                  : isOpen
+                  ? "rgba(223, 194, 125, 0.08)"
+                  : "rgba(10, 10, 15, 0.3)",
+                color: isSelected
+                  ? "#050507"
+                  : isOpen
+                  ? "#f5f3ef"
+                  : "rgba(255, 255, 255, 0.2)",
+                cursor: isOpen ? "pointer" : "not-allowed",
+                transition: "all 0.15s ease",
+                boxShadow: isSelected ? "0 0 16px var(--gold-glow)" : "none",
+                position: "relative",
+              }}
+              title={
+                isOpen
+                  ? `Available date (${availMap.get(day.dateStr)?.slots?.length || 0} time slots)`
+                  : "Closed date (studio unavailable)"
+              }
+            >
+              <span
+                style={{
+                  fontSize: "14px",
+                  fontWeight: isSelected ? 800 : isOpen ? 700 : 400,
+                  lineHeight: 1,
+                }}
+              >
+                {day.dayNumber}
+              </span>
+
+              {isOpen ? (
+                <span
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                    color: isSelected ? "#050507" : "#34d399",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "3px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "5px",
+                      height: "5px",
+                      borderRadius: "50%",
+                      background: isSelected ? "#050507" : "#34d399",
+                    }}
+                  />
+                  Open
+                </span>
+              ) : (
+                <span
+                  style={{
+                    fontSize: "8px",
+                    color: "rgba(255, 255, 255, 0.15)",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Closed
+                </span>
+              )}
+
+              {isToday && !isSelected && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: "4px",
+                    right: "4px",
+                    width: "4px",
+                    height: "4px",
+                    borderRadius: "50%",
+                    background: "var(--gold)",
+                  }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected Date & Available Time Slots */}
+      <div
+        style={{
+          marginTop: "24px",
+          paddingTop: "20px",
+          borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+        }}
+      >
+        {selectedDate ? (
+          <div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "10px",
+                marginBottom: "14px",
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--gold)",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    display: "block",
+                    marginBottom: "2px",
+                  }}
+                >
+                  Studio Appointment Date & Time
+                </span>
+                <h4 style={{ margin: 0, fontSize: "16px", color: "var(--text-h)", fontWeight: 700 }}>
+                  {formatLongDate(selectedDate)}
+                </h4>
+              </div>
+
+              {selectedTime && (
+                <span
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "999px",
+                    background: "rgba(223, 194, 125, 0.15)",
+                    border: "1px solid var(--gold)",
+                    color: "var(--gold)",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Session Time: {selectedTime}
+                </span>
+              )}
+            </div>
+
+            {availableSlots.length > 0 ? (
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "12px",
+                    color: "var(--muted)",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Select an available studio session time:
+                </label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                  {availableSlots.map((slot) => {
+                    const isSlotSelected = selectedTime === slot;
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => onSelectTime(slot)}
+                        style={{
+                          padding: "10px 18px",
+                          borderRadius: "6px",
+                          border: isSlotSelected
+                            ? "1px solid var(--gold)"
+                            : "1px solid rgba(255, 255, 255, 0.15)",
+                          background: isSlotSelected
+                            ? "var(--gold)"
+                            : "rgba(255, 255, 255, 0.04)",
+                          color: isSlotSelected ? "#050507" : "var(--text)",
+                          fontSize: "13px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                          boxShadow: isSlotSelected ? "0 0 12px var(--gold-glow)" : "none",
+                        }}
+                      >
+                        {slot}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: "13px", color: "#e57373" }}>
+                No active time slots found for this date. Please choose another open date.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", padding: "16px 0", color: "var(--muted)", fontSize: "13px" }}>
+            Click an open date (marked in gold/green) on the calendar above to view and choose available session hours.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ServicesPage() {
   const navigate = useNavigate();
@@ -592,13 +1001,7 @@ export default function ServicesPage() {
   const deadlineDateString = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() + (maxTurnaroundDays || 3));
-    return d.toLocaleDateString("en-GB", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      timeZone: "Africa/Lagos",
-    });
+    return formatLongDate(d);
   }, [maxTurnaroundDays]);
 
   return (
@@ -953,10 +1356,17 @@ export default function ServicesPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <span style={{ color: "var(--gold)", fontSize: "20px" }}>✦</span>
                   <div>
-                    <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>
-                      {selectedSlugs.length === 0
-                        ? "Choose Studio Services"
-                        : `${selectedSlugs.length} Studio Service${selectedSlugs.length === 1 ? "" : "s"} Selected`}
+                    <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <span>
+                        {selectedSlugs.length === 0
+                          ? "Choose Studio Services"
+                          : `${selectedSlugs.length} Studio Service${selectedSlugs.length === 1 ? "" : "s"} Selected`}
+                      </span>
+                      {selectedSlugs.length > 0 && (
+                        <span style={{ color: "var(--gold)", fontWeight: 800 }}>
+                          • {totalNgn === null ? "Custom Quote" : `₦${totalNgn.toLocaleString()}`}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: "12px", color: "var(--muted)" }}>
                       {selectedSlugs.length === 0
@@ -1173,11 +1583,14 @@ export default function ServicesPage() {
                               {isSelected && <CheckIcon size={13} color="#050507" />}
                             </div>
                             <div>
-                              <p style={{ margin: "0 0 2px", fontSize: "14px", fontWeight: 600, color: isSelected ? "var(--text)" : "#e0e0e0" }}>
+                              <p style={{ margin: "0 0 2px", fontSize: "14px", fontWeight: 700, color: isSelected ? "var(--gold)" : "#e0e0e0" }}>
                                 {svc.title}
                               </p>
-                              <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)" }}>
-                                "{svc.prompt}" · {svc.tagline}
+                              <p style={{ margin: "0 0 3px", fontSize: "12px", color: isSelected ? "var(--text)" : "#d1d1d6", lineHeight: 1.4 }}>
+                                {svc.plainExplanation || svc.tagline}
+                              </p>
+                              <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>
+                                "{svc.prompt}"
                               </p>
                             </div>
                           </div>
@@ -1218,8 +1631,8 @@ export default function ServicesPage() {
                                 >
                                   -
                                 </button>
-                                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", minWidth: "38px", textAlign: "center" }}>
-                                  {hours} hrs
+                                <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", minWidth: "50px", textAlign: "center" }}>
+                                  {hours} {hours === 1 ? "hour" : "hours"}
                                 </span>
                                 <button
                                   type="button"
@@ -1327,64 +1740,6 @@ export default function ServicesPage() {
               </div>
             )}
 
-            {/* Running Total Card — Visible Immediately from Selection Stage (Req #2) */}
-            <div
-              style={{
-                background: "rgba(5, 5, 8, 0.7)",
-                border: "1px solid rgba(223, 194, 125, 0.25)",
-                borderRadius: "8px",
-                padding: "18px 24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "28px",
-                flexWrap: "wrap",
-                gap: "14px",
-              }}
-            >
-              <div>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: "var(--muted)",
-                    display: "block",
-                    marginBottom: "4px",
-                  }}
-                >
-                  RUNNING SESSION TOTAL
-                </span>
-                <span
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "24px",
-                    fontWeight: 800,
-                    color: "var(--gold)",
-                  }}
-                >
-                  {selectedServices.length === 0
-                    ? "₦0"
-                    : totalNgn === null
-                    ? "Custom Quote (Price Upon Request)"
-                    : hasPriceUponRequest
-                    ? `₦${totalNgn.toLocaleString()} + Custom Quote`
-                    : `₦${totalNgn.toLocaleString()}`}
-                </span>
-              </div>
-              {selectedServices.length > 0 && (
-                <div style={{ textAlign: "right" }}>
-                  <span style={{ fontSize: "12px", color: "var(--text)", display: "block" }}>
-                    ~{maxTurnaroundDays} Business Days Turnaround
-                  </span>
-                  <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                    {selectedServices.length} {selectedServices.length === 1 ? "service" : "services"} configured
-                  </span>
-                </div>
-              )}
-            </div>
-
             {/* Bottom Action Bar */}
             <div
               style={{
@@ -1399,9 +1754,40 @@ export default function ServicesPage() {
             >
               <div>
                 {selectedSlugs.length > 0 ? (
-                  <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
-                    Ready to proceed to session details.
-                  </p>
+                  <div>
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        color: "var(--muted)",
+                        display: "block",
+                        marginBottom: "2px",
+                      }}
+                    >
+                      SESSION TOTAL
+                    </span>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "8px", flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: "20px",
+                          fontWeight: 800,
+                          color: "var(--gold)",
+                        }}
+                      >
+                        {totalNgn === null
+                          ? "Custom Quote (Price Upon Request)"
+                          : hasPriceUponRequest
+                          ? `₦${totalNgn.toLocaleString()} + Custom Quote`
+                          : `₦${totalNgn.toLocaleString()}`}
+                      </span>
+                      <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+                        • ~{maxTurnaroundDays} Business Days Turnaround
+                      </span>
+                    </div>
+                  </div>
                 ) : (
                   <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
                     Open the service menu above and select at least one service to continue.
@@ -1791,89 +2177,18 @@ export default function ServicesPage() {
                               <strong>Studio Notice:</strong> All upcoming studio session dates are currently closed by studio administration. Please check back soon or contact studio management directly.
                             </div>
                           ) : (
-                            <>
-                              <div>
-                                <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
-                                  Select an Open Studio Date:
-                                </label>
-                                <select
-                                  value={cfg.bookingDate || ""}
-                                  onChange={(e) => {
-                                    const nextDate = e.target.value;
-                                    updateConfig(svc.slug, "bookingDate", nextDate);
-                                    updateConfig(svc.slug, "bookingTime", "");
-                                  }}
-                                  style={{
-                                    width: "100%",
-                                    padding: "10px 14px",
-                                    borderRadius: "4px",
-                                    border: "1px solid rgba(223, 194, 125, 0.3)",
-                                    background: "#0b0b10",
-                                    color: "var(--text)",
-                                    fontSize: "13px",
-                                    cursor: "pointer",
-                                    outline: "none",
-                                  }}
-                                >
-                                  <option value="">-- Choose an open date --</option>
-                                  {studioAvailability.map((avail) => (
-                                    <option key={avail.dateStr} value={avail.dateStr}>
-                                      {avail.dateStr} {avail.notes ? `(${avail.notes})` : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              {cfg.bookingDate && (
-                                <div>
-                                  <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
-                                    Available Time Slots for {cfg.bookingDate}:
-                                  </label>
-                                  {(() => {
-                                    const matching = studioAvailability.find((a) => a.dateStr === cfg.bookingDate);
-                                    const slots = Array.isArray(matching?.slots) ? matching.slots : [];
-                                    if (slots.length === 0) {
-                                      return (
-                                        <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)" }}>
-                                          No time slots currently open for this date.
-                                        </p>
-                                      );
-                                    }
-                                    return (
-                                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                                        {slots.map((slot) => {
-                                          const isSelected = cfg.bookingTime === slot;
-                                          return (
-                                            <button
-                                              key={slot}
-                                              type="button"
-                                              onClick={() => updateConfig(svc.slug, "bookingTime", slot)}
-                                              style={{
-                                                padding: "8px 14px",
-                                                borderRadius: "4px",
-                                                border: isSelected
-                                                  ? "1px solid var(--gold)"
-                                                  : "1px solid rgba(255, 255, 255, 0.15)",
-                                                background: isSelected
-                                                  ? "var(--gold)"
-                                                  : "rgba(255, 255, 255, 0.04)",
-                                                color: isSelected ? "#050507" : "var(--text)",
-                                                fontSize: "12px",
-                                                fontWeight: 700,
-                                                cursor: "pointer",
-                                                transition: "all 0.15s ease",
-                                              }}
-                                            >
-                                              {slot}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-                            </>
+                            <PublicStudioCalendar
+                              studioAvailability={studioAvailability}
+                              selectedDate={cfg.bookingDate || ""}
+                              onSelectDate={(newDate) => {
+                                updateConfig(svc.slug, "bookingDate", newDate);
+                                updateConfig(svc.slug, "bookingTime", "");
+                              }}
+                              selectedTime={cfg.bookingTime || ""}
+                              onSelectTime={(newTime) => {
+                                updateConfig(svc.slug, "bookingTime", newTime);
+                              }}
+                            />
                           )}
 
                           <div>
@@ -2790,6 +3105,11 @@ export default function ServicesPage() {
                             {cfg.hours || 2} hours × ₦{(svc.hourlyRateNgn || 25000).toLocaleString()}
                           </p>
                         )}
+                        {cfg.bookingDate && (
+                          <p style={{ fontSize: "12px", color: "var(--gold)", margin: "2px 0 0", fontWeight: 600 }}>
+                            Studio Session: {formatLongDate(cfg.bookingDate)} {cfg.bookingTime ? `at ${cfg.bookingTime}` : ""}
+                          </p>
+                        )}
                         {svc.slug === "recording-mixing-client-beat" && (
                           <p style={{ fontSize: "12px", color: "var(--gold)", margin: 0 }}>
                             Scope: {cfg.scope || "Client custom beat & tracking"}
@@ -3117,6 +3437,40 @@ export default function ServicesPage() {
               A confirmation and studio stem link have been reserved for{" "}
               <strong style={{ color: "var(--text)" }}>{confirmedOrder.customer_email || confirmedOrder.customerEmail}</strong>.
             </p>
+
+            {/* Scheduled Appointment Badge if present */}
+            {(() => {
+              const scheduledDate = confirmedOrder.booking_date || Object.values(configurations).find((c) => c?.bookingDate)?.bookingDate;
+              const scheduledTime = confirmedOrder.booking_time || Object.values(configurations).find((c) => c?.bookingTime)?.bookingTime;
+              if (!scheduledDate) return null;
+              return (
+                <div
+                  style={{
+                    background: "rgba(223, 194, 125, 0.12)",
+                    border: "1px solid rgba(223, 194, 125, 0.35)",
+                    borderRadius: "8px",
+                    padding: "12px 20px",
+                    maxWidth: "500px",
+                    margin: "0 auto 28px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ color: "var(--gold)", fontSize: "16px" }}>📅</span>
+                  <div style={{ textAlign: "center" }}>
+                    <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", display: "block" }}>
+                      Studio Appointment Reserved
+                    </span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>
+                      {formatLongDate(scheduledDate)} {scheduledTime ? `at ${scheduledTime}` : ""}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Copyable Order Reference Box (Part 8) */}
             <div

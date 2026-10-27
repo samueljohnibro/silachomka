@@ -2,7 +2,7 @@ import { UpRightArrowIcon, RightArrowIcon, LoadingSpinner } from "../components/
 // src/components/ReleasePage.jsx
 
 import { useState, useMemo, useEffect } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom";
 import SeoHead from "./SeoHead";
 import ShareLinkBox from "./ShareLinkBox";
 import RandomPreviewPlayer from "./RandomPreviewPlayer";
@@ -175,8 +175,12 @@ export function TrackRow({ track, release = null, index, isExpanded, onToggle, i
 export default function ReleasePage({ release: propRelease }) {
   const params = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const activeFilter = searchParams.get("filter") || "all";
+  const viewMode = searchParams.get("view") || location.state?.fromView || (() => {
+    try { return sessionStorage.getItem("silachomka_music_view") || "grid"; } catch { return "grid"; }
+  })();
   const { preferences: cookiePrefs, saveCustomPreferences } = useCookieConsent();
   const {
     releases: storeReleases,
@@ -497,12 +501,17 @@ export default function ReleasePage({ release: propRelease }) {
         </div>
       )}
 
-      {/* Breadcrumb Navigation */}
+      {/* Breadcrumb Navigation (Stage 35 — Preserves List/Grid View State) */}
       <Link
         className="release-breadcrumb"
-        to={`/?${
-          activeFilter !== "all" ? "filter=" + activeFilter + "#music" : "#music"
-        }`}
+        to={{
+          pathname: "/",
+          search: `?${new URLSearchParams({
+            ...(activeFilter !== "all" ? { filter: activeFilter } : {}),
+            ...(viewMode === "list" ? { view: "list" } : {}),
+          }).toString()}`,
+          hash: "#music",
+        }}
       >
         ← All Music
       </Link>
