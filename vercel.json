@@ -60,6 +60,18 @@
       "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/share/services/:slug"
     },
     {
+      "source": "/services",
+      "destination": "/services/index.html"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/robots.txt"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/sitemap.xml"
+    },
+    {
       "source": "/beats",
       "destination": "/beats/index.html"
     },
