@@ -1626,36 +1626,6 @@ export default function BeatsPage() {
               <span>REEL</span>
             </button>
           </div>
-
-          {/* 1-Minute / Full Track Playback Mode Segmented Control */}
-          <div
-            className="beats-segmented-group"
-            role="group"
-            aria-label="Audio playback length"
-          >
-            <button
-              type="button"
-              className={`beats-segment-btn ${
-                playbackMode === "1min" ? "is-active" : ""
-              }`}
-              onClick={() => setPlaybackMode("1min")}
-              aria-pressed={playbackMode === "1min"}
-              title="Play 1-minute random preview"
-            >
-              <span>1 MIN</span>
-            </button>
-            <button
-              type="button"
-              className={`beats-segment-btn ${
-                playbackMode === "full" ? "is-active" : ""
-              }`}
-              onClick={() => setPlaybackMode("full")}
-              aria-pressed={playbackMode === "full"}
-              title="Play full beat track"
-            >
-              <span>FULL TRACK</span>
-            </button>
-          </div>
         </div>
 
         {/* 3. Genre Filters + 4. Commerce Currency Selector */}

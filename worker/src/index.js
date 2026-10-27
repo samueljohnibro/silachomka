@@ -917,6 +917,333 @@ app.get('/api/gallery/:slug', async (c) => {
 })
 
 // ------------------------------------------
+// Music Services & Studio Orders (/api/services)
+// ------------------------------------------
+app.get('/api/services', async (c) => {
+  const sql = c.get('sql')
+  const rows = await sql`
+    SELECT id, slug, title, tagline, description, category, base_price_ngn as "basePriceNgn",
+           is_hourly as "isHourly", hourly_rate_ngn as "hourlyRateNgn", deliverables,
+           turnaround_days as "turnaroundDays", sort_order as "sortOrder", is_active as "isActive"
+    FROM music_services
+    WHERE is_active = true
+    ORDER BY sort_order ASC, created_at ASC
+  `
+  return c.json(rows)
+})
+
+app.get('/api/services/:slug', async (c) => {
+  const sql = c.get('sql')
+  const slug = String(c.req.param('slug') || '').trim().toLowerCase()
+  const rows = await sql`
+    SELECT id, slug, title, tagline, description, category, base_price_ngn as "basePriceNgn",
+           is_hourly as "isHourly", hourly_rate_ngn as "hourlyRateNgn", deliverables,
+           turnaround_days as "turnaroundDays", sort_order as "sortOrder", is_active as "isActive"
+    FROM music_services
+    WHERE slug = ${slug} AND is_active = true
+  `
+  if (rows.length === 0) return c.json({ error: 'Service not found' }, 404)
+  return c.json(rows[0])
+})
+
+// Private client upload endpoint (stems, vocal audio, reference tracks)
+// Client files are strictly isolated from public catalogue & public gallery
+app.post('/api/services/upload', async (c) => {
+  const sql = c.get('sql')
+  try {
+    const formData = await c.req.formData()
+    const file = formData.get('file')
+    if (!file || typeof file === 'string') {
+      return c.json({ error: 'No file provided' }, 400)
+    }
+
+    const fileName = file.name || 'unnamed-file'
+    const fileSize = file.size || 0
+    const mimeType = file.type || 'application/octet-stream'
+
+    // 100MB limit per file
+    if (fileSize > 100 * 1024 * 1024) {
+      return c.json({ error: 'File size exceeds 100MB limit' }, 400)
+    }
+
+    const buf = await file.arrayBuffer()
+    const bytes = new Uint8Array(buf)
+    const accessToken = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
+    const fileHex = '\\x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+
+    const inserted = await sql`
+      INSERT INTO service_private_files (
+        file_name, file_size, mime_type, file_data, access_token
+      ) VALUES (
+        ${fileName}, ${fileSize}, ${mimeType}, ${fileHex}::bytea, ${accessToken}
+      )
+      RETURNING id, file_name, file_size, mime_type, access_token, created_at
+    `
+    const record = inserted[0]
+
+    return c.json({
+      success: true,
+      file: {
+        id: record.id,
+        name: record.file_name,
+        size: Number(record.file_size),
+        type: record.mime_type,
+        token: record.access_token,
+        url: `/api/services/files/${record.id}?token=${record.access_token}`
+      }
+    })
+  } catch (err) {
+    console.error('Private file upload error:', err)
+    return c.json({ error: 'Upload failed', message: err.message }, 500)
+  }
+})
+
+// Secure private file download endpoint
+app.get('/api/services/files/:id', async (c) => {
+  const sql = c.get('sql')
+  const id = c.req.param('id')
+  const token = c.req.query('token')
+
+  const rows = await sql`
+    SELECT id, file_name, file_size, mime_type, encode(file_data, 'hex') as file_hex, access_token
+    FROM service_private_files
+    WHERE id = ${id}
+  `
+  if (rows.length === 0) return c.json({ error: 'File not found' }, 404)
+  const file = rows[0]
+
+  // Validate token or admin authentication
+  let authorized = false
+  if (token && token === file.access_token) {
+    authorized = true
+  } else {
+    const cookieToken = getCookie(c, COOKIE_NAME)
+    if (cookieToken && c.env?.JWT_SECRET) {
+      try {
+        const payload = await verify(cookieToken, c.env.JWT_SECRET)
+        if (payload?.sub) authorized = true
+      } catch {}
+    }
+  }
+
+  if (!authorized) {
+    return c.json({ error: 'Unauthorized: Valid access token required' }, 403)
+  }
+
+  if (file.file_hex) {
+    const bytes = decodeHexToBytes(file.file_hex)
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'Content-Type': file.mime_type || 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(file.file_name)}"`,
+        'Content-Length': String(bytes.length),
+        'Cache-Control': 'private, no-cache'
+      }
+    })
+  }
+
+  return c.json({ error: 'File data unavailable' }, 404)
+})
+
+// Create Service Order
+app.post('/api/services/orders', async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json().catch(() => ({}))
+
+  const serviceSlug = String(body.serviceSlug || body.service_slug || '').trim().toLowerCase()
+  const customerName = String(body.customerName || body.customer_name || '').trim()
+  const customerEmail = String(body.customerEmail || body.customer_email || '').trim().toLowerCase()
+  const customerPhone = String(body.customerPhone || body.customer_phone || '').trim()
+  const configuration = body.configuration || {}
+  const clientFiles = Array.isArray(body.clientFiles || body.client_files) ? (body.clientFiles || body.client_files) : []
+
+  if (!serviceSlug) {
+    return c.json({ error: 'Service slug is required' }, 400)
+  }
+  if (!customerName) {
+    return c.json({ error: 'Customer name is required' }, 400)
+  }
+  if (!customerEmail || !customerEmail.includes('@')) {
+    return c.json({ error: 'Valid customer email is required' }, 400)
+  }
+
+  const services = await sql`
+    SELECT id, slug, title, category, base_price_ngn, is_hourly, hourly_rate_ngn, turnaround_days
+    FROM music_services
+    WHERE slug = ${serviceSlug} AND is_active = true
+  `
+  if (services.length === 0) {
+    return c.json({ error: 'Invalid or inactive service requested' }, 400)
+  }
+  const s = services[0]
+
+  let totalNgn = null
+  if (s.is_hourly) {
+    const hours = Math.max(1, parseInt(configuration.hours || 1, 10))
+    configuration.hours = hours
+    totalNgn = Number(s.hourly_rate_ngn || 25000) * hours
+  } else if (s.base_price_ngn !== null && s.base_price_ngn !== undefined) {
+    totalNgn = Number(s.base_price_ngn)
+  } else {
+    totalNgn = null
+  }
+
+  const year = new Date().getFullYear()
+  const randomChars = Math.random().toString(36).substring(2, 6).toUpperCase()
+  const orderNumber = `SC-SRV-${year}-${randomChars}`
+  const initialStatus = totalNgn === null ? 'IN_PROGRESS' : 'AWAITING_PAYMENT'
+
+  const inserted = await sql`
+    INSERT INTO service_orders (
+      order_number, service_id, service_slug, service_title, customer_name, customer_email, customer_phone,
+      configuration, client_files, total_amount_ngn, currency, payment_status, order_status, deadline_timezone
+    ) VALUES (
+      ${orderNumber}, ${s.id}, ${s.slug}, ${s.title}, ${customerName}, ${customerEmail}, ${customerPhone || null},
+      ${JSON.stringify(configuration)}::jsonb, ${JSON.stringify(clientFiles)}::jsonb, ${totalNgn}, 'NGN', 'UNPAID', ${initialStatus}, 'WAT'
+    )
+    RETURNING id, order_number, service_slug, service_title, customer_name, customer_email, total_amount_ngn, currency, order_status, created_at
+  `
+
+  return c.json({
+    success: true,
+    order: {
+      id: inserted[0].id,
+      orderNumber: inserted[0].order_number,
+      serviceSlug: inserted[0].service_slug,
+      serviceTitle: inserted[0].service_title,
+      customerName: inserted[0].customer_name,
+      customerEmail: inserted[0].customer_email,
+      totalAmountNgn: inserted[0].total_amount_ngn ? Number(inserted[0].total_amount_ngn) : null,
+      currency: inserted[0].currency,
+      orderStatus: inserted[0].order_status,
+      createdAt: inserted[0].created_at
+    }
+  }, 201)
+})
+
+// Get Customer Order Status
+app.get('/api/services/orders/:orderNumber', async (c) => {
+  const sql = c.get('sql')
+  const orderNumber = String(c.req.param('orderNumber') || '').trim().toUpperCase()
+
+  const rows = await sql`
+    SELECT 
+      o.id, o.order_number as "orderNumber", o.service_slug as "serviceSlug", o.service_title as "serviceTitle",
+      o.customer_name as "customerName", o.customer_email as "customerEmail", o.customer_phone as "customerPhone",
+      o.configuration, o.client_files as "clientFiles", o.total_amount_ngn as "totalAmountNgn", o.currency,
+      o.payment_status as "paymentStatus", o.payment_reference as "paymentReference", o.payment_provider as "paymentProvider",
+      o.order_status as "orderStatus", o.agreed_deadline as "agreedDeadline", o.deadline_timezone as "deadlineTimezone",
+      o.deliverables, o.created_at as "createdAt", o.updated_at as "updatedAt",
+      s.tagline as "serviceTagline", s.category as "serviceCategory", s.turnaround_days as "turnaroundDays"
+    FROM service_orders o
+    LEFT JOIN music_services s ON o.service_slug = s.slug
+    WHERE o.order_number = ${orderNumber} OR o.id::text = ${orderNumber}
+  `
+  if (rows.length === 0) return c.json({ error: 'Order not found' }, 404)
+  const o = rows[0]
+
+  return c.json({
+    orderNumber: o.orderNumber,
+    serviceSlug: o.serviceSlug,
+    serviceTitle: o.serviceTitle,
+    serviceTagline: o.serviceTagline,
+    serviceCategory: o.serviceCategory,
+    customerName: o.customerName,
+    customerEmail: o.customerEmail,
+    configuration: o.configuration,
+    clientFilesCount: Array.isArray(o.clientFiles) ? o.clientFiles.length : 0,
+    totalAmountNgn: o.totalAmountNgn ? Number(o.totalAmountNgn) : null,
+    currency: o.currency || 'NGN',
+    paymentStatus: o.paymentStatus,
+    orderStatus: o.orderStatus,
+    agreedDeadline: o.agreedDeadline,
+    deadlineTimezone: o.deadlineTimezone || 'WAT',
+    deliverables: (o.orderStatus === 'DELIVERED' || o.orderStatus === 'COMPLETED') ? o.deliverables : [],
+    createdAt: o.createdAt,
+    updatedAt: o.updatedAt
+  })
+})
+
+// Initialize payment for service order
+app.post('/api/services/orders/:orderNumber/payment', async (c) => {
+  const sql = c.get('sql')
+  const orderNumber = String(c.req.param('orderNumber') || '').trim().toUpperCase()
+
+  const rows = await sql`
+    SELECT id, order_number, service_title, customer_name, customer_email, total_amount_ngn, currency, order_status, payment_status
+    FROM service_orders
+    WHERE order_number = ${orderNumber} OR id::text = ${orderNumber}
+  `
+  if (rows.length === 0) return c.json({ error: 'Order not found' }, 404)
+  const order = rows[0]
+
+  if (!order.total_amount_ngn || Number(order.total_amount_ngn) <= 0) {
+    return c.json({
+      error: 'Order price is not yet defined or requires creator review',
+      message: 'The creator is reviewing your project details. You will receive an invoice once confirmed.'
+    }, 400)
+  }
+
+  const amountKobo = Math.round(Number(order.total_amount_ngn) * 100)
+  const reference = `PAY-${order.order_number}-${Date.now()}`
+
+  if (c.env?.PAYSTACK_SECRET_KEY && c.env.PAYSTACK_SECRET_KEY.startsWith('sk_')) {
+    try {
+      const siteOrigin = c.env?.PUBLIC_ORIGIN || 'https://silachomka.vercel.app'
+      const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${c.env.PAYSTACK_SECRET_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: order.customer_email,
+          amount: amountKobo,
+          reference,
+          callback_url: `${siteOrigin}/services/order/${order.order_number}?paid=true`,
+          metadata: {
+            order_number: order.order_number,
+            service_title: order.service_title,
+            customer_name: order.customer_name
+          }
+        })
+      })
+      const paystackData = await paystackRes.json()
+      if (paystackData.status && paystackData.data?.authorization_url) {
+        await sql`
+          UPDATE service_orders
+          SET payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
+          WHERE id = ${order.id}
+        `
+        return c.json({
+          success: true,
+          provider: 'PAYSTACK',
+          authorizationUrl: paystackData.data.authorization_url,
+          accessCode: paystackData.data.access_code,
+          reference
+        })
+      }
+    } catch (e) {
+      console.warn('Paystack initialization fallback:', e.message)
+    }
+  }
+
+  await sql`
+    UPDATE service_orders
+    SET payment_reference = ${reference}, updated_at = NOW()
+    WHERE id = ${order.id}
+  `
+  return c.json({
+    success: true,
+    provider: 'DIRECT',
+    reference,
+    message: 'Payment reference created. Awaiting transfer or card confirmation.',
+    amountNgn: Number(order.total_amount_ngn)
+  })
+})
+
+// ------------------------------------------
 // Dynamic Social Crawler Share Metadata (/api/share/:type/:slug)
 // Ensures newly created beats, future releases & gallery posts immediately render accurate Open Graph / Twitter Cards
 // ------------------------------------------
@@ -928,8 +1255,8 @@ function escapeHtmlAttr(val) {
     .replace(/>/g, '&gt;')
 }
 
-function resolvePublicMediaUrl(pathOrUrl, workerOrigin, siteOrigin) {
-  if (!pathOrUrl) return `${siteOrigin}/media/gallery/post2_1.jpg`
+function resolvePublicMediaUrl(pathOrUrl, workerOrigin, siteOrigin, fallbackUrl = null) {
+  if (!pathOrUrl) return fallbackUrl || `${siteOrigin}/beats-image.png`
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl
   if (pathOrUrl.startsWith('/api/')) return `${workerOrigin}${pathOrUrl}`
   const clean = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`
@@ -943,7 +1270,7 @@ function buildShareHtml({ title, description, url, image, type = 'website', audi
   const safeImg = escapeHtmlAttr(image)
   const safeType = escapeHtmlAttr(type)
   const audioMeta = audio
-    ? `\n    <meta property="og:audio" content="${escapeHtmlAttr(audio)}" />\n    <meta property="og:audio:type" content="audio/mpeg" />`
+    ? `\n    <meta property="og:audio" content="${escapeHtmlAttr(audio)}" />\n    <meta property="og:audio:secure_url" content="${escapeHtmlAttr(audio)}" />\n    <meta property="og:audio:type" content="audio/mpeg" />\n    <meta name="twitter:player:stream" content="${escapeHtmlAttr(audio)}" />\n    <meta name="twitter:player:stream:content_type" content="audio/mpeg" />`
     : ''
 
   return `<!doctype html>
@@ -961,8 +1288,12 @@ function buildShareHtml({ title, description, url, image, type = 'website', audi
     <meta property="og:url" content="${safeUrl}" />
     <meta property="og:image" content="${safeImg}" />
     <meta property="og:image:secure_url" content="${safeImg}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="${safeTitle}" />${audioMeta}
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@silachomka" />
+    <meta name="twitter:creator" content="@silachomka" />
     <meta name="twitter:title" content="${safeTitle}" />
     <meta name="twitter:description" content="${safeDesc}" />
     <meta name="twitter:image" content="${safeImg}" />
@@ -981,7 +1312,8 @@ function buildShareHtml({ title, description, url, image, type = 'website', audi
 app.get('/api/share/:type/:slug', async (c) => {
   const sql = c.get('sql')
   const shareType = c.req.param('type')
-  const slug = c.req.param('slug')
+  const rawSlug = String(c.req.param('slug') || '').trim()
+  const cleanSlug = rawSlug.replace(/\/+$/, '')
   const siteOrigin = c.env?.PUBLIC_ORIGIN || 'https://silachomka.vercel.app'
   const workerOrigin = new URL(c.req.url).origin
 
@@ -997,7 +1329,7 @@ app.get('/api/share/:type/:slug', async (c) => {
       FROM beats b
       LEFT JOIN media_assets img ON b.image_asset_id = img.id
       LEFT JOIN media_assets aud ON b.audio_asset_id = aud.id
-      WHERE b.slug = ${slug} AND b.deleted_at IS NULL
+      WHERE (b.slug = ${cleanSlug} OR b.id::text = ${cleanSlug}) AND b.deleted_at IS NULL
         AND (b.status = 'PUBLISHED' OR (b.status = 'SCHEDULED' AND b.scheduled_at <= NOW()))
     `
     if (rows.length > 0) {
@@ -1007,11 +1339,12 @@ app.get('/api/share/:type/:slug', async (c) => {
       const desc = b.description
         ? `${b.title} (${metaParts}) — ${b.description}`
         : `Listen and license "${b.title}" (${metaParts}) produced by ${b.producer || 'silachomka'} at Chomka Music Studio.`
+      const fallbackImg = `${siteOrigin}/beats/${b.slug}.jpg`
       const html = buildShareHtml({
         title: `${b.title} — Beat by ${b.producer || 'silachomka'} | silachomka`,
         description: desc,
         url: `${siteOrigin}/beats/${b.slug}`,
-        image: resolvePublicMediaUrl(b.image, workerOrigin, siteOrigin),
+        image: resolvePublicMediaUrl(b.image, workerOrigin, siteOrigin, fallbackImg),
         type: 'music.song',
         audio: b.audio ? resolvePublicMediaUrl(b.audio, workerOrigin, siteOrigin) : null
       })
@@ -1027,7 +1360,7 @@ app.get('/api/share/:type/:slug', async (c) => {
                   ELSE NULL END as cover
       FROM releases r
       LEFT JOIN media_assets m ON r.cover_asset_id = m.id
-      WHERE (r.slug = ${slug} OR COALESCE(r.previous_slugs, '[]'::jsonb) @> to_jsonb(${slug}::text))
+      WHERE (r.slug = ${cleanSlug} OR r.id::text = ${cleanSlug} OR COALESCE(r.previous_slugs, '[]'::jsonb) @> to_jsonb(${cleanSlug}::text))
         AND r.deleted_at IS NULL
         AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
     `
@@ -1046,11 +1379,12 @@ app.get('/api/share/:type/:slug', async (c) => {
         ? ` ${r.description}`
         : ''
       const desc = `${statusLead}${customNote}`.trim()
+      const fallbackCover = `${siteOrigin}/covers/${r.slug}.jpg`
       const html = buildShareHtml({
         title: `${r.title} — ${r.primary_artist || 'silachomka'} | silachomka`,
         description: desc,
         url: `${siteOrigin}/release/${r.slug}`,
-        image: resolvePublicMediaUrl(r.cover, workerOrigin, siteOrigin),
+        image: resolvePublicMediaUrl(r.cover, workerOrigin, siteOrigin, fallbackCover),
         type: 'music.album'
       })
       return c.html(html)
@@ -1066,7 +1400,7 @@ app.get('/api/share/:type/:slug', async (c) => {
              m.mime_type as "mimeType"
       FROM gallery_posts g
       LEFT JOIN media_assets m ON g.primary_asset_id = m.id
-      WHERE g.slug = ${slug} AND g.deleted_at IS NULL
+      WHERE (g.slug = ${cleanSlug} OR g.id::text = ${cleanSlug}) AND g.deleted_at IS NULL
         AND (g.status = 'PUBLISHED' OR (g.status = 'SCHEDULED' AND g.scheduled_at <= NOW()))
     `
     if (rows.length > 0) {
@@ -1079,6 +1413,26 @@ app.get('/api/share/:type/:slug', async (c) => {
         url: `${siteOrigin}/gallery/${g.slug}`,
         image: resolvePublicMediaUrl(imagePath, workerOrigin, siteOrigin),
         type: 'article'
+      })
+      return c.html(html)
+    }
+  }
+
+  if (shareType === 'services' || shareType === 'service') {
+    const rows = await sql`
+      SELECT title, tagline, description, category, base_price_ngn
+      FROM music_services
+      WHERE slug = ${cleanSlug} AND is_active = true
+    `
+    if (rows.length > 0) {
+      const s = rows[0]
+      const desc = s.tagline || s.description || 'Professional music production and studio services by silachomka.'
+      const html = buildShareHtml({
+        title: `${s.title} — Music Services | silachomka`,
+        description: desc,
+        url: `${siteOrigin}/services`,
+        image: `${siteOrigin}/beats-image.png`,
+        type: 'website'
       })
       return c.html(html)
     }

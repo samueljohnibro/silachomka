@@ -38,6 +38,28 @@
       "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/share/gallery/:id"
     },
     {
+      "source": "/services",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Twitterbot|WhatsApp|Slackbot|Discordbot|TelegramBot|LinkedInBot|Applebot|Iframely|MetaInspector|SkypeUriPreview|redditbot|vkShare).*"
+        }
+      ],
+      "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/share/services/all"
+    },
+    {
+      "source": "/services/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Twitterbot|WhatsApp|Slackbot|Discordbot|TelegramBot|LinkedInBot|Applebot|Iframely|MetaInspector|SkypeUriPreview|redditbot|vkShare).*"
+        }
+      ],
+      "destination": "https://silachomka-api.samueljohnibrotech.workers.dev/api/share/services/:slug"
+    },
+    {
       "source": "/beats",
       "destination": "/beats/index.html"
     },

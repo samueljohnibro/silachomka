@@ -1492,3 +1492,122 @@ adminApp.get('/subscriber-notifications', async (c) => {
     return c.json({ error: err.message }, 500)
   }
 })
+
+// ------------------------------------------
+// Admin Music Services & Orders Management
+// ------------------------------------------
+adminApp.get('/services', async (c) => {
+  const sql = c.get('sql')
+  const rows = await sql`
+    SELECT id, slug, title, tagline, description, category, base_price_ngn as "basePriceNgn",
+           is_hourly as "isHourly", hourly_rate_ngn as "hourlyRateNgn", deliverables,
+           turnaround_days as "turnaroundDays", sort_order as "sortOrder", is_active as "isActive",
+           created_at as "createdAt", updated_at as "updatedAt"
+    FROM music_services
+    ORDER BY sort_order ASC, created_at ASC
+  `
+  return c.json(rows)
+})
+
+adminApp.put('/services/:id', async (c) => {
+  const sql = c.get('sql')
+  const id = c.req.param('id')
+  const body = await c.req.json().catch(() => ({}))
+
+  const basePrice = body.basePriceNgn !== undefined ? (body.basePriceNgn === null || body.basePriceNgn === '' ? null : Number(body.basePriceNgn)) : undefined
+  const hourlyRate = body.hourlyRateNgn !== undefined ? (body.hourlyRateNgn === null || body.hourlyRateNgn === '' ? null : Number(body.hourlyRateNgn)) : undefined
+
+  const updated = await sql`
+    UPDATE music_services
+    SET 
+      title = COALESCE(${body.title}, title),
+      tagline = COALESCE(${body.tagline}, tagline),
+      description = COALESCE(${body.description}, description),
+      category = COALESCE(${body.category}, category),
+      base_price_ngn = CASE WHEN ${basePrice !== undefined} THEN ${basePrice} ELSE base_price_ngn END,
+      is_hourly = COALESCE(${body.isHourly}, is_hourly),
+      hourly_rate_ngn = CASE WHEN ${hourlyRate !== undefined} THEN ${hourlyRate} ELSE hourly_rate_ngn END,
+      deliverables = CASE WHEN ${body.deliverables !== undefined} THEN ${JSON.stringify(body.deliverables)}::jsonb ELSE deliverables END,
+      turnaround_days = COALESCE(${body.turnaroundDays}, turnaround_days),
+      is_active = COALESCE(${body.isActive}, is_active),
+      updated_at = NOW()
+    WHERE id = ${id}
+    RETURNING id, slug, title, base_price_ngn as "basePriceNgn", is_active as "isActive"
+  `
+  if (updated.length === 0) return c.json({ error: 'Service not found' }, 404)
+  return c.json(updated[0])
+})
+
+adminApp.get('/service-orders', async (c) => {
+  const sql = c.get('sql')
+  const status = c.req.query('status')
+  const service = c.req.query('service')
+  const q = c.req.query('q')
+
+  const rows = await sql`
+    SELECT 
+      o.id, o.order_number as "orderNumber", o.service_slug as "serviceSlug", o.service_title as "serviceTitle",
+      o.customer_name as "customerName", o.customer_email as "customerEmail", o.customer_phone as "customerPhone",
+      o.configuration, o.client_files as "clientFiles", o.total_amount_ngn as "totalAmountNgn", o.currency,
+      o.payment_status as "paymentStatus", o.payment_reference as "paymentReference", o.payment_provider as "paymentProvider",
+      o.order_status as "orderStatus", o.agreed_deadline as "agreedDeadline", o.deadline_timezone as "deadlineTimezone",
+      o.deliverables, o.admin_notes as "adminNotes", o.created_at as "createdAt", o.updated_at as "updatedAt"
+    FROM service_orders o
+    WHERE (${!status} OR o.order_status = ${status})
+      AND (${!service} OR o.service_slug = ${service})
+      AND (${!q} OR (
+        o.order_number ILIKE ${'%' + q + '%'} OR 
+        o.customer_name ILIKE ${'%' + q + '%'} OR 
+        o.customer_email ILIKE ${'%' + q + '%'}
+      ))
+    ORDER BY o.created_at DESC
+  `
+  return c.json(rows)
+})
+
+adminApp.get('/service-orders/:id', async (c) => {
+  const sql = c.get('sql')
+  const id = c.req.param('id')
+  const rows = await sql`
+    SELECT 
+      o.id, o.order_number as "orderNumber", o.service_slug as "serviceSlug", o.service_title as "serviceTitle",
+      o.customer_name as "customerName", o.customer_email as "customerEmail", o.customer_phone as "customerPhone",
+      o.configuration, o.client_files as "clientFiles", o.total_amount_ngn as "totalAmountNgn", o.currency,
+      o.payment_status as "paymentStatus", o.payment_reference as "paymentReference", o.payment_provider as "paymentProvider",
+      o.order_status as "orderStatus", o.agreed_deadline as "agreedDeadline", o.deadline_timezone as "deadlineTimezone",
+      o.deliverables, o.admin_notes as "adminNotes", o.created_at as "createdAt", o.updated_at as "updatedAt"
+    FROM service_orders o
+    WHERE o.id::text = ${id} OR o.order_number = ${id}
+  `
+  if (rows.length === 0) return c.json({ error: 'Order not found' }, 404)
+  return c.json(rows[0])
+})
+
+adminApp.put('/service-orders/:id', async (c) => {
+  const sql = c.get('sql')
+  const id = c.req.param('id')
+  const body = await c.req.json().catch(() => ({}))
+
+  const totalNgn = body.totalAmountNgn !== undefined ? (body.totalAmountNgn === null ? null : Number(body.totalAmountNgn)) : undefined
+  const deadline = body.agreedDeadline !== undefined ? (body.agreedDeadline ? new Date(body.agreedDeadline) : null) : undefined
+
+  const updated = await sql`
+    UPDATE service_orders
+    SET 
+      order_status = COALESCE(${body.orderStatus}, order_status),
+      payment_status = COALESCE(${body.paymentStatus}, payment_status),
+      total_amount_ngn = CASE WHEN ${totalNgn !== undefined} THEN ${totalNgn} ELSE total_amount_ngn END,
+      agreed_deadline = CASE WHEN ${deadline !== undefined} THEN ${deadline} ELSE agreed_deadline END,
+      deadline_timezone = COALESCE(${body.deadlineTimezone}, deadline_timezone),
+      admin_notes = CASE WHEN ${body.adminNotes !== undefined} THEN ${body.adminNotes} ELSE admin_notes END,
+      deliverables = CASE WHEN ${body.deliverables !== undefined} THEN ${JSON.stringify(body.deliverables)}::jsonb ELSE deliverables END,
+      updated_at = NOW()
+    WHERE id::text = ${id} OR order_number = ${id}
+    RETURNING 
+      id, order_number as "orderNumber", order_status as "orderStatus", payment_status as "paymentStatus",
+      total_amount_ngn as "totalAmountNgn", agreed_deadline as "agreedDeadline", deadline_timezone as "deadlineTimezone",
+      deliverables, admin_notes as "adminNotes", updated_at as "updatedAt"
+  `
+  if (updated.length === 0) return c.json({ error: 'Order not found' }, 404)
+  return c.json(updated[0])
+})

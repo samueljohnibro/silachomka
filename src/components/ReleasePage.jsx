@@ -258,10 +258,6 @@ export default function ReleasePage({ release: propRelease }) {
 
   useEffect(() => {
     if (!release?.slug) return;
-    if (!isFuture && !isRecentRelease) {
-      setShowEntrySplash(false);
-      return;
-    }
     const sessionKey = `chomka_release_entry_splash_${release.slug}`;
     try {
       if (sessionStorage.getItem(sessionKey) === "shown") {
@@ -275,7 +271,7 @@ export default function ReleasePage({ release: propRelease }) {
       setShowEntrySplash(false);
     }, 2600);
     return () => clearTimeout(timer);
-  }, [release?.slug, isFuture, isRecentRelease]);
+  }, [release?.slug]);
 
   // Session-based dismissal for the persistent "OUT NOW" badge bar
   const [showOutNowCelebration, setShowOutNowCelebration] = useState(false);
@@ -448,7 +444,7 @@ export default function ReleasePage({ release: propRelease }) {
           style={{ pointerEvents: "none" }}
         >
           <div className="release-entry-splash-card">
-            <span className="release-entry-splash-kicker">
+            <span className="release-entry-splash-badge">
               {isFuture ? "COMING SOON" : "OUT NOW"}
             </span>
             <span className="release-entry-splash-title">{release.title}</span>

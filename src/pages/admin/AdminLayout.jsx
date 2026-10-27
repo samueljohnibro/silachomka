@@ -6,6 +6,7 @@ import './admin.css';
 const AdminSidebar = ({ mobileOpen, setMobileOpen }) => {
   const navItems = [
     { name: 'Dashboard', path: '/admin', exact: true },
+    { name: 'Services & Orders', path: '/admin/services' },
     { name: 'Gallery', path: '/admin/gallery' },
     { name: 'Music', path: '/admin/music' },
     { name: 'Tracks', path: '/admin/tracks' },
@@ -56,6 +57,7 @@ const AdminHeader = ({ user, logout, toggleMobile }) => {
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/admin') return 'Dashboard';
+    if (path.includes('/services')) return 'Services & Studio Orders';
     if (path.includes('/gallery')) return 'Gallery Management';
     if (path.includes('/music')) return 'Music Management';
     if (path.includes('/tracks')) return 'Tracks Management';

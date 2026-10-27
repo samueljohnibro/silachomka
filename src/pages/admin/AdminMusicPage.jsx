@@ -1145,7 +1145,7 @@ const AdminMusicPage = () => {
                         className="studio-input"
                         value={newTrackCreditRole}
                         onChange={(e) => setNewTrackCreditRole(e.target.value)}
-                        style={{ fontSize: 12, height: 34, width: 110 }}
+                        style={{ fontSize: 12, height: 34, minWidth: 135, width: "auto" }}
                       >
                         <option value="FEATURING">FEATURING</option>
                         <option value="PRODUCER">PRODUCER</option>

@@ -40,6 +40,7 @@ import AdminMerchandisePage from "./pages/admin/AdminMerchandisePage";
 import AdminVideosPage from "./pages/admin/AdminVideosPage";
 import AdminRecycleBinPage from "./pages/admin/AdminRecycleBinPage";
 import AdminSubscribersPage from "./pages/admin/AdminSubscribersPage";
+import AdminServicesPage from "./pages/admin/AdminServicesPage";
 import SubscriberNewsletterBox from "./components/SubscriberNewsletterBox";
 
 import MediaSlideshow from "./components/MediaSlideshow";
@@ -51,6 +52,8 @@ import VideosSection from "./components/VideosSection";
 import BeatsPage from "./pages/BeatsPage";
 import BeatDetailPage from "./pages/BeatDetailPage";
 import StudioPublisherPage from "./pages/StudioPublisherPage";
+import ServicesPage from "./pages/ServicesPage";
+import ServiceOrderDetailPage from "./pages/ServiceOrderDetailPage";
 import GalleryPostPage from "./pages/GalleryPostPage";
 import SeoHead from "./components/SeoHead";
 import { formatGalleryDate } from "./utils/dateFormatter";
@@ -136,6 +139,7 @@ function SiteHeader({
   beatsPage = false,
 }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen((prev) => !prev);
@@ -185,10 +189,16 @@ function SiteHeader({
 
             <Link
               to="/beats"
-              className="is-active"
-              aria-current="page"
+              className={location.pathname.startsWith("/beats") ? "is-active" : ""}
             >
               Beats
+            </Link>
+
+            <Link
+              to="/services"
+              className={location.pathname.startsWith("/services") ? "is-active" : ""}
+            >
+              Services
             </Link>
           </nav>
 
@@ -244,8 +254,12 @@ function SiteHeader({
               Connect
             </Link>
 
-            <Link to="/beats" onClick={closeMobileMenu} className="active">
+            <Link to="/beats" onClick={closeMobileMenu} className={location.pathname.startsWith("/beats") ? "active" : ""}>
               Beats
+            </Link>
+
+            <Link to="/services" onClick={closeMobileMenu} className={location.pathname.startsWith("/services") ? "active" : ""}>
+              Services
             </Link>
           </div>
 
@@ -297,6 +311,10 @@ function SiteHeader({
 
           <Link to="/beats">
             Beats
+          </Link>
+
+          <Link to="/services">
+            Services
           </Link>
         </nav>
 
@@ -354,6 +372,10 @@ function SiteHeader({
 
           <Link to="/beats" onClick={closeMobileMenu}>
             Beats
+          </Link>
+
+          <Link to="/services" onClick={closeMobileMenu}>
+            Services
           </Link>
         </div>
 
@@ -1806,6 +1828,38 @@ function StudioRoute() {
 }
 
 /* =========================================================
+   SERVICES ROUTE (/services)
+   ========================================================= */
+
+function ServicesRoute() {
+  return (
+    <>
+      <SiteHeader beatsPage />
+
+      <ServicesPage />
+
+      <SiteFooter />
+    </>
+  );
+}
+
+/* =========================================================
+   SERVICE ORDER DETAIL ROUTE (/services/order/:orderNumber)
+   ========================================================= */
+
+function ServiceOrderDetailRoute() {
+  return (
+    <>
+      <SiteHeader beatsPage />
+
+      <ServiceOrderDetailPage />
+
+      <SiteFooter />
+    </>
+  );
+}
+
+/* =========================================================
    GALLERY POST ROUTE (/gallery/:id)
    ========================================================= */
 
@@ -1981,6 +2035,27 @@ function App() {
               <StudioRoute />
             }
           />
+
+          <Route
+            path="/services"
+            element={
+              <ServicesRoute />
+            }
+          />
+
+          <Route
+            path="/services/order/:orderNumber"
+            element={
+              <ServiceOrderDetailRoute />
+            }
+          />
+
+          <Route
+            path="/services/:slug"
+            element={
+              <ServicesRoute />
+            }
+          />
   
           <Route
             path="/gallery/:id"
@@ -2048,6 +2123,7 @@ function App() {
             }
           >
             <Route index element={<AdminDashboard />} />
+            <Route path="services" element={<AdminServicesPage />} />
             <Route path="gallery" element={<AdminGalleryPage />} />
             <Route path="music" element={<AdminMusicPage />} />
             <Route path="tracks" element={<AdminTracksPage />} />

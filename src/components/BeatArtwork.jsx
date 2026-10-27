@@ -155,8 +155,7 @@ export default function BeatArtwork({
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            opacity: gifLoaded && !gifError ? 0 : 1,
-            transition: 'opacity 0.35s ease',
+            zIndex: 1,
             pointerEvents: 'none',
             ...style,
           }}
