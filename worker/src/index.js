@@ -854,6 +854,8 @@ app.get('/api/gallery', async (c) => {
       g.legacy_link as link,
       g.external_social_url as "externalSocialUrl",
       g.external_social_platform as "externalSocialPlatform",
+      g.tags as tags,
+      (g.tags->'assignedSocials') as "assignedSocials",
       COALESCE(
         (
           SELECT json_agg(json_build_object(
@@ -899,6 +901,8 @@ app.get('/api/gallery/:slug', async (c) => {
       g.legacy_link as link,
       g.external_social_url as "externalSocialUrl",
       g.external_social_platform as "externalSocialPlatform",
+      g.tags as tags,
+      (g.tags->'assignedSocials') as "assignedSocials",
       COALESCE(
         (
           SELECT json_agg(json_build_object(
@@ -1092,6 +1096,29 @@ app.post('/api/services/orders', async (c) => {
     WHERE is_active = true
   `
   const serviceMap = new Map(dbServices.map(s => [s.slug, s]))
+
+  // Req #4: Authoritative File Upload Requirement Validation
+  const REQUIRED_UPLOAD_SLUGS = new Set([
+    'beat-mixing',
+    'vocal-mixing',
+    'full-song-mastering',
+    'recording-mixing-client-beat',
+    'feature',
+    'instrumentalist-collaboration',
+  ])
+
+  const missingUploadServices = rawServices
+    .map(s => String(s.slug || s.serviceSlug || '').trim().toLowerCase())
+    .filter(slug => REQUIRED_UPLOAD_SLUGS.has(slug))
+
+  if (missingUploadServices.length > 0 && (!clientFiles || clientFiles.length === 0)) {
+    const titles = missingUploadServices
+      .map(slug => serviceMap.get(slug)?.title || slug)
+      .join(', ')
+    return c.json({
+      error: `Audio file upload is required for: ${titles}. Please attach your audio stems or reference demo before placing your order.`
+    }, 400)
+  }
 
   const processedItems = []
   let hasPriceUponRequest = false

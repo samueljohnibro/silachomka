@@ -173,9 +173,9 @@ export function useDraftAutosave({
     if (typeof restoreCallback === 'function') {
       restoreCallback(recoverableDraft.data);
     }
-    try {
-      initialJsonRef.current = JSON.stringify(recoverableDraft.data);
-    } catch {}
+    // Req #16: Restoring a draft does NOT mark it as saved!
+    // It remains dirty and active until an explicit Save or Discard.
+    isDirtyRef.current = true;
     setRecoverableDraft(null);
     setAutosaveStatus('RESTORED');
     setLastSavedAt(new Date(recoverableDraft.savedAt));
@@ -313,16 +313,18 @@ export function DraftAutosaveBanner({
   const statusText =
     autosaveStatus === 'SAVING'
       ? 'Autosaving draft...'
+      : autosaveStatus === 'RESTORED'
+      ? `Draft restored (Unsaved changes)`
       : autosaveStatus === 'SAVED' || formattedTime
       ? `Draft autosaved at ${formattedTime}`
-      : autosaveStatus === 'RESTORED'
-      ? `Draft restored (${formattedTime})`
       : 'Draft autosave ready';
 
   const dotColor =
     autosaveStatus === 'SAVING'
       ? '#eab308'
-      : autosaveStatus === 'SAVED' || autosaveStatus === 'RESTORED' || formattedTime
+      : autosaveStatus === 'RESTORED'
+      ? '#dfc27d'
+      : autosaveStatus === 'SAVED' || formattedTime
       ? '#4ade80'
       : 'rgba(255,255,255,0.2)';
 

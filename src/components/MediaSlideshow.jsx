@@ -145,48 +145,32 @@ export default function MediaSlideshow({
                 muted
                 loop
                 playsInline
+                ref={(el) => {
+                  if (el) {
+                    el.muted = true;
+                    el.play().catch(() => {});
+                  }
+                }}
+                onLoadedMetadata={(e) => {
+                  if (e.target && e.target.currentTime === 0) {
+                    try {
+                      e.target.currentTime = 0.1;
+                    } catch {}
+                  }
+                }}
                 className={`hero-slideshow-media ${activeClasses}`}
                 style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
                   objectFit: "cover",
-                  opacity: 1,
                   filter: "brightness(0.72) contrast(1.08)",
                 }}
               />
-            ) : (item.beat || item.poster) && /\.gif(\?.*)?$/i.test(src) ? (
-              <div
-                className={`hero-slideshow-media ${activeClasses}`}
-                style={{
-                  position: "absolute",
-                  inset: "-10%",
-                  width: "120%",
-                  height: "120%",
-                  filter: "brightness(0.75) contrast(1.08)",
-                }}
-              >
-                <BeatArtwork
-                  image={item.poster || item.beat?.image}
-                  video={src}
-                  videoMimeType={item.beat?.videoMimeType || "image/gif"}
-                  alt={alt}
-                  lazy={false}
-                />
-              </div>
             ) : (
               <img
                 src={src}
                 alt={alt}
                 className={`hero-slideshow-media ${activeClasses}`}
                 style={{
-                  position: "absolute",
-                  inset: "-10%",
-                  width: "120%",
-                  height: "120%",
                   objectFit: "cover",
-                  opacity: 1,
                   filter: "brightness(0.75) contrast(1.08)",
                 }}
               />

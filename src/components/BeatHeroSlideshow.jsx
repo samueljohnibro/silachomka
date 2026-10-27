@@ -2,10 +2,13 @@ import { useMemo } from "react";
 import MediaSlideshow from "./MediaSlideshow";
 
 /**
- * BeatHeroSlideshow
+ * BeatHeroSlideshow (Stage 32 — Req #18 & #20)
  *
- * Specialized wrapper around the generic MediaSlideshow engine.
- * Preserves JPG poster + GIF progressive loading for beat hero visuals.
+ * Strictly GIF-only hero slideshow for beats:
+ * - Only beats with authentic animated GIFs are included in the hero rotation.
+ * - Ordinary static JPG/PNG images are strictly excluded.
+ * - Renders animated GIFs directly without static poster cover-ups so animations
+ *   play continuously and vividly on both desktop and mobile.
  */
 export default function BeatHeroSlideshow({ beats = [] }) {
   const media = useMemo(() => {
@@ -21,32 +24,43 @@ export default function BeatHeroSlideshow({ beats = [] }) {
           return null;
         }
 
-        const video = beat.video || beat.image;
+        // Req #18: Strictly GIF media only, never static JPG/PNG fallbacks
+        const videoSrc = typeof beat.video === "string" ? beat.video.trim() : "";
+        const isGif =
+          Boolean(videoSrc) &&
+          (/\.gif(\?.*)?$/i.test(videoSrc) || beat.videoMimeType === "image/gif");
 
-        if (typeof video !== "string" || !video.trim()) {
+        if (!isGif) {
           return null;
         }
 
-        const src = video.trim();
-
-        if (seen.has(src)) {
+        if (seen.has(videoSrc)) {
           return null;
         }
 
-        seen.add(src);
-
-        const isVid =
-          (beat.videoMimeType && beat.videoMimeType.startsWith("video/")) ||
-          /\.(mp4|webm|mov)(\?.*)?$/i.test(src);
+        seen.add(videoSrc);
 
         return {
-          type: isVid ? "video" : "image",
-          src,
-          poster: beat.image || null,
+          id: `beat-gif-${beat.id || beat.slug}`,
+          type: "image",
+          src: videoSrc,
+          title: beat.title || "chomkaMUSIC™ Beat",
+          poster: null, // Strictly no static poster overlay
           beat,
         };
       })
       .filter(Boolean);
+
+    // If no GIF beats were found in the database, fall back to the authorized default GIF
+    if (mediaList.length === 0) {
+      mediaList.push({
+        id: "beat-gif-default",
+        type: "image",
+        src: "/beats/shine.gif",
+        title: "chomkaMUSIC™ Beats",
+        poster: null,
+      });
+    }
 
     // Pseudorandom shuffle
     for (let i = mediaList.length - 1; i > 0; i--) {

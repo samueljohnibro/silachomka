@@ -147,6 +147,8 @@ function renderSocialMetadata({
     <meta property="og:description" content="${escapedDescription}" />
     <meta property="og:image" content="${escapedImageUrl}" />
     <meta property="og:image:secure_url" content="${escapedImageUrl}" />${imageTypeTag}
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="${escapedImageAlt}" />${audioTags}
 
     <meta name="twitter:card" content="summary_large_image" />

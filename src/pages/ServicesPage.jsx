@@ -114,13 +114,25 @@ export default function ServicesPage() {
   const [isLoadingServices, setIsLoadingServices] = useState(true);
 
   // Conversational Concierge Steps:
-  // 1: 'intent'     - Opening greeting & multi-service selection
+  // 1: 'intent'     - Opening greeting & expandable service selection
   // 2: 'confirm'    - "Nice. I've got that. Anything else to include?"
-  // 3: 'details'    - Service-specific tailored questions
+  // 3: 'details'    - Service-specific tailored questions & stems upload
   // 4: 'client'     - Customer contact info & overall brief
   // 5: 'summary'    - Session summary & review before booking
   // 6: 'success'    - Order confirmed, copyable reference & payment
   const [step, setStep] = useState("intent");
+
+  // Expandable dropdown state for conversational intent selection (Req #1)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  // Unfinished booking draft persistence (Req #5)
+  const [hasPendingDraft, setHasPendingDraft] = useState(false);
+  const [draftToRestore, setDraftToRestore] = useState(null);
+
+  // Permanent order tracking lookup (Req #6)
+  const [showTrackingLookup, setShowTrackingLookup] = useState(false);
+  const [trackOrderInput, setTrackOrderInput] = useState("");
+  const [recentOrders, setRecentOrders] = useState([]);
 
   // Multi-service selection: array of service slugs
   const [selectedSlugs, setSelectedSlugs] = useState([]);
@@ -146,6 +158,83 @@ export default function ServicesPage() {
   const [hasCopiedRef, setHasCopiedRef] = useState(false);
   const [isInitializingPayment, setIsInitializingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
+
+  // Auto-scroll to top on step transitions (Req #3)
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, [step]);
+
+  // Load draft & recent orders on mount (Req #5 & Req #6)
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem("chomka_services_booking_draft_v1");
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed && Array.isArray(parsed.selectedSlugs) && parsed.selectedSlugs.length > 0) {
+          setDraftToRestore(parsed);
+          setHasPendingDraft(true);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to check services draft:", e);
+    }
+
+    try {
+      const rec = JSON.parse(localStorage.getItem("chomka_recent_service_orders") || "[]");
+      setRecentOrders(Array.isArray(rec) ? rec : []);
+    } catch (e) {}
+  }, []);
+
+  // Save in-progress booking to localStorage (Req #5)
+  useEffect(() => {
+    if (step === "success") return;
+    if (selectedSlugs.length === 0 && !customerName && !customerEmail) return;
+
+    const draft = {
+      selectedSlugs,
+      configurations,
+      customerName,
+      customerEmail,
+      customerPhone,
+      customerMessage,
+      clientFiles,
+      step,
+      updatedAt: Date.now(),
+    };
+    try {
+      localStorage.setItem("chomka_services_booking_draft_v1", JSON.stringify(draft));
+    } catch (e) {}
+  }, [selectedSlugs, configurations, customerName, customerEmail, customerPhone, customerMessage, clientFiles, step]);
+
+  const handleResumeDraft = () => {
+    if (!draftToRestore) return;
+    setSelectedSlugs(draftToRestore.selectedSlugs || []);
+    setConfigurations(draftToRestore.configurations || {});
+    setCustomerName(draftToRestore.customerName || "");
+    setCustomerEmail(draftToRestore.customerEmail || "");
+    setCustomerPhone(draftToRestore.customerPhone || "");
+    setCustomerMessage(draftToRestore.customerMessage || "");
+    setClientFiles(draftToRestore.clientFiles || []);
+    if (draftToRestore.step && draftToRestore.step !== "success") {
+      setStep(draftToRestore.step);
+    }
+    setHasPendingDraft(false);
+  };
+
+  const handleDiscardDraft = () => {
+    try {
+      localStorage.removeItem("chomka_services_booking_draft_v1");
+    } catch (e) {}
+    setDraftToRestore(null);
+    setHasPendingDraft(false);
+  };
+
+  const handleTrackOrderSubmit = (e) => {
+    e?.preventDefault();
+    const clean = trackOrderInput.trim();
+    if (!clean) return;
+    navigate(`/services/order/${encodeURIComponent(clean)}`);
+  };
 
   // Fetch live services from Worker API
   useEffect(() => {
@@ -245,6 +334,18 @@ export default function ServicesPage() {
 
   const sessionCart = selectedServices;
 
+  // Explicit upload requirement rule matrix (Req #4)
+  const REQUIRED_UPLOAD_SERVICES = [
+    "beat-mixing",
+    "vocal-mixing",
+    "full-song-mastering",
+    "recording-mixing-client-beat",
+  ];
+  const servicesRequiringFiles = useMemo(() => {
+    return selectedServices.filter((s) => REQUIRED_UPLOAD_SERVICES.includes(s.slug));
+  }, [selectedServices]);
+  const isUploadRequired = servicesRequiringFiles.length > 0;
+
   // Live Authoritative Calculation
   const { totalNgn, hasPriceUponRequest, itemizedPrices, maxTurnaroundDays } =
     useMemo(() => {
@@ -333,6 +434,12 @@ export default function ServicesPage() {
       setSubmitError("Please select at least one studio service.");
       return;
     }
+    if (isUploadRequired && clientFiles.length === 0) {
+      setSubmitError(
+        `Audio files or stems are required for: ${servicesRequiringFiles.map((s) => s.title).join(", ")}. Please attach your audio stems/mix before proceeding.`
+      );
+      return;
+    }
     if (!customerName.trim() || !customerEmail.trim()) {
       setSubmitError("Please provide your name and contact email.");
       return;
@@ -365,6 +472,28 @@ export default function ServicesPage() {
       }
       setConfirmedOrder(data.order);
       setStep("success");
+
+      // Clear draft upon successful booking (Req #5)
+      try {
+        localStorage.removeItem("chomka_services_booking_draft_v1");
+        setDraftToRestore(null);
+        setHasPendingDraft(false);
+      } catch (e) {}
+
+      // Save to permanent recent orders (Req #6)
+      try {
+        const orderNum = data.order.order_number || data.order.orderNumber;
+        const recent = JSON.parse(localStorage.getItem("chomka_recent_service_orders") || "[]");
+        const newEntry = {
+          orderNumber: orderNum,
+          createdAt: new Date().toISOString(),
+          totalAmountNgn: data.order.total_amount_ngn,
+          services: selectedServices.map((s) => s.title),
+        };
+        const updated = [newEntry, ...recent.filter((r) => r.orderNumber !== orderNum)].slice(0, 5);
+        localStorage.setItem("chomka_recent_service_orders", JSON.stringify(updated));
+        setRecentOrders(updated);
+      } catch (e) {}
     } catch (err) {
       setSubmitError(err.message || "Session reservation failed");
     } finally {
@@ -443,19 +572,175 @@ export default function ServicesPage() {
 
       <div style={{ maxWidth: "840px", margin: "0 auto" }}>
         {/* =========================================================
-            HEADER / BREADCRUMB INDICATOR
+            HEADER / TRACKING / BREADCRUMB INDICATOR
             ========================================================= */}
         <div style={{ marginBottom: "28px", textAlign: "left" }}>
-          <p
-            className="eyebrow"
+          <div
             style={{
-              letterSpacing: "0.22em",
-              color: "var(--gold)",
-              marginBottom: "8px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "12px",
+              flexWrap: "wrap",
+              gap: "10px",
             }}
           >
-            chomkaMUSIC™ STUDIO CONCIERGE
-          </p>
+            <p
+              className="eyebrow"
+              style={{
+                letterSpacing: "0.22em",
+                color: "var(--gold)",
+                margin: 0,
+              }}
+            >
+              chomkaMUSIC™ STUDIO CONCIERGE
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowTrackingLookup((prev) => !prev)}
+              style={{
+                background: "none",
+                border: "1px solid rgba(223, 194, 125, 0.35)",
+                borderRadius: "4px",
+                padding: "6px 14px",
+                color: "var(--gold)",
+                fontSize: "11px",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              {showTrackingLookup ? "✕ Close Tracking" : "🔍 Track Existing Booking"}
+            </button>
+          </div>
+
+          {/* Dedicated Order Tracking Lookup Box (Req #6) */}
+          {showTrackingLookup && (
+            <div
+              style={{
+                background: "rgba(10, 10, 16, 0.95)",
+                border: "1px solid rgba(223, 194, 125, 0.3)",
+                borderRadius: "8px",
+                padding: "18px 22px",
+                marginBottom: "20px",
+                animation: "fadeIn 0.2s ease-out",
+              }}
+            >
+              <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)", margin: "0 0 6px" }}>
+                Track Studio Session Order
+              </h3>
+              <p style={{ fontSize: "12px", color: "var(--muted)", margin: "0 0 14px", lineHeight: 1.5 }}>
+                Enter your permanent order reference (e.g. SC-SRV-2026-ABCD) to check status, files, and deliverables.
+              </p>
+              <form onSubmit={handleTrackOrderSubmit} style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  placeholder="e.g. SC-SRV-2026-..."
+                  value={trackOrderInput}
+                  onChange={(e) => setTrackOrderInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    minWidth: "220px",
+                    padding: "10px 14px",
+                    borderRadius: "4px",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    background: "rgba(5, 5, 8, 0.8)",
+                    color: "var(--text)",
+                    fontSize: "13px",
+                  }}
+                />
+                <button
+                  type="submit"
+                  className="primary-button"
+                  style={{ height: "40px", padding: "0 20px", fontSize: "12px", fontWeight: 700 }}
+                >
+                  Track Session →
+                </button>
+              </form>
+              {recentOrders.length > 0 && (
+                <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                  <span style={{ fontSize: "11px", color: "var(--muted)", display: "block", marginBottom: "8px", fontWeight: 600 }}>
+                    Recent Bookings on this device:
+                  </span>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {recentOrders.map((ro) => (
+                      <Link
+                        key={ro.orderNumber}
+                        to={`/services/order/${ro.orderNumber}`}
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: "var(--gold)",
+                          background: "rgba(223, 194, 125, 0.12)",
+                          padding: "4px 10px",
+                          borderRadius: "4px",
+                          textDecoration: "none",
+                          border: "1px solid rgba(223, 194, 125, 0.25)",
+                        }}
+                      >
+                        #{ro.orderNumber}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Pending Draft Resume / Start Fresh Banner (Req #5) */}
+          {hasPendingDraft && draftToRestore && step !== "success" && (
+            <div
+              style={{
+                background: "rgba(223, 194, 125, 0.08)",
+                border: "1px solid rgba(223, 194, 125, 0.35)",
+                borderRadius: "8px",
+                padding: "16px 20px",
+                marginBottom: "20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "12px",
+                animation: "fadeIn 0.2s ease-out",
+              }}
+            >
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>
+                  Resume your unfinished studio booking?
+                </p>
+                <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)" }}>
+                  You have an in-progress session with {draftToRestore.selectedSlugs?.length || 0} service(s) configured.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={handleResumeDraft}
+                  className="primary-button"
+                  style={{ height: "34px", padding: "0 18px", fontSize: "12px", fontWeight: 700 }}
+                >
+                  Resume Session
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  style={{
+                    background: "none",
+                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                    borderRadius: "4px",
+                    color: "var(--muted)",
+                    padding: "0 14px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Start Fresh
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Concierge Step Breadcrumb */}
           {step !== "success" && (
@@ -526,7 +811,8 @@ export default function ServicesPage() {
         </div>
 
         {/* =========================================================
-            STAGE 1: INTENT (Hey. What are we creating?)
+            STAGE 1: INTENT — CONVERSATIONAL SELECTION (Req #1 & #2)
+            "What are we creating?" + Expandable / Dropdown Selector
             ========================================================= */}
         {step === "intent" && (
           <section
@@ -540,7 +826,7 @@ export default function ServicesPage() {
               animation: "fadeIn 0.25s ease-out",
             }}
           >
-            <div style={{ marginBottom: "28px" }}>
+            <div style={{ marginBottom: "24px" }}>
               <h1
                 style={{
                   fontFamily: "var(--font-display)",
@@ -552,7 +838,7 @@ export default function ServicesPage() {
                   lineHeight: 1.2,
                 }}
               >
-                Hey. What are we creating?
+                What are we creating?
               </h1>
               <p
                 style={{
@@ -562,122 +848,292 @@ export default function ServicesPage() {
                   margin: 0,
                 }}
               >
-                Tell me what you're trying to get done and I'll help you put together the right studio session.
-              </p>
-              <p
-                style={{
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "var(--gold)",
-                  marginTop: "16px",
-                  marginBottom: 0,
-                }}
-              >
-                What are you looking to create?
+                Tell me what you're trying to get done and I'll help you assemble the right studio session.
               </p>
             </div>
 
-            {/* Selectable conversational service options */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-                marginBottom: "32px",
-              }}
-            >
-              {activeServiceList.map((svc) => {
-                const isSelected = selectedSlugs.includes(svc.slug);
-
-                return (
-                  <button
-                    key={svc.slug}
-                    type="button"
-                    onClick={() => toggleService(svc.slug)}
+            {/* Expandable / Dropdown Studio Service Selector Trigger (Req #1) */}
+            <div style={{ position: "relative", marginBottom: "24px" }}>
+              <button
+                type="button"
+                onClick={() => setIsDropdownOpen((prev) => !prev)}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "18px 22px",
+                  borderRadius: "10px",
+                  border: isDropdownOpen
+                    ? "1px solid var(--gold)"
+                    : "1px solid rgba(223, 194, 125, 0.35)",
+                  background: isDropdownOpen
+                    ? "rgba(223, 194, 125, 0.08)"
+                    : "rgba(5, 5, 8, 0.7)",
+                  color: "var(--text)",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  textAlign: "left",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ color: "var(--gold)", fontSize: "20px" }}>✦</span>
+                  <div>
+                    <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text)" }}>
+                      {selectedSlugs.length === 0
+                        ? "Choose Studio Services"
+                        : `${selectedSlugs.length} Studio Service${selectedSlugs.length === 1 ? "" : "s"} Selected`}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                      {selectedSlugs.length === 0
+                        ? "Click to open service selector (Production, Recording, Mixing, Mastering...)"
+                        : "Click to modify or add additional services"}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    color: "var(--gold)",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                  }}
+                >
+                  <span>{isDropdownOpen ? "Close Menu" : "Select Services"}</span>
+                  <span
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      textAlign: "left",
-                      padding: "16px 20px",
-                      borderRadius: "8px",
-                      border: isSelected
-                        ? "1px solid var(--gold)"
-                        : "1px solid rgba(255, 255, 255, 0.08)",
-                      background: isSelected
-                        ? "rgba(223, 194, 125, 0.1)"
-                        : "rgba(5, 5, 8, 0.5)",
-                      cursor: "pointer",
-                      transition: "all 0.15s ease",
-                      gap: "16px",
+                      fontSize: "12px",
+                      transform: isDropdownOpen ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s ease",
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1 }}>
-                      {/* Checkbox circle indicator */}
-                      <div
+                    ▼
+                  </span>
+                </div>
+              </button>
+
+              {/* Dropdown Options Menu */}
+              {isDropdownOpen && (
+                <div
+                  style={{
+                    marginTop: "10px",
+                    background: "rgba(8, 8, 12, 0.98)",
+                    border: "1px solid rgba(223, 194, 125, 0.35)",
+                    borderRadius: "10px",
+                    padding: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                    boxShadow: "0 16px 40px rgba(0, 0, 0, 0.8)",
+                    animation: "fadeIn 0.2s ease-out",
+                    maxHeight: "440px",
+                    overflowY: "auto",
+                  }}
+                >
+                  {activeServiceList.map((svc) => {
+                    const isSelected = selectedSlugs.includes(svc.slug);
+                    return (
+                      <button
+                        key={svc.slug}
+                        type="button"
+                        onClick={() => toggleService(svc.slug)}
                         style={{
-                          width: "20px",
-                          height: "20px",
-                          borderRadius: "4px",
-                          border: isSelected
-                            ? "1px solid var(--gold)"
-                            : "1px solid rgba(255, 255, 255, 0.25)",
-                          background: isSelected ? "var(--gold)" : "transparent",
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
+                          justifyContent: "space-between",
+                          textAlign: "left",
+                          padding: "14px 18px",
+                          borderRadius: "8px",
+                          border: isSelected
+                            ? "1px solid var(--gold)"
+                            : "1px solid rgba(255, 255, 255, 0.08)",
+                          background: isSelected
+                            ? "rgba(223, 194, 125, 0.12)"
+                            : "rgba(15, 15, 22, 0.6)",
+                          cursor: "pointer",
                           transition: "all 0.15s ease",
+                          gap: "16px",
                         }}
                       >
-                        {isSelected && <CheckIcon size={13} color="#050507" />}
-                      </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
+                          <div
+                            style={{
+                              width: "20px",
+                              height: "20px",
+                              borderRadius: "4px",
+                              border: isSelected
+                                ? "1px solid var(--gold)"
+                                : "1px solid rgba(255, 255, 255, 0.25)",
+                              background: isSelected ? "var(--gold)" : "transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {isSelected && <CheckIcon size={13} color="#050507" />}
+                          </div>
+                          <div>
+                            <p style={{ margin: "0 0 2px", fontSize: "14px", fontWeight: 600, color: isSelected ? "var(--text)" : "#e0e0e0" }}>
+                              {svc.title}
+                            </p>
+                            <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)" }}>
+                              "{svc.prompt}" · {svc.tagline}
+                            </p>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: isSelected ? "var(--gold)" : "var(--muted)" }}>
+                            {svc.basePriceNgn === null
+                              ? "Price Upon Request"
+                              : svc.isHourly
+                              ? `₦${(svc.hourlyRateNgn || 25000).toLocaleString()}/hr`
+                              : `₦${svc.basePriceNgn.toLocaleString()}`}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  <div style={{ textAlign: "right", paddingTop: "8px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsDropdownOpen(false)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--gold)",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        padding: "4px 8px",
+                      }}
+                    >
+                      Done Selecting (Close Menu) ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
-                      <div>
-                        <p
-                          style={{
-                            fontSize: "15px",
-                            fontWeight: 600,
-                            color: isSelected ? "var(--text)" : "#d6d6d8",
-                            margin: "0 0 2px",
-                          }}
-                        >
-                          {svc.prompt}
-                        </p>
-                        <p
-                          style={{
-                            fontSize: "12px",
-                            color: "var(--muted)",
-                            margin: 0,
-                          }}
-                        >
-                          {svc.title} · {svc.tagline}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Price tag */}
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <span
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: 700,
-                          color: isSelected ? "var(--gold)" : "var(--muted)",
-                          letterSpacing: "0.04em",
-                        }}
-                      >
+            {/* Selected Services Display (Immediate Visibility) */}
+            {selectedServices.length > 0 && (
+              <div style={{ marginBottom: "22px" }}>
+                <p
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "var(--gold)",
+                    margin: "0 0 10px",
+                  }}
+                >
+                  Selected for this session ({selectedServices.length}):
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {selectedServices.map((svc) => (
+                    <div
+                      key={svc.slug}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        background: "rgba(223, 194, 125, 0.12)",
+                        border: "1px solid rgba(223, 194, 125, 0.35)",
+                        fontSize: "13px",
+                        color: "var(--text)",
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{svc.title}</span>
+                      <span style={{ color: "var(--gold)", fontSize: "12px", fontWeight: 700 }}>
                         {svc.basePriceNgn === null
-                          ? "Price Upon Request"
+                          ? "Quote"
                           : svc.isHourly
                           ? `₦${(svc.hourlyRateNgn || 25000).toLocaleString()}/hr`
                           : `₦${svc.basePriceNgn.toLocaleString()}`}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleService(svc.slug)}
+                        title="Remove service"
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--muted)",
+                          cursor: "pointer",
+                          fontSize: "16px",
+                          padding: "0 0 0 4px",
+                          lineHeight: 1,
+                        }}
+                      >
+                        ×
+                      </button>
                     </div>
-                  </button>
-                );
-              })}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Running Total Card — Visible Immediately from Selection Stage (Req #2) */}
+            <div
+              style={{
+                background: "rgba(5, 5, 8, 0.7)",
+                border: "1px solid rgba(223, 194, 125, 0.25)",
+                borderRadius: "8px",
+                padding: "18px 24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "28px",
+                flexWrap: "wrap",
+                gap: "14px",
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    color: "var(--muted)",
+                    display: "block",
+                    marginBottom: "4px",
+                  }}
+                >
+                  RUNNING SESSION TOTAL
+                </span>
+                <span
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: "24px",
+                    fontWeight: 800,
+                    color: "var(--gold)",
+                  }}
+                >
+                  {selectedServices.length === 0
+                    ? "₦0"
+                    : totalNgn === null
+                    ? "Custom Quote (Price Upon Request)"
+                    : hasPriceUponRequest
+                    ? `₦${totalNgn.toLocaleString()} + Custom Quote`
+                    : `₦${totalNgn.toLocaleString()}`}
+                </span>
+              </div>
+              {selectedServices.length > 0 && (
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ fontSize: "12px", color: "var(--text)", display: "block" }}>
+                    ~{maxTurnaroundDays} Business Days Turnaround
+                  </span>
+                  <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                    {selectedServices.length} {selectedServices.length === 1 ? "service" : "services"} configured
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Bottom Action Bar */}
@@ -694,25 +1150,12 @@ export default function ServicesPage() {
             >
               <div>
                 {selectedSlugs.length > 0 ? (
-                  <p style={{ margin: 0, fontSize: "14px", color: "var(--text)" }}>
-                    <strong style={{ color: "var(--gold)" }}>
-                      {selectedSlugs.length}
-                    </strong>{" "}
-                    {selectedSlugs.length === 1 ? "service" : "services"} selected
-                    {totalNgn !== null && (
-                      <span style={{ color: "var(--muted)", marginLeft: "8px" }}>
-                        · Subtotal: ₦{totalNgn.toLocaleString()}
-                      </span>
-                    )}
-                    {hasPriceUponRequest && (
-                      <span style={{ color: "var(--gold)", marginLeft: "6px" }}>
-                        (+ Custom Quote)
-                      </span>
-                    )}
+                  <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
+                    Ready to proceed to session details.
                   </p>
                 ) : (
                   <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
-                    Select one or multiple options above to proceed.
+                    Open the service menu above and select at least one service to continue.
                   </p>
                 )}
               </div>
@@ -1349,37 +1792,74 @@ export default function ServicesPage() {
               })}
             </div>
 
-            {/* Audio & Stem Upload Component */}
+            {/* Audio & Stem Upload Component (Req #4: Explicit Rules by Service Type) */}
             <div
               style={{
                 background: "rgba(5, 5, 8, 0.5)",
-                border: "1px dashed rgba(223, 194, 125, 0.3)",
+                border: isUploadRequired
+                  ? "1px dashed var(--gold)"
+                  : "1px dashed rgba(223, 194, 125, 0.3)",
                 borderRadius: "8px",
-                padding: "20px",
+                padding: "22px",
                 marginBottom: "32px",
               }}
             >
-              <h3
-                style={{
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  color: "var(--text)",
-                  margin: "0 0 6px",
-                }}
-              >
-                Upload Project Audio / Stems (Optional)
-              </h3>
-              <p
-                style={{
-                  fontSize: "12px",
-                  color: "var(--muted)",
-                  margin: "0 0 14px",
-                  lineHeight: 1.5,
-                }}
-              >
-                Upload WAV, MP3, ZIP, or AIFF up to 100MB. Files are securely transferred directly to studio storage.
-              </p>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
+                <h3
+                  style={{
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                    color: "var(--text)",
+                    margin: 0,
+                  }}
+                >
+                  Upload Project Audio / Stems {isUploadRequired ? "(REQUIRED)" : "(Optional)"}
+                </h3>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    background: isUploadRequired ? "rgba(223, 194, 125, 0.2)" : "rgba(255, 255, 255, 0.08)",
+                    color: isUploadRequired ? "var(--gold)" : "var(--muted)",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {isUploadRequired ? "Upload Required for Checkout" : "Optional Reference"}
+                </span>
+              </div>
+
+              {isUploadRequired ? (
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "6px",
+                    background: "rgba(223, 194, 125, 0.1)",
+                    border: "1px solid rgba(223, 194, 125, 0.3)",
+                    color: "var(--gold)",
+                    fontSize: "12px",
+                    marginBottom: "14px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  ⚠️ <strong>Stems / Audio Required:</strong> Your session includes{" "}
+                  <strong>{servicesRequiringFiles.map((s) => s.title).join(", ")}</strong>. You must upload your audio files, mixdown, or stems below before reserving your session.
+                </div>
+              ) : (
+                <p
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--muted)",
+                    margin: "0 0 14px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Your selected service(s) do not strictly require audio stems. You may upload reference tracks, beat ideas, or rough demos if desired, or skip this step.
+                </p>
+              )}
 
               <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                 <label
@@ -1391,7 +1871,7 @@ export default function ServicesPage() {
                     height: "38px",
                     borderRadius: "4px",
                     border: "1px solid var(--gold)",
-                    background: "rgba(223, 194, 125, 0.1)",
+                    background: "rgba(223, 194, 125, 0.12)",
                     color: "var(--gold)",
                     fontSize: "12px",
                     fontWeight: 700,
@@ -1493,7 +1973,15 @@ export default function ServicesPage() {
 
               <button
                 type="button"
-                onClick={() => setStep("client")}
+                onClick={() => {
+                  if (isUploadRequired && clientFiles.length === 0) {
+                    setUploadError(
+                      `Audio files or stems are required for: ${servicesRequiringFiles.map((s) => s.title).join(", ")}. Please upload your files above.`
+                    );
+                    return;
+                  }
+                  setStep("client");
+                }}
                 className="primary-button"
                 style={{
                   height: "44px",
@@ -1933,19 +2421,43 @@ export default function ServicesPage() {
                   borderRadius: "6px",
                 }}
               >
-                <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)" }}>
-                  Attached Files
+                <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: isUploadRequired && clientFiles.length === 0 ? "#e57373" : "var(--gold)" }}>
+                  Attached Files {isUploadRequired ? "(REQUIRED)" : "(OPTIONAL)"}
                 </span>
-                <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)", margin: "4px 0 2px" }}>
+                <p style={{ fontSize: "14px", fontWeight: 600, color: isUploadRequired && clientFiles.length === 0 ? "#e57373" : "var(--text)", margin: "4px 0 2px" }}>
                   {clientFiles.length === 0
-                    ? "None attached"
+                    ? isUploadRequired
+                      ? "⚠️ None attached (Required)"
+                      : "None attached (Optional)"
                     : `${clientFiles.length} file${clientFiles.length === 1 ? "" : "s"}`}
                 </p>
-                <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
-                  {clientFiles.length > 0 ? clientFiles.map((f) => f.originalName).join(", ") : "Can be sent via WhatsApp/email"}
+                <p style={{ fontSize: "12px", color: isUploadRequired && clientFiles.length === 0 ? "#e57373" : "var(--muted)", margin: 0 }}>
+                  {clientFiles.length > 0
+                    ? clientFiles.map((f) => f.originalName).join(", ")
+                    : isUploadRequired
+                    ? `Required for ${servicesRequiringFiles.map((s) => s.title).join(", ")}`
+                    : "Can be sent via WhatsApp/email"}
                 </p>
               </div>
             </div>
+
+            {isUploadRequired && clientFiles.length === 0 && (
+              <div
+                style={{
+                  padding: "14px 18px",
+                  borderRadius: "6px",
+                  background: "rgba(229, 115, 115, 0.12)",
+                  border: "1px solid #e57373",
+                  color: "#e57373",
+                  fontSize: "13px",
+                  marginBottom: "24px",
+                  lineHeight: 1.5,
+                }}
+              >
+                ⚠️ <strong>Required Audio Missing:</strong> Your booking includes{" "}
+                <strong>{servicesRequiringFiles.map((s) => s.title).join(", ")}</strong>, which requires audio stems or mixdown before checkout. Please click <strong>"Adjust Details"</strong> below to attach your files.
+              </div>
+            )}
 
             {customerMessage && (
               <div

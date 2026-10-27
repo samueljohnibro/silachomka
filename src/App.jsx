@@ -567,26 +567,56 @@ function HeroSlideshow() {
         type: "image",
       }));
 
-    // 2. Gallery photos and videos (including carousel slides)
+    // 2. Gallery photos and videos (including carousel slides & video clips) (Req #19)
     const galleryMedia = (gallery || []).flatMap((g) => {
+      const items = [];
+
+      // Check carousel slides
       if (Array.isArray(g.slides) && g.slides.length > 0) {
-        return g.slides.map((slideSrc, sIdx) => ({
-          id: `gallery-${g.id}-${sIdx}`,
-          src: slideSrc,
-          title: g.title,
-          type: g.slideTypes?.[sIdx] || (typeof slideSrc === "string" && (slideSrc.startsWith("data:video") || slideSrc.endsWith(".mp4") || slideSrc.endsWith(".webm") || slideSrc.endsWith(".mov")) ? "video" : "image"),
-        }));
+        g.slides.forEach((slide, sIdx) => {
+          const slideSrc =
+            typeof slide === "string" ? slide : slide?.src || slide?.asset || "";
+          if (!slideSrc) return;
+          const isVideo =
+            slide?.slideType === "video" ||
+            slide?.assetType === "VIDEO" ||
+            Boolean(slide?.mimeType && String(slide.mimeType).startsWith("video/")) ||
+            (typeof slideSrc === "string" &&
+              (slideSrc.startsWith("data:video") ||
+                /\.(mp4|webm|mov)(\?.*)?$/i.test(slideSrc)));
+
+          items.push({
+            id: `gallery-${g.id}-slide-${sIdx}`,
+            src: slideSrc,
+            title: g.title || "silachomka Archive",
+            type: isVideo ? "video" : "image",
+            poster: g.asset || g.src || null,
+          });
+        });
       }
-      const primary = g.src || g.videoSrc;
-      if (!primary) return [];
-      return [
-        {
-          id: `gallery-${g.id}`,
+
+      // Check primary media (single image or standalone video clip)
+      const primary =
+        g.src || g.asset || g.videoSrc || g.media_url || g.video_url || null;
+      if (primary && typeof primary === "string") {
+        const isVideo =
+          g.type === "video" ||
+          g.post_type === "video" ||
+          g.assetType === "VIDEO" ||
+          Boolean(g.mimeType && String(g.mimeType).startsWith("video/")) ||
+          primary.startsWith("data:video") ||
+          /\.(mp4|webm|mov)(\?.*)?$/i.test(primary);
+
+        items.push({
+          id: `gallery-${g.id}-primary`,
           src: primary,
-          title: g.title,
-          type: g.type || (typeof primary === "string" && (primary.startsWith("data:video") || primary.endsWith(".mp4") || primary.endsWith(".webm") || primary.endsWith(".mov")) ? "video" : "image"),
-        },
-      ];
+          title: g.title || "silachomka Archive",
+          type: isVideo ? "video" : "image",
+          poster: !isVideo ? primary : null,
+        });
+      }
+
+      return items;
     });
 
     const combined = [...releaseMedia, ...galleryMedia];

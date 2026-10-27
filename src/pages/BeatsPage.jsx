@@ -28,7 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useChomkaStore } from "../data/store";
 import { useCurrency } from "../data/CurrencyContext";
@@ -89,7 +89,17 @@ const BeatCard = memo(function BeatCard({
   onPlay,
   startingPrice,
 }) {
+  const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
+
+  const handleCardClick = (e) => {
+    // Prevent interfering with audio trigger, Selar licensing button, or share button
+    if (e.target.closest("button") || e.target.closest("a")) {
+      return;
+    }
+    const targetSlug = beat.slug || beat.id;
+    navigate(`/beat/${targetSlug}`);
+  };
 
   const handleShareBeat = useCallback(
     async (e) => {
@@ -129,7 +139,11 @@ const BeatCard = memo(function BeatCard({
   );
 
   return (
-    <article className={`beat-card ${isPlaying ? "is-playing" : ""}`}>
+    <article
+      className={`beat-card ${isPlaying ? "is-playing" : ""}`}
+      onClick={handleCardClick}
+      style={{ cursor: "pointer" }}
+    >
       {/* Visualizer Frame */}
       <div className={`beat-art ${isPlaying ? "is-playing" : ""}`}>
         <BeatArtwork

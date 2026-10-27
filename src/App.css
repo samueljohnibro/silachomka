@@ -40,7 +40,7 @@
   --transition-fast: 160ms;
   --transition-base: 280ms;
   --transition-slow: 450ms;
-  --transition-pan: 12000ms;
+  --transition-pan: 7500ms;
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
@@ -1182,6 +1182,45 @@ a:focus-visible {
 .gallery-modal-close:hover {
   background: var(--gold);
   color: var(--bg);
+}
+
+.gallery-modal-post-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 30px;
+  background: rgba(5, 5, 8, 0.9);
+  border: 1px solid var(--line-gold);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--transition-fast) ease;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.gallery-modal-post-nav:hover {
+  background: var(--gold);
+  color: var(--bg);
+  box-shadow: 0 0 20px var(--gold-glow);
+  transform: translateY(-50%) scale(1.04);
+}
+
+.gallery-modal-post-prev { left: -110px; }
+.gallery-modal-post-next { right: -110px; }
+
+@media (max-width: 1280px) {
+  .gallery-modal-post-prev { left: 16px; top: auto; bottom: -54px; transform: none; }
+  .gallery-modal-post-next { right: 16px; top: auto; bottom: -54px; transform: none; }
+  .gallery-modal-post-nav:hover { transform: scale(1.04); }
 }
 
 .gallery-modal-nav {
@@ -4204,9 +4243,7 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
    ========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
-  .hero-slideshow-media { transform: none !important; opacity: 0 !important; }
-  .hero-slideshow-media.is-active { opacity: 1 !important; transform: none !important; animation: none !important; }
+  .ambientFloat { animation: none !important; }
 }
 
 .beat-video.is-letterboxed { transform: scale(1.35); }
@@ -4677,8 +4714,8 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   height: 140%;
   background-size: cover;
   background-position: center;
-  filter: blur(85px) saturate(1.25);
-  opacity: 0.18;
+  filter: blur(45px) saturate(1.35) contrast(1.08);
+  opacity: 0.40;
   transform: scale(1.1);
   animation: ambientFloat 26s ease-in-out infinite alternate;
   will-change: transform;
@@ -4691,8 +4728,8 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   width: 140%;
   height: 140%;
   object-fit: cover;
-  filter: blur(85px) saturate(1.25);
-  opacity: 0.16;
+  filter: blur(45px) saturate(1.35) contrast(1.08);
+  opacity: 0.38;
   transform: scale(1.1);
   pointer-events: none;
 }

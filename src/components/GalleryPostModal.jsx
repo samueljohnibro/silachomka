@@ -127,10 +127,25 @@ export default function GalleryPostModal({
       });
   }, []);
 
-  // Pick random social link with session anti-repeat logic
+  // Pick random social link with session anti-repeat logic (Req #22: per-post assigned links support)
   const selectedSocial = useMemo(() => {
-    const list =
-      socialOptions.length > 0 ? socialOptions : FALLBACK_GALLERY_SOCIALS;
+    const assigned = post?.assignedSocials || post?.tags?.assignedSocials;
+    let list;
+    if (Array.isArray(assigned) && assigned.length > 0) {
+      const matched = socialOptions.filter(
+        (s) =>
+          assigned.includes(s.url) ||
+          assigned.includes(s.platform) ||
+          assigned.includes(s.name)
+      );
+      list = matched.length > 0 ? matched : assigned.map((item) => ({
+        name: normalizePlatformName(item),
+        url: String(item).startsWith("http") ? item : `https://${item}`,
+      }));
+    } else {
+      list = socialOptions.length > 0 ? socialOptions : FALLBACK_GALLERY_SOCIALS;
+    }
+
     const candidates =
       list.length > 1
         ? list.filter((s) => s.url !== lastSelectedSocialUrl)
@@ -139,7 +154,7 @@ export default function GalleryPostModal({
       candidates[Math.floor(Math.random() * candidates.length)] || list[0];
     lastSelectedSocialUrl = pick.url;
     return pick;
-  }, [post?.id, socialOptions]);
+  }, [post?.id, post?.assignedSocials, post?.tags, socialOptions]);
 
   /* Keyboard navigation (Escape, ArrowLeft, ArrowRight) */
   const handleKeyDown = useCallback(
@@ -258,22 +273,26 @@ export default function GalleryPostModal({
       {!embedded && hasPrev && (
         <button
           type="button"
-          className="gallery-modal-nav gallery-modal-nav-prev"
+          className="gallery-modal-post-nav gallery-modal-post-prev"
           onClick={onPrev}
           aria-label="Previous post"
+          title="Previous post"
         >
-          ‹
+          <span className="post-nav-arrow">←</span>
+          <span className="post-nav-text">Prev Post</span>
         </button>
       )}
 
       {!embedded && hasNext && (
         <button
           type="button"
-          className="gallery-modal-nav gallery-modal-nav-next"
+          className="gallery-modal-post-nav gallery-modal-post-next"
           onClick={onNext}
           aria-label="Next post"
+          title="Next post"
         >
-          ›
+          <span className="post-nav-text">Next Post</span>
+          <span className="post-nav-arrow">→</span>
         </button>
       )}
 

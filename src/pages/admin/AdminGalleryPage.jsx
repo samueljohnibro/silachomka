@@ -39,6 +39,7 @@ const AdminGalleryPage = () => {
   const [libraryTarget, setLibraryTarget] = useState("primary"); // 'primary' or 'carousel'
   const [librarySearch, setLibrarySearch] = useState("");
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [availableSocialLinks, setAvailableSocialLinks] = useState([]);
 
   // File input refs
   const primaryFileInputRef = useRef(null);
@@ -61,7 +62,7 @@ const AdminGalleryPage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [postsData, slidesData, mediaData, releasesData, tracksData, categoriesData] = await Promise.all([
+      const [postsData, slidesData, mediaData, releasesData, tracksData, categoriesData, socialsData] = await Promise.all([
         adminApi.getGallery().catch(() => []),
         adminApi.getGallerySlides().catch(() => []),
         adminApi.getMediaAssets().catch(() => []),
@@ -74,6 +75,7 @@ const AdminGalleryPage = () => {
           { slug: "freestyles", label: "Freestyles & Covers" },
           { slug: "videos", label: "Videos" },
         ]),
+        fetch("/api/social-links").then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
       setPosts(postsData);
       setSlides(slidesData);
@@ -81,6 +83,13 @@ const AdminGalleryPage = () => {
       setReleases(releasesData);
       setTracks(tracksData);
       setCategories(categoriesData);
+      if (socialsData) {
+        const allLinks = [
+          ...(Array.isArray(socialsData.artist) ? socialsData.artist : []),
+          ...(Array.isArray(socialsData.ecosystem) ? socialsData.ecosystem : []),
+        ];
+        setAvailableSocialLinks(allLinks);
+      }
     } catch (err) {
       setError(err.message || "Failed to load gallery posts.");
     } finally {
@@ -116,6 +125,7 @@ const AdminGalleryPage = () => {
       post_date: today,
       status: "DRAFT",
       carouselSlides: [],
+      assignedSocials: [],
     });
     setView("CREATE");
     setError(null);
@@ -172,6 +182,7 @@ const AdminGalleryPage = () => {
       external_social_platform: post.external_social_platform || "",
       post_date: post.post_date ? post.post_date.split("T")[0] : "",
       carouselSlides: initialSlides,
+      assignedSocials: post.tags?.assignedSocials || post.assignedSocials || [],
     });
     setView("EDIT");
     setError(null);
@@ -228,11 +239,14 @@ const AdminGalleryPage = () => {
 
       setCurrentPost((prev) => {
         const existingSlides = Array.isArray(prev.carouselSlides) ? prev.carouselSlides : [];
-        // If target === "replace" and only 1 file uploaded, replace the primary single item
-        const combined =
-          target === "replace" && uploadedSlides.length === 1 && existingSlides.length <= 1
-            ? uploadedSlides
-            : [...existingSlides, ...uploadedSlides].map((s, idx) => ({ ...s, sort_order: idx }));
+        let combined;
+        if (target === "primary" || target === "replace") {
+          // Setting or replacing the primary selection directly
+          combined = uploadedSlides.map((s, idx) => ({ ...s, sort_order: idx }));
+        } else {
+          // Appending to carousel
+          combined = [...existingSlides, ...uploadedSlides].map((s, idx) => ({ ...s, sort_order: idx }));
+        }
         const nextType =
           combined.length > 1
             ? "carousel"
@@ -261,10 +275,12 @@ const AdminGalleryPage = () => {
     setCurrentPost((prev) => {
       const existingSlides = Array.isArray(prev.carouselSlides) ? prev.carouselSlides : [];
       const newItem = { asset_id: asset.id, slide_type: isVid ? "video" : "image", sort_order: 0 };
-      const combined =
-        libraryTarget === "replace" && existingSlides.length <= 1
-          ? [newItem]
-          : [...existingSlides, newItem].map((s, idx) => ({ ...s, sort_order: idx }));
+      let combined;
+      if (libraryTarget === "primary" || libraryTarget === "replace") {
+        combined = [newItem];
+      } else {
+        combined = [...existingSlides, newItem].map((s, idx) => ({ ...s, sort_order: idx }));
+      }
       const nextType =
         combined.length > 1
           ? "carousel"
@@ -370,6 +386,7 @@ const AdminGalleryPage = () => {
         legacy_link: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_url: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_platform: currentPost.external_social_platform || null,
+        tags: { ...(currentPost.tags || {}), assignedSocials: currentPost.assignedSocials || [] },
         slides: activeSlides,
       };
 
@@ -1094,6 +1111,56 @@ const AdminGalleryPage = () => {
                 </select>
               </div>
 
+              {/* Req #22: Cross-Post Link Assignment */}
+              <div className="studio-field" style={{ textAlign: "left" }}>
+                <label>Assigned Cross-Post Ecosystem Links (Optional)</label>
+                <p style={{ fontSize: 11, color: "var(--muted)", margin: "0 0 8px 0" }}>
+                  Select specific social/ecosystem links to feature on this post in the public modal. If none are selected, default links apply.
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {(availableSocialLinks.length > 0
+                    ? availableSocialLinks
+                    : [
+                        { name: "Instagram", platform: "Instagram", url: "https://www.instagram.com/silachomka/?__pwa=1" },
+                        { name: "X", platform: "X", url: "https://x.com/silachomka" },
+                        { name: "Threads", platform: "Threads", url: "https://www.threads.net/@silachomka" },
+                        { name: "TikTok", platform: "TikTok", url: "https://www.tiktok.com/@silachomka" },
+                        { name: "YouTube", platform: "YouTube", url: "https://www.youtube.com/@silachomka" },
+                      ]
+                  ).map((linkItem) => {
+                    const identifier = linkItem.url || linkItem.platform || linkItem.name;
+                    const assignedList = Array.isArray(currentPost.assignedSocials) ? currentPost.assignedSocials : [];
+                    const isAssigned = assignedList.includes(identifier) || assignedList.includes(linkItem.platform);
+
+                    return (
+                      <button
+                        key={identifier}
+                        type="button"
+                        onClick={() => {
+                          setCurrentPost((prev) => {
+                            const cur = Array.isArray(prev.assignedSocials) ? [...prev.assignedSocials] : [];
+                            const next = isAssigned
+                              ? cur.filter((x) => x !== identifier && x !== linkItem.platform)
+                              : [...cur, identifier];
+                            return { ...prev, assignedSocials: next };
+                          });
+                        }}
+                        className="studio-pill-btn"
+                        style={{
+                          fontSize: 12,
+                          background: isAssigned ? "rgba(223, 194, 125, 0.2)" : "rgba(0,0,0,0.3)",
+                          color: isAssigned ? "var(--gold)" : "var(--muted)",
+                          borderColor: isAssigned ? "var(--gold)" : "var(--border)",
+                          fontWeight: isAssigned ? 700 : 500,
+                        }}
+                      >
+                        {isAssigned ? "✓ " : "+ "}{linkItem.name || linkItem.platform}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="studio-field" style={{ textAlign: "left" }}>
                 <label>Lifecycle Status (Automatic)</label>
                 <div
@@ -1296,7 +1363,7 @@ const AdminGalleryPage = () => {
                         transition: "all 0.16s ease",
                         display: "flex",
                         flexDirection: "column",
-                        height: 175,
+                        minHeight: 180,
                         position: "relative",
                       }}
                       onMouseEnter={(e) => {
@@ -1313,7 +1380,7 @@ const AdminGalleryPage = () => {
                       <div
                         style={{
                           width: "100%",
-                          height: 135,
+                          aspectRatio: "1/1",
                           position: "relative",
                           background: "#000",
                           overflow: "hidden",
@@ -1356,19 +1423,22 @@ const AdminGalleryPage = () => {
                       </div>
                       <div
                         style={{
-                          padding: "6px 8px",
+                          padding: "8px 10px",
                           fontSize: 11,
                           color: "var(--text-h)",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          flex: 1,
                           display: "flex",
-                          alignItems: "center",
+                          flexDirection: "column",
+                          gap: 2,
+                          overflow: "hidden",
                         }}
-                        title={asset.original_filename}
+                        title={asset.original_filename || asset.r2_key}
                       >
-                        {asset.original_filename || "Media asset"}
+                        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600 }}>
+                          {asset.original_filename || asset.r2_key}
+                        </span>
+                        <span style={{ fontSize: 10, color: "var(--muted)" }}>
+                          {asset.size_bytes ? `${(asset.size_bytes / 1024).toFixed(1)} KB` : "—"}
+                        </span>
                       </div>
                     </div>
                   );
