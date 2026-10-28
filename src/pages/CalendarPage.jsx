@@ -141,11 +141,6 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(initialDateAndMonth.currentDate);
   const [selectedDateStr, setSelectedDateStr] = useState(initialDateAndMonth.selectedDateStr);
 
-  const selectedDayActivities = useMemo(() => {
-    if (!selectedDateStr) return null;
-    return activitiesByDate[selectedDateStr] || [];
-  }, [selectedDateStr, activitiesByDate]);
-
   // Target scroll position and targeted activity ID for restoration
   const targetScrollYRef = useRef(
     searchParams.get("scrollY") ? parseInt(searchParams.get("scrollY"), 10) :
@@ -280,6 +275,11 @@ export default function CalendarPage() {
     return map;
   }, [filteredActivities]);
 
+  const selectedDayActivities = useMemo(() => {
+    if (!selectedDateStr) return null;
+    return activitiesByDate[selectedDateStr] || [];
+  }, [selectedDateStr, activitiesByDate]);
+
   // Generate days for Month Grid
   const gridDays = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -404,7 +404,6 @@ export default function CalendarPage() {
   const handlePrevMonth = () => {
     const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
     setCurrentDate(nextDate);
-    setSelectedDayActivities(null);
     setSelectedDateStr(null);
     syncParams({
       month: formatMonthYearParam(nextDate),
@@ -415,7 +414,6 @@ export default function CalendarPage() {
   const handleNextMonth = () => {
     const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
     setCurrentDate(nextDate);
-    setSelectedDayActivities(null);
     setSelectedDateStr(null);
     syncParams({
       month: formatMonthYearParam(nextDate),
@@ -428,7 +426,6 @@ export default function CalendarPage() {
     setCurrentDate(now);
     const nowStr = now.toISOString().slice(0, 10);
     const acts = activitiesByDate[nowStr] || null;
-    setSelectedDayActivities(acts);
     setSelectedDateStr(acts ? nowStr : null);
     syncParams({
       month: formatMonthYearParam(now),
@@ -439,7 +436,6 @@ export default function CalendarPage() {
   const handleDayClick = (day) => {
     if (day.empty) return;
     setSelectedDateStr(day.dateKey);
-    setSelectedDayActivities(day.activities);
     syncParams({
       date: day.dateKey,
     });
@@ -753,7 +749,6 @@ export default function CalendarPage() {
                     type="button"
                     className="calendar-drawer-close"
                     onClick={() => {
-                      setSelectedDayActivities(null);
                       setSelectedDateStr(null);
                       syncParams({ date: null });
                     }}

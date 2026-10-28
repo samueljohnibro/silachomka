@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useLocation, useSearchParams } from "react-router-dom";
 import GalleryPostModal from "../components/GalleryPostModal";
 import SeoHead from "../components/SeoHead";
 import { LoadingSpinner } from "../components/Icons";
@@ -7,6 +7,7 @@ import { useChomkaStore } from "../data/store";
 import { normalizeGalleryPost } from "../data/api";
 import { DEFAULT_SOURCE } from "../data/credits";
 import { canonicalUrl } from "../data/siteConfig";
+import { getCalendarReturnUrl } from "../utils/calendarNavigation";
 
 function rasterImage(post) {
   const primary = post?.src || post?.asset;
@@ -34,6 +35,11 @@ function rasterImage(post) {
 
 export default function GalleryPostPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const calendarReturnUrl = useMemo(() => {
+    return getCalendarReturnUrl(location, searchParams);
+  }, [location, searchParams]);
   const { gallery, isLoading: isStoreLoading } = useChomkaStore();
   const [fetchedPost, setFetchedPost] = useState(null);
   const [isFetchingPost, setIsFetchingPost] = useState(false);
@@ -99,9 +105,16 @@ export default function GalleryPostPage() {
           <p style={{ color: "var(--muted)", margin: "20px 0 35px" }}>
             This gallery post is not in the official visual archive.
           </p>
-          <Link className="primary-button" to="/#gallery">
-            ← Back to Gallery
-          </Link>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+            {calendarReturnUrl && (
+              <Link className="primary-button" to={calendarReturnUrl}>
+                ← Back to Calendar
+              </Link>
+            )}
+            <Link className="primary-button" to="/#gallery">
+              ← Back to Gallery
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -143,9 +156,30 @@ export default function GalleryPostPage() {
         imageAlt={`${post.title || post.caption || "Visual Archive"} — silachomka visual archive`}
         jsonLd={galleryJsonLd}
       />
-      <Link className="release-breadcrumb" to="/#gallery">
-        ← All Gallery
-      </Link>
+      {/* Breadcrumb Navigation (Calendar return or All Gallery) */}
+      {calendarReturnUrl ? (
+        <div className="release-breadcrumb-group" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
+          <Link
+            className="release-breadcrumb calendar-return-link"
+            to={calendarReturnUrl}
+            style={{ marginBottom: 0 }}
+          >
+            ← Back to Calendar
+          </Link>
+          <span style={{ color: "var(--muted)", opacity: 0.4, fontSize: "11px" }}>|</span>
+          <Link
+            className="release-breadcrumb"
+            style={{ marginBottom: 0, opacity: 0.7 }}
+            to="/#gallery"
+          >
+            All Gallery
+          </Link>
+        </div>
+      ) : (
+        <Link className="release-breadcrumb" to="/#gallery">
+          ← All Gallery
+        </Link>
+      )}
       <p className="eyebrow" style={{ marginTop: "18px" }}>
         Visual Archive · Source: {post.source || DEFAULT_SOURCE}
       </p>

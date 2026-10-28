@@ -19,13 +19,14 @@ import {
 // src/pages/BeatDetailPage.jsx
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import { normalizeBeat } from "../data/api";
 import { useCurrency } from "../data/CurrencyContext";
 import BeatArtwork from "../components/BeatArtwork";
 import SeoHead from "../components/SeoHead";
 import ShareLinkBox from "../components/ShareLinkBox";
+import { getCalendarReturnUrl } from "../utils/calendarNavigation";
 import {
   absoluteUrl,
   canonicalUrl,
@@ -38,8 +39,12 @@ const PREVIEW_LENGTH = 45;
 export default function BeatDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const licenseParam = searchParams.get("license");
+  const calendarReturnUrl = useMemo(() => {
+    return getCalendarReturnUrl(location, searchParams);
+  }, [location, searchParams]);
   const { beats, isLoading: isStoreLoading } = useChomkaStore();
   const {
     currency,
@@ -586,9 +591,16 @@ export default function BeatDetailPage() {
             The beat you requested does not exist in the official studio
             catalogue.
           </p>
-          <Link className="primary-button" to="/beats">
-            <LeftArrowIcon /> Back to All Beats
-          </Link>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+            {calendarReturnUrl && (
+              <Link className="primary-button" to={calendarReturnUrl}>
+                <LeftArrowIcon /> Back to Calendar
+              </Link>
+            )}
+            <Link className="primary-button" to="/beats">
+              <LeftArrowIcon /> Back to All Beats
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -685,10 +697,30 @@ export default function BeatDetailPage() {
         </div>
       )}
 
-      {/* Breadcrumb Navigation */}
-      <Link className="release-breadcrumb" to="/beats">
-        <LeftArrowIcon /> All Beats
-      </Link>
+      {/* Breadcrumb Navigation (Calendar return or All Beats) */}
+      {calendarReturnUrl ? (
+        <div className="release-breadcrumb-group" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "35px", flexWrap: "wrap" }}>
+          <Link
+            className="release-breadcrumb calendar-return-link"
+            to={calendarReturnUrl}
+            style={{ marginBottom: 0 }}
+          >
+            <LeftArrowIcon /> Back to Calendar
+          </Link>
+          <span style={{ color: "var(--muted)", opacity: 0.4, fontSize: "11px" }}>|</span>
+          <Link
+            className="release-breadcrumb"
+            style={{ marginBottom: 0, opacity: 0.7 }}
+            to="/beats"
+          >
+            All Beats
+          </Link>
+        </div>
+      ) : (
+        <Link className="release-breadcrumb" to="/beats">
+          <LeftArrowIcon /> All Beats
+        </Link>
+      )}
 
       <div className="beat-detail-grid">
         {/* =================================================
