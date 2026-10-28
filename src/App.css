@@ -4625,6 +4625,28 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   }
 }
 
+@keyframes outNowGlow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(223, 194, 125, 0.4), 0 0 16px rgba(223, 194, 125, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(223, 194, 125, 0.8), 0 0 24px rgba(223, 194, 125, 0.4);
+    transform: scale(1.02);
+  }
+}
+
+@keyframes comingSoonGlow {
+  0%, 100% {
+    border-color: rgba(223, 194, 125, 0.4);
+    box-shadow: 0 0 8px rgba(223, 194, 125, 0.2);
+  }
+  50% {
+    border-color: rgba(223, 194, 125, 0.85);
+    box-shadow: 0 0 16px rgba(223, 194, 125, 0.5);
+  }
+}
+
 .out-now-badge {
   background: var(--gold);
   color: #000;
@@ -4636,6 +4658,20 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   letter-spacing: 0.14em;
   text-transform: uppercase;
   box-shadow: 0 0 10px rgba(223, 194, 125, 0.4);
+  animation: outNowGlow 3s ease-in-out infinite;
+}
+
+.upcoming-art-badge,
+.coming-soon-badge-label {
+  animation: comingSoonGlow 3.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .out-now-badge,
+  .upcoming-art-badge,
+  .coming-soon-badge-label {
+    animation: none !important;
+  }
 }
 
 .out-now-tagline {

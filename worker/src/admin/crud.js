@@ -1151,9 +1151,13 @@ adminApp.post('/media-assets/upload', async (c) => {
       })
     }
 
+    // Default newly uploaded media to selected for homepage eligibility (Stage 38 — Req #4)
+    const heroRequested = formData.get('is_hero') !== 'false'
+    const initialAltText = heroRequested ? '[HERO]' : null
+
     const inserted = await sql`
-      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, file_data)
-      VALUES (${storageKey}, ${filename}, ${assetType}, ${detectedMime}, ${file.size || null}, ${widthVal}, ${heightVal}, ${durationVal}, ${assetRole}, ${sourceAssetId}, ${originalSizeBytes}, ${originalMimeType}, ${optimizationStatus}, ${user?.sub || null}, decode(${hex}, 'hex'))
+      INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, alt_text, file_data)
+      VALUES (${storageKey}, ${filename}, ${assetType}, ${detectedMime}, ${file.size || null}, ${widthVal}, ${heightVal}, ${durationVal}, ${assetRole}, ${sourceAssetId}, ${originalSizeBytes}, ${originalMimeType}, ${optimizationStatus}, ${user?.sub || null}, ${initialAltText}, decode(${hex}, 'hex'))
       RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at,
         CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
     `
@@ -1161,6 +1165,7 @@ adminApp.post('/media-assets/upload', async (c) => {
     const urlSuffix = detectedMime === 'image/gif' ? '?.gif' : ''
     return c.json({
       ...inserted[0],
+      is_hero: heroRequested,
       url: `/api/media/asset/${inserted[0].id}${urlSuffix}`
     }, 201)
   } catch (err) {
@@ -1679,6 +1684,58 @@ adminApp.post('/services/availability', async (c) => {
     RETURNING id, date_str as "dateStr", slots, is_closed as "isClosed", notes, updated_at as "updatedAt"
   `
   return c.json(rows[0])
+})
+
+// Batch Calendar Availability Workflow (Stage 38 — Req #5)
+adminApp.post('/services/availability/batch', async (c) => {
+  const sql = c.get('sql')
+  const body = await c.req.json().catch(() => ({}))
+  const dates = Array.isArray(body.dates) ? body.dates : []
+  if (dates.length === 0) {
+    return c.json({ error: 'At least one date is required in dates array' }, 400)
+  }
+
+  const validDates = []
+  for (const d of dates) {
+    const s = String(d || '').trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s) && !validDates.includes(s)) {
+      validDates.push(s)
+    }
+  }
+
+  if (validDates.length === 0) {
+    return c.json({ error: 'No valid YYYY-MM-DD dates provided' }, 400)
+  }
+
+  const slots = Array.isArray(body.slots) ? body.slots : []
+  const isClosed = Boolean(body.isClosed)
+  const notes = String(body.notes || '').trim()
+
+  const updatedRecords = []
+  for (const dateStr of validDates) {
+    const rows = await sql`
+      INSERT INTO service_availability (date_str, slots, is_closed, notes, updated_at)
+      VALUES (${dateStr}, ${JSON.stringify(slots)}::jsonb, ${isClosed}, ${notes}, NOW())
+      ON CONFLICT (date_str) DO UPDATE SET
+        slots = EXCLUDED.slots,
+        is_closed = EXCLUDED.is_closed,
+        notes = EXCLUDED.notes,
+        updated_at = NOW()
+      RETURNING id, date_str as "dateStr", slots, is_closed as "isClosed", notes, updated_at as "updatedAt"
+    `
+    if (rows && rows[0]) {
+      updatedRecords.push(rows[0])
+    }
+  }
+
+  return c.json({
+    success: true,
+    count: updatedRecords.length,
+    records: updatedRecords,
+    dates: validDates,
+    isClosed,
+    slotsCount: slots.length
+  })
 })
 
 adminApp.delete('/services/availability/:dateStr', async (c) => {

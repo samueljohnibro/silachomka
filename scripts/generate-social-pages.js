@@ -161,14 +161,20 @@ function renderSocialMetadata({
     <!-- SOCIAL_METADATA:END -->`;
 }
 
-function withSocialMetadata(html, metadata) {
+const ROOT_PATTERN = /<div id="root"><\/div>/;
+
+function withSocialMetadata(html, metadata, bodyHtml = "") {
   if (!SOCIAL_METADATA_PATTERN.test(html)) {
     throw new Error(
       "Could not find SOCIAL_METADATA markers in dist/index.html. Keep the markers in index.html so share pages can be generated."
     );
   }
 
-  return html.replace(SOCIAL_METADATA_PATTERN, renderSocialMetadata(metadata));
+  let result = html.replace(SOCIAL_METADATA_PATTERN, renderSocialMetadata(metadata));
+  if (bodyHtml && ROOT_PATTERN.test(result)) {
+    result = result.replace(ROOT_PATTERN, `<div id="root">${bodyHtml}</div>`);
+  }
+  return result;
 }
 
 async function writePage(relativeDirectory, html) {
@@ -353,104 +359,180 @@ async function fetchLiveEndpoint(pathname) {
   }
 }
 
+function renderSemanticNav() {
+  return `<header style="padding: 20px 6vw; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
+    <a href="/" style="font-weight: 800; color: #dfc27d; text-decoration: none; font-size: 16px;">silachomka</a>
+    <nav style="display: flex; gap: 16px; font-size: 13px;">
+      <a href="/music" style="color: #fff; text-decoration: none;">Music</a>
+      <a href="/beats" style="color: #fff; text-decoration: none;">Beats</a>
+      <a href="/services" style="color: #fff; text-decoration: none;">Studio Services</a>
+      <a href="/gallery" style="color: #fff; text-decoration: none;">Gallery</a>
+      <a href="/about" style="color: #fff; text-decoration: none;">About</a>
+    </nav>
+  </header>`;
+}
+
+function renderSemanticFooter() {
+  return `<footer style="padding: 40px 6vw; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 60px; font-size: 12px; color: #888;">
+    <p>&copy; ${new Date().getFullYear()} silachomka &middot; chomkaMUSIC&trade; &middot; Chomka Nation. All rights reserved.</p>
+    <p><a href="/privacy" style="color: #888;">Privacy Policy</a> &middot; <a href="/cookies" style="color: #888;">Cookie Policy</a> &middot; <a href="/terms" style="color: #888;">Terms</a></p>
+  </footer>`;
+}
+
+function renderHomeBodyHtml(releases, beats) {
+  const topReleases = (releases || []).slice(0, 6);
+  const topBeats = (beats || []).slice(0, 4);
+  return `${renderSemanticNav()}
+  <main style="max-width: 1200px; margin: 40px auto; padding: 0 6vw;">
+    <h1>silachomka &mdash; Official Artist Home</h1>
+    <p>Official website of Samuel Silachomka John-Ibro &mdash; recording artist, record producer, audio engineer, and creator behind chomkaMUSIC&trade; and Chomka Nation.</p>
+    <section style="margin-top: 36px;">
+      <h2>Latest Music &amp; Releases</h2>
+      <ul>
+        ${topReleases.map(r => `<li><a href="/release/${escapeHtml(r.slug)}"><strong>${escapeHtml(r.title)}</strong></a> &mdash; ${escapeHtml(r.displayDate || r.date || 'Out Now')}</li>`).join('')}
+      </ul>
+      <p><a href="/music">&rarr; View Full Music Discography</a></p>
+    </section>
+    <section style="margin-top: 36px;">
+      <h2>chomkaMUSIC&trade; Studio Beats</h2>
+      <ul>
+        ${topBeats.map(b => `<li><a href="/beats/${escapeHtml(b.id)}"><strong>${escapeHtml(b.title)}</strong></a> (${b.bpm ? `${b.bpm} BPM` : 'Instrumental'}${b.genre ? ` &middot; ${escapeHtml(b.genre)}` : ''})</li>`).join('')}
+      </ul>
+      <p><a href="/beats">&rarr; Browse Beat Store</a></p>
+    </section>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderMusicBodyHtml(releases) {
+  return `${renderSemanticNav()}
+  <main style="max-width: 1200px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <span>Music &amp; Discography</span></nav>
+    <h1>silachomka Music Catalogue &amp; Discography</h1>
+    <p>Explore the complete discography, albums, and singles by silachomka (Samuel Silachomka John-Ibro) under chomkaMUSIC&trade;.</p>
+    <section style="margin-top: 32px;">
+      ${(releases || []).map(r => `
+        <article style="margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <h2><a href="/release/${escapeHtml(r.slug)}" style="color: #dfc27d; text-decoration: none;">${escapeHtml(r.title)}</a></h2>
+          <p>${escapeHtml(r.description || '')}</p>
+          <p style="font-size: 12px; color: #888;">Release Date: ${escapeHtml(r.displayDate || r.date || 'Available')}</p>
+        </article>
+      `).join('')}
+    </section>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderGalleryBodyHtml(gallery) {
+  return `${renderSemanticNav()}
+  <main style="max-width: 1200px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <span>Visual Archive &amp; Gallery</span></nav>
+    <h1>silachomka Visual Archive &amp; Gallery</h1>
+    <p>Behind-the-scenes photography, portraits, style, and visual stories from silachomka.</p>
+    <section style="margin-top: 32px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+      ${(gallery || []).map(g => `
+        <article style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 16px; border-radius: 8px;">
+          <h3><a href="/gallery/${escapeHtml(g.id)}" style="color: #dfc27d; text-decoration: none;">${escapeHtml(g.title || g.category || 'Visual Archive Post')}</a></h3>
+          <p style="font-size: 13px; color: #ccc;">${escapeHtml(g.caption || g.description || '')}</p>
+          <p style="font-size: 11px; color: #888;">${escapeHtml(g.displayDate || g.date || '')}</p>
+        </article>
+      `).join('')}
+    </section>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderAboutBodyHtml() {
+  return `${renderSemanticNav()}
+  <main style="max-width: 1000px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <span>About</span></nav>
+    <h1>About silachomka &mdash; Samuel Silachomka John-Ibro</h1>
+    <p>silachomka is the artist identity of Samuel John-Ibro &mdash; a multidisciplinary creative working across music, technology and visual culture.</p>
+    <p>The music lives under <strong>chomkaMUSIC&trade;</strong>, while the wider creative, technology and sports ecosystem sits under <strong>Chomka Nation</strong>.</p>
+    <section style="margin-top: 32px;">
+      <h2>Chomka Nation Ecosystem Architecture</h2>
+      <ul>
+        <li><strong>chomkaMUSIC&trade;:</strong> Music production, artist releases, sound design, master licensing, beat catalogue.</li>
+        <li><strong>chomkaTECH&trade;:</strong> Software engineering, creator tools, digital audio platforms, studio automation.</li>
+        <li><strong>Spartamonuel:</strong> Athletic brand, fitness, discipline, performance co-founded by Samuel and his brother.</li>
+      </ul>
+    </section>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderBeatsBodyHtml(beats) {
+  return `${renderSemanticNav()}
+  <main style="max-width: 1200px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <span>Beat Store</span></nav>
+    <h1>chomkaMUSIC&trade; Studio Beats &amp; Instrumentals</h1>
+    <p>Browse, audition 45-second previews, and license original beats and instrumentals produced by silachomka.</p>
+    <section style="margin-top: 32px;">
+      ${(beats || []).map(b => `
+        <article style="margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <h2><a href="/beats/${escapeHtml(b.id)}" style="color: #dfc27d; text-decoration: none;">${escapeHtml(b.title)}</a></h2>
+          <p>${escapeHtml(b.description || '')}</p>
+          <p style="font-size: 13px; color: #888;">BPM: ${b.bpm || 'Variable'} &middot; Genre: ${escapeHtml(b.genre || 'Instrumental')} &middot; Key: ${escapeHtml(b.key || 'N/A')}</p>
+        </article>
+      `).join('')}
+    </section>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderServicesBodyHtml() {
+  return `${renderSemanticNav()}
+  <main style="max-width: 1000px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <span>Studio Services</span></nav>
+    <h1>Chomka Studio Services</h1>
+    <p>Professional music production, custom beats, vocal recording, mixing &amp; mastering, and studio audio engineering by silachomka at Chomka Studio.</p>
+    <section style="margin-top: 32px;">
+      <h2>Available Studio Services</h2>
+      <ul>
+        <li><strong>Voice Recording:</strong> Professional acoustic vocal tracking sessions with engineer.</li>
+        <li><strong>Mixing &amp; Mastering:</strong> Industry-standard stereo balances and competitive loudness masters.</li>
+        <li><strong>Custom Beat Production:</strong> Tailored instrumentals composed from scratch to your vision.</li>
+        <li><strong>Sound Design &amp; Scoring:</strong> Atmospheric foley, cinematic transitions, and commercial sync.</li>
+      </ul>
+    </section>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderReleaseBodyHtml(release) {
+  const tracks = Array.isArray(release.tracks) ? release.tracks : [];
+  return `${renderSemanticNav()}
+  <main style="max-width: 900px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <a href="/music">Music</a> / <span>${escapeHtml(release.title)}</span></nav>
+    <h1>${escapeHtml(release.title)} &mdash; silachomka</h1>
+    <p style="font-size: 14px; color: #dfc27d; font-weight: 700;">Release Date: ${escapeHtml(release.displayDate || release.date || 'Available Now')}</p>
+    <p>${escapeHtml(release.description || '')}</p>
+    ${tracks.length > 0 ? `
+      <section style="margin-top: 28px;">
+        <h2>Tracklist (${tracks.length} tracks)</h2>
+        <ol>
+          ${tracks.map(t => `<li><strong>${escapeHtml(t.title)}</strong>${t.duration ? ` &mdash; ${escapeHtml(t.duration)}` : ''}</li>`).join('')}
+        </ol>
+      </section>
+    ` : ''}
+    <p style="margin-top: 24px;"><a href="/music">&larr; Back to Music Catalogue</a></p>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderBeatDetailBodyHtml(beat) {
+  return `${renderSemanticNav()}
+  <main style="max-width: 900px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <a href="/beats">Beats</a> / <span>${escapeHtml(beat.title)}</span></nav>
+    <h1>${escapeHtml(beat.title)} &mdash; chomkaMUSIC&trade; Beat</h1>
+    <p style="font-size: 14px; color: #dfc27d; font-weight: 700;">BPM: ${beat.bpm || 'Variable'} &middot; Key: ${escapeHtml(beat.key || 'N/A')} &middot; Genre: ${escapeHtml(beat.genre || 'Hip-Hop/Afrobeats')}</p>
+    <p>${escapeHtml(beat.description || '')}</p>
+    <p><a href="/beats">&larr; Back to Beat Store</a></p>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
 async function generateSocialPages() {
-  const baseHtmlPath = path.join(outputDirectory, "index.html");
-  const baseHtml = await readFile(baseHtmlPath, "utf8");
-  const homeHtml = withSocialMetadata(baseHtml, createHomeMetadata());
-
-  await writeFile(baseHtmlPath, homeHtml, "utf8");
-  await writePage(["beats"], withSocialMetadata(homeHtml, createBeatHubMetadata()));
-  await writePage(
-    ["services"],
-    withSocialMetadata(homeHtml, {
-      title: "Chomka Studio Services | silachomka",
-      description:
-        "Professional music production, custom beats, mixing & mastering, vocal recording, sound design, and studio audio engineering by silachomka at Chomka Studio.",
-      canonicalPath: "/services",
-      type: "website",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "Chomka Studio Services | silachomka",
-    })
-  );
-  await writePage(
-    ["studio"],
-    withSocialMetadata(homeHtml, {
-      title: "chomkaMUSIC™ Studio Publishing",
-      description:
-        "Official publishing catalog and sync licensing for silachomka. Explore rights, master ownership, and sync opportunities.",
-      canonicalPath: "/studio",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "chomkaMUSIC™ Studio Publishing",
-    })
-  );
-  await writePage(
-    ["privacy"],
-    withSocialMetadata(homeHtml, {
-      title: "Privacy Policy | silachomka",
-      description:
-        "Privacy Policy and transparency disclosures for silachomka. Explains data privacy, local storage keys including silachomka_cookie_consent_v1, and embedded media consent.",
-      canonicalPath: "/privacy",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "Privacy Policy | silachomka",
-    })
-  );
-  await writePage(
-    ["cookies"],
-    withSocialMetadata(homeHtml, {
-      title: "Cookie Policy | silachomka",
-      description:
-        "Cookie Policy and consent management for silachomka. Details silachomka_cookie_consent_v1, functional preferences, and embedded media options.",
-      canonicalPath: "/cookies",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "Cookie Policy | silachomka",
-    })
-  );
-  await writePage(
-    ["terms"],
-    withSocialMetadata(homeHtml, {
-      title: "Terms & Conditions | silachomka",
-      description:
-        "Terms and conditions of use for silachomka website, music catalog, beat store, and digital assets.",
-      canonicalPath: "/terms",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "Terms & Conditions | silachomka",
-    })
-  );
-  await writePage(
-    ["music"],
-    withSocialMetadata(homeHtml, {
-      title: "Music Catalogue & Discography | silachomka",
-      description:
-        "Explore the complete music discography, singles, and albums by silachomka (Samuel Silachomka John-Ibro) under chomkaMUSIC™.",
-      canonicalPath: "/music",
-      type: "music.album",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "silachomka music catalogue",
-    })
-  );
-  await writePage(
-    ["gallery"],
-    withSocialMetadata(homeHtml, {
-      title: "Visual Archive & Gallery | silachomka",
-      description:
-        "Explore behind-the-scenes photography, portraits, style, and visual stories from silachomka.",
-      canonicalPath: "/gallery",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "silachomka visual archive",
-    })
-  );
-  await writePage(
-    ["about"],
-    withSocialMetadata(homeHtml, {
-      title: "About silachomka — Samuel Silachomka John-Ibro | Artist & Producer",
-      description:
-        "Official biography and story of silachomka (Samuel Silachomka John-Ibro) — Nigerian recording artist, producer, and audio engineer under chomkaMUSIC™.",
-      canonicalPath: "/about",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "About silachomka",
-    })
-  );
-
   const [liveBeats, liveGallery, liveReleases] = await Promise.all([
     fetchLiveEndpoint("/api/beats"),
     fetchLiveEndpoint("/api/gallery"),
@@ -465,23 +547,149 @@ async function generateSocialPages() {
   const canonicalGallery = validEntries(mergedGallery, "id", false);
   const canonicalReleases = validEntries(mergedReleases, "slug", true);
 
+  const baseHtmlPath = path.join(outputDirectory, "index.html");
+  const baseHtml = await readFile(baseHtmlPath, "utf8");
+  const homeHtml = withSocialMetadata(
+    baseHtml,
+    createHomeMetadata(),
+    renderHomeBodyHtml(canonicalReleases, canonicalBeats)
+  );
+
+  await writeFile(baseHtmlPath, homeHtml, "utf8");
+  await writePage(
+    ["beats"],
+    withSocialMetadata(baseHtml, createBeatHubMetadata(), renderBeatsBodyHtml(canonicalBeats))
+  );
+  await writePage(
+    ["services"],
+    withSocialMetadata(
+      baseHtml,
+      {
+        title: "Chomka Studio Services | silachomka",
+        description:
+          "Professional music production, custom beats, mixing & mastering, vocal recording, sound design, and studio audio engineering by silachomka at Chomka Studio.",
+        canonicalPath: "/services",
+        type: "website",
+        image: DEFAULT_SOCIAL_IMAGE,
+        imageAlt: "Chomka Studio Services | silachomka",
+      },
+      renderServicesBodyHtml()
+    )
+  );
+  await writePage(
+    ["studio"],
+    withSocialMetadata(baseHtml, {
+      title: "chomkaMUSIC™ Studio Publishing",
+      description:
+        "Official publishing catalog and sync licensing for silachomka. Explore rights, master ownership, and sync opportunities.",
+      canonicalPath: "/studio",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "chomkaMUSIC™ Studio Publishing",
+    })
+  );
+  await writePage(
+    ["privacy"],
+    withSocialMetadata(baseHtml, {
+      title: "Privacy Policy | silachomka",
+      description:
+        "Privacy Policy and transparency disclosures for silachomka. Explains data privacy, local storage keys including silachomka_cookie_consent_v1, and embedded media consent.",
+      canonicalPath: "/privacy",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Privacy Policy | silachomka",
+    })
+  );
+  await writePage(
+    ["cookies"],
+    withSocialMetadata(baseHtml, {
+      title: "Cookie Policy | silachomka",
+      description:
+        "Cookie Policy and consent management for silachomka. Details silachomka_cookie_consent_v1, functional preferences, and embedded media options.",
+      canonicalPath: "/cookies",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Cookie Policy | silachomka",
+    })
+  );
+  await writePage(
+    ["terms"],
+    withSocialMetadata(baseHtml, {
+      title: "Terms & Conditions | silachomka",
+      description:
+        "Terms and conditions of use for silachomka website, music catalog, beat store, and digital assets.",
+      canonicalPath: "/terms",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Terms & Conditions | silachomka",
+    })
+  );
+  await writePage(
+    ["music"],
+    withSocialMetadata(
+      baseHtml,
+      {
+        title: "Music Catalogue & Discography | silachomka",
+        description:
+          "Explore the complete music discography, singles, and albums by silachomka (Samuel Silachomka John-Ibro) under chomkaMUSIC™.",
+        canonicalPath: "/music",
+        type: "music.album",
+        image: DEFAULT_SOCIAL_IMAGE,
+        imageAlt: "silachomka music catalogue",
+      },
+      renderMusicBodyHtml(canonicalReleases)
+    )
+  );
+  await writePage(
+    ["gallery"],
+    withSocialMetadata(
+      baseHtml,
+      {
+        title: "Visual Archive & Gallery | silachomka",
+        description:
+          "Explore behind-the-scenes photography, portraits, style, and visual stories from silachomka.",
+        canonicalPath: "/gallery",
+        image: DEFAULT_SOCIAL_IMAGE,
+        imageAlt: "silachomka visual archive",
+      },
+      renderGalleryBodyHtml(canonicalGallery)
+    )
+  );
+  await writePage(
+    ["about"],
+    withSocialMetadata(
+      baseHtml,
+      {
+        title: "About silachomka — Samuel Silachomka John-Ibro | Artist & Producer",
+        description:
+          "Official biography and story of silachomka (Samuel Silachomka John-Ibro) — Nigerian recording artist, producer, and audio engineer under chomkaMUSIC™.",
+        canonicalPath: "/about",
+        image: DEFAULT_SOCIAL_IMAGE,
+        imageAlt: "About silachomka",
+      },
+      renderAboutBodyHtml()
+    )
+  );
+
   await Promise.all([
     ...canonicalBeats.map((beat) =>
       writePage(
         ["beats", encodeURIComponent(beat.id.trim())],
-        withSocialMetadata(homeHtml, createBeatMetadata(beat))
+        withSocialMetadata(baseHtml, createBeatMetadata(beat), renderBeatDetailBodyHtml(beat))
+      )
+    ),
+    ...canonicalBeats.map((beat) =>
+      writePage(
+        ["beat", encodeURIComponent(beat.id.trim())],
+        withSocialMetadata(baseHtml, createBeatMetadata(beat), renderBeatDetailBodyHtml(beat))
       )
     ),
     ...canonicalGallery.map((post) =>
       writePage(
         ["gallery", encodeURIComponent(post.id.trim())],
-        withSocialMetadata(homeHtml, createGalleryMetadata(post))
+        withSocialMetadata(baseHtml, createGalleryMetadata(post))
       )
     ),
     ...canonicalReleases.map((release) =>
       writePage(
         ["release", encodeURIComponent(release.slug.trim())],
-        withSocialMetadata(homeHtml, createReleaseMetadata(release))
+        withSocialMetadata(baseHtml, createReleaseMetadata(release), renderReleaseBodyHtml(release))
       )
     ),
     ...canonicalReleases.flatMap((rel) =>

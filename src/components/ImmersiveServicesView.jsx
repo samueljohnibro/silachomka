@@ -53,9 +53,11 @@ export default function ImmersiveServicesView({
 
   const selectedServices = activeServiceList.filter((s) => selectedSlugs.includes(s.slug));
   const hasVoiceRecording = selectedSlugs.includes("voice-recording");
-  const voiceHours = configurations["voice-recording"]?.hours || 2;
-  const voiceBookingDate = configurations["voice-recording"]?.bookingDate || "";
-  const voiceBookingTime = configurations["voice-recording"]?.bookingTime || "";
+  const primarySlug = hasVoiceRecording ? "voice-recording" : (selectedSlugs[0] || "general");
+  const voiceBookingDate =
+    configurations[primarySlug]?.bookingDate || configurations["voice-recording"]?.bookingDate || "";
+  const voiceBookingTime =
+    configurations[primarySlug]?.bookingTime || configurations["voice-recording"]?.bookingTime || "";
 
   return (
     <section className="services-immersive-viewport" aria-label="Immersive Studio Concierge Conversation">
@@ -189,9 +191,84 @@ export default function ImmersiveServicesView({
                       </p>
                     </div>
 
+                    {/* Live Duration Stepper right on card for hourly recording sessions */}
+                    {svc.isHourly && isSelected && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          background: "rgba(0, 0, 0, 0.45)",
+                          padding: "6px 12px",
+                          borderRadius: "8px",
+                          marginTop: "12px",
+                          border: "1px solid rgba(223, 194, 125, 0.35)",
+                        }}
+                      >
+                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>Session Duration:</span>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const currentH = Math.max(1, parseInt(configurations[svc.slug]?.hours || 2, 10));
+                              updateConfig(svc.slug, "hours", Math.max(1, currentH - 1));
+                            }}
+                            disabled={Math.max(1, parseInt(configurations[svc.slug]?.hours || 2, 10)) <= 1}
+                            style={{
+                              width: "24px",
+                              height: "24px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255,255,255,0.2)",
+                              background: "rgba(255,255,255,0.08)",
+                              color: "var(--text)",
+                              cursor: "pointer",
+                              fontWeight: 700,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                            aria-label="Decrease hours"
+                          >
+                            -
+                          </button>
+                          <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--gold)", minWidth: "48px", textAlign: "center" }}>
+                            {configurations[svc.slug]?.hours || 2} {Number(configurations[svc.slug]?.hours || 2) === 1 ? "hr" : "hrs"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const currentH = Math.max(1, parseInt(configurations[svc.slug]?.hours || 2, 10));
+                              updateConfig(svc.slug, "hours", currentH + 1);
+                            }}
+                            style={{
+                              width: "24px",
+                              height: "24px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255,255,255,0.2)",
+                              background: "rgba(255,255,255,0.08)",
+                              color: "var(--text)",
+                              cursor: "pointer",
+                              fontWeight: 700,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                            aria-label="Increase hours"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: isSelected ? "var(--gold)" : "var(--text)" }}>
-                        {svc.isHourly ? `₦${(svc.hourlyRateNgn || 25000).toLocaleString()} / hr` : svc.basePriceNgn ? `₦${Number(svc.basePriceNgn).toLocaleString()}` : "Price upon request"}
+                        {svc.isHourly
+                          ? `₦${((svc.hourlyRateNgn || 25000) * (configurations[svc.slug]?.hours || 2)).toLocaleString()}`
+                          : svc.basePriceNgn ? `₦${Number(svc.basePriceNgn).toLocaleString()}` : "Price upon request"}
                       </span>
                       <span style={{ fontSize: "10px", color: "var(--muted)" }}>
                         {svc.turnaroundDays ? `~${svc.turnaroundDays}d turnaround` : "Live session"}
@@ -380,11 +457,14 @@ export default function ImmersiveServicesView({
                   studioAvailability={studioAvailability}
                   selectedDate={voiceBookingDate}
                   onSelectDate={(newDate) => {
+                    updateConfig(primarySlug, "bookingDate", newDate);
                     updateConfig("voice-recording", "bookingDate", newDate);
+                    updateConfig(primarySlug, "bookingTime", "");
                     updateConfig("voice-recording", "bookingTime", "");
                   }}
                   selectedTime={voiceBookingTime}
                   onSelectTime={(newTime) => {
+                    updateConfig(primarySlug, "bookingTime", newTime);
                     updateConfig("voice-recording", "bookingTime", newTime);
                   }}
                 />
@@ -642,16 +722,35 @@ export default function ImmersiveServicesView({
                 </p>
               </div>
 
-              {hasVoiceRecording && voiceBookingDate && (
+              {voiceBookingDate && (
                 <div style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.08)", paddingBottom: "14px", marginBottom: "14px" }}>
                   <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: "4px" }}>
-                    Scheduled Appointment
+                    Scheduled Studio Session
                   </span>
                   <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "var(--gold)" }}>
                     📅 {formatLongDate(voiceBookingDate)} {voiceBookingTime ? `at ${voiceBookingTime}` : ""}
                   </p>
                 </div>
               )}
+
+              {/* Deliverables Overview */}
+              <div style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.08)", paddingBottom: "14px", marginBottom: "14px" }}>
+                <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: "8px" }}>
+                  Guaranteed Deliverables
+                </span>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {selectedServices.map((svc) => (
+                    <div key={`deliv-${svc.slug}`} style={{ fontSize: "12px", color: "var(--text)" }}>
+                      <strong style={{ color: "var(--gold)" }}>• {svc.title}:</strong>{" "}
+                      <span style={{ color: "var(--muted)" }}>
+                        {Array.isArray(svc.deliverables) && svc.deliverables.length > 0
+                          ? svc.deliverables.join(", ")
+                          : "High-resolution master files, industry-standard stems & mix passes"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
                 <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
@@ -673,26 +772,47 @@ export default function ImmersiveServicesView({
                 })}
               </div>
 
+              {/* Total & 50% Deposit Breakdown */}
               <div
                 style={{
                   borderTop: "1px solid rgba(223, 194, 125, 0.3)",
                   paddingTop: "14px",
                   display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
+                  flexDirection: "column",
+                  gap: "10px",
                 }}
               >
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block" }}>
-                    Total Estimated Investment
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontSize: "12px", color: "var(--text-h)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    Total Studio Investment
                   </span>
-                  <span style={{ fontSize: "11px", color: "#4ade80" }}>
-                    * 50% deposit required upon booking confirmation
+                  <span style={{ fontSize: "20px", fontWeight: 800, color: "var(--gold)" }}>
+                    {hasPriceUponRequest && totalNgn === 0 ? "Price upon request" : `₦${totalNgn.toLocaleString()}`}
                   </span>
                 </div>
-                <span style={{ fontSize: "22px", fontWeight: 800, color: "var(--gold)" }}>
-                  {hasPriceUponRequest && totalNgn === 0 ? "Price upon request" : `₦${totalNgn.toLocaleString()}`}
-                </span>
+
+                {totalNgn > 0 && (
+                  <div
+                    style={{
+                      background: "rgba(223, 194, 125, 0.06)",
+                      border: "1px solid rgba(223, 194, 125, 0.2)",
+                      borderRadius: "8px",
+                      padding: "10px 14px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: "#4ade80", display: "block" }}>⚡ 50% Initial Deposit Today</strong>
+                      <span style={{ color: "var(--muted)", fontSize: "11px" }}>To lock studio schedule & engineer time</span>
+                    </div>
+                    <span style={{ fontSize: "15px", fontWeight: 800, color: "#4ade80" }}>
+                      ₦{Math.round(totalNgn * 0.5).toLocaleString()}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 

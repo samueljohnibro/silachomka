@@ -30,6 +30,9 @@ export default function GalleryCardVideo({
     const video = videoRef.current;
     if (!video) return;
 
+    video.muted = true;
+    video.playsInline = true;
+
     const setupRandomSnippet = () => {
       const dur = video.duration;
       if (Number.isFinite(dur) && dur > SNIPPET_DURATION + 0.2) {
@@ -51,10 +54,6 @@ export default function GalleryCardVideo({
       }
     };
 
-    const handleLoadedMetadata = () => {
-      setupRandomSnippet();
-    };
-
     const handleCanPlay = () => {
       setHasLoadedData(true);
       if (onReady) onReady(src);
@@ -62,6 +61,21 @@ export default function GalleryCardVideo({
         video.play().catch(() => {});
       }
     };
+
+    const handleLoadedMetadata = () => {
+      setupRandomSnippet();
+      if (video.readyState >= 2) {
+        handleCanPlay();
+      }
+    };
+
+    // Immediate check if video is already cached or loaded
+    if (video.readyState >= 1) {
+      setupRandomSnippet();
+    }
+    if (video.readyState >= 2) {
+      handleCanPlay();
+    }
 
     const handleError = (e) => {
       if (onError) onError(src, e);
@@ -136,12 +150,12 @@ export default function GalleryCardVideo({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (isActive && hasLoadedData) {
+    if (isActive) {
       video.play().catch(() => {});
-    } else if (!isActive) {
+    } else {
       video.pause();
     }
-  }, [isActive, hasLoadedData]);
+  }, [isActive]);
 
   return (
     <video

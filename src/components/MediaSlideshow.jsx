@@ -19,6 +19,7 @@ const VIDEO_EXTENSIONS = ["mp4", "webm", "ogg", "mov", "m4v"];
 function isVideoMedia(item, src) {
   if (!item) return false;
   if (item.type === "video" || item.kind === "video" || item.assetType === "VIDEO") return true;
+  if (item.mimeType && String(item.mimeType).toLowerCase().startsWith("video/")) return true;
   if (typeof src === "string") {
     if (src.startsWith("data:video/")) return true;
     const ext = src.split("?")[0].split("#")[0].split(".").pop()?.toLowerCase();
@@ -227,7 +228,8 @@ export default function MediaSlideshow({
     const src = getMediaSrc(item);
     const alt = getMediaAlt(item, 0);
     const isVideo = isVideoMedia(item, src);
-    const activeClasses = isIncoming ? `is-active ${currentPanClass}` : "";
+    // Both previous and current media stay active to maintain unbroken visuals during crossfade
+    const activeClasses = `is-active ${currentPanClass}`;
 
     return (
       <div
@@ -238,9 +240,8 @@ export default function MediaSlideshow({
           inset: 0,
           width: "100%",
           height: "100%",
-          opacity: isIncoming ? 1 : 0,
+          opacity: 1,
           zIndex: isIncoming ? 2 : 1,
-          transition: `opacity ${FADE_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`,
           pointerEvents: "none",
         }}
       >

@@ -253,9 +253,10 @@ export default function ReleasePage({ release: propRelease }) {
 
   const isFuture = releaseTimestamp > 0 && releaseTimestamp > now;
   const isRecentRelease =
-    releaseTimestamp > 0 &&
     !isFuture &&
-    now - releaseTimestamp <= 30 * 24 * 60 * 60 * 1000;
+    (Boolean(release?.isLatest || release?.is_latest) ||
+      release?.slug === "noisemaker" ||
+      (releaseTimestamp > 0 && now - releaseTimestamp <= 90 * 24 * 60 * 60 * 1000));
 
   // Stage 31 Part 23: Smooth, non-blocking entry animation ("COMING SOON" or "OUT NOW") on release entry
   const [showEntrySplash, setShowEntrySplash] = useState(false);

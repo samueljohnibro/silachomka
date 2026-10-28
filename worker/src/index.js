@@ -1409,50 +1409,132 @@ app.post('/api/services/verify-payment', async (c) => {
   }
 })
 
-// Paystack Webhook Handler (Req #26 & #27)
+// Paystack Webhook Handler (Strict Fail-Closed, HMAC-SHA512 Verified & Authoritative) (Stage 38 — Req #1)
 app.post('/api/services/webhook', async (c) => {
   const sql = c.get('sql')
-  const signature = c.req.header('x-paystack-signature')
+
+  // 1. Mandatory Gateway Configuration Check
+  if (!c.env?.PAYSTACK_SECRET_KEY || !c.env.PAYSTACK_SECRET_KEY.startsWith('sk_')) {
+    return c.json({ error: 'Paystack payment gateway is not configured on this environment (missing PAYSTACK_SECRET_KEY in worker secrets).' }, 503)
+  }
+
+  // 2. Strict Signature Presence Check
+  const signature = String(c.req.header('x-paystack-signature') || '').trim()
+  if (!signature) {
+    return c.json({ error: 'Missing x-paystack-signature header' }, 401)
+  }
+
+  // 3. Strict Signature Format Validation (HMAC-SHA512 is 64 bytes = 128 hex characters)
+  if (!/^[0-9a-fA-F]{128}$/.test(signature)) {
+    return c.json({ error: 'Invalid webhook signature format' }, 401)
+  }
+
   const rawBody = await c.req.text()
-  
-  if (c.env?.PAYSTACK_SECRET_KEY && signature) {
-    try {
-      const encoder = new TextEncoder()
-      const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(c.env.PAYSTACK_SECRET_KEY),
-        { name: 'HMAC', hash: 'SHA-512' },
-        false,
-        ['verify']
-      )
-      const sigBytes = new Uint8Array(signature.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
-      const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(rawBody))
-      if (!isValid) {
-        return c.json({ error: 'Invalid webhook signature' }, 401)
+
+  // 4. Constant-Time HMAC-SHA512 Verification against Exact Raw Body
+  try {
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(c.env.PAYSTACK_SECRET_KEY),
+      { name: 'HMAC', hash: 'SHA-512' },
+      false,
+      ['verify']
+    )
+    const sigBytes = new Uint8Array(signature.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
+    const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(rawBody))
+    if (!isValid) {
+      return c.json({ error: 'Invalid webhook signature' }, 401)
+    }
+  } catch (e) {
+    return c.json({ error: 'Webhook signature verification failed' }, 401)
+  }
+
+  // 5. Parse JSON Payload
+  let payload
+  try {
+    payload = JSON.parse(rawBody || '{}')
+  } catch {
+    return c.json({ error: 'Malformed JSON payload' }, 400)
+  }
+
+  // 6. Only process supported event types (charge.success)
+  if (payload.event !== 'charge.success') {
+    return c.json({ received: true, ignored: true, event: payload.event })
+  }
+
+  const data = payload.data || {}
+  if (data.status !== 'success') {
+    return c.json({ received: true, ignored: true, reason: 'Transaction not in success state' })
+  }
+
+  const reference = String(data.reference || '').trim()
+  const orderNumber = String(data.metadata?.order_number || '').trim().toUpperCase()
+
+  if (!reference && !orderNumber) {
+    return c.json({ error: 'Missing transaction reference or order number' }, 400)
+  }
+
+  // 7. Locate Order in Neon Database
+  const rows = await sql`
+    SELECT id, order_number, total_amount_ngn, currency, payment_status, order_status
+    FROM service_orders
+    WHERE order_number = ${orderNumber} OR payment_reference = ${reference}
+  `
+  if (rows.length === 0) {
+    return c.json({ received: true, warning: 'No matching order found for reference' }, 404)
+  }
+  const order = rows[0]
+
+  // Idempotent duplicate check: already paid orders return 200 without mutation
+  if (order.payment_status === 'PAID') {
+    return c.json({ received: true, alreadyPaid: true, orderNumber: order.order_number })
+  }
+
+  // 8. Authoritative External Paystack Verification (Verify against Paystack API)
+  try {
+    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: {
+        'Authorization': `Bearer ${c.env.PAYSTACK_SECRET_KEY}`
       }
-    } catch (e) {
-      console.warn('Webhook signature check error:', e.message)
+    })
+    const verifyData = await verifyRes.json()
+    if (!verifyData.status || verifyData.data?.status !== 'success') {
+      return c.json({
+        error: 'Authoritative transaction verification failed',
+        details: verifyData.data?.gateway_response || 'Transaction not confirmed'
+      }, 400)
     }
-  }
 
-  const payload = JSON.parse(rawBody || '{}')
-  if (payload.event === 'charge.success') {
-    const data = payload.data || {}
-    const orderNumber = data.metadata?.order_number
-    const reference = data.reference
-
-    if (orderNumber || reference) {
-      await sql`
-        UPDATE service_orders
-        SET payment_status = 'PAID', order_status = 'PAID', paid_at = NOW(),
-            payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
-        WHERE (order_number = ${orderNumber} OR payment_reference = ${reference})
-          AND payment_status != 'PAID'
-      `
+    const expectedKobo = Math.round(Number(order.total_amount_ngn || 0) * 100)
+    const actualKobo = Number(verifyData.data?.amount || 0)
+    if (expectedKobo > 0 && actualKobo < expectedKobo) {
+      return c.json({ error: 'Amount paid does not match authoritative order total' }, 400)
     }
-  }
 
-  return c.json({ received: true })
+    if (verifyData.data?.currency && verifyData.data.currency !== 'NGN' && verifyData.data.currency !== order.currency) {
+      return c.json({ error: 'Currency mismatch' }, 400)
+    }
+
+    // 9. Mark Order Paid Authoritatively
+    await sql`
+      UPDATE service_orders
+      SET payment_status = 'PAID', order_status = 'PAID', paid_at = NOW(),
+          payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
+      WHERE id = ${order.id} AND payment_status != 'PAID'
+    `
+
+    return c.json({
+      received: true,
+      success: true,
+      orderNumber: order.order_number,
+      paymentStatus: 'PAID',
+      orderStatus: 'PAID',
+      reference
+    })
+  } catch (e) {
+    return c.json({ error: 'Failed connecting to Paystack authority: ' + e.message }, 502)
+  }
 })
 
 app.post('/api/services/orders/:orderNumber/payment', async (c) => {

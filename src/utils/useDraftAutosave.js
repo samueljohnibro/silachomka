@@ -32,6 +32,20 @@ export function useDraftAutosave({
   const initialJsonRef = useRef(null);
   const currentDataRef = useRef(currentData);
   const isDirtyRef = useRef(false);
+  const prevEntityKeyRef = useRef(entityKey);
+
+  // Reset baseline and dirty state whenever entityKey changes (Stage 38)
+  useEffect(() => {
+    if (entityKey !== prevEntityKeyRef.current) {
+      prevEntityKeyRef.current = entityKey;
+      initialJsonRef.current = null;
+      isDirtyRef.current = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setAutosaveStatus('IDLE');
+      setRecoverableDraft(null);
+      setLastSavedAt(null);
+    }
+  }, [entityKey]);
 
   useEffect(() => {
     currentDataRef.current = currentData;
@@ -109,7 +123,7 @@ export function useDraftAutosave({
 
   // Check for existing stored draft when entering CREATE or EDIT mode
   useEffect(() => {
-    if (!active) {
+    if (!active || !entityKey) {
       setAutosaveStatus('IDLE');
       setRecoverableDraft(null);
       initialJsonRef.current = null;
@@ -122,6 +136,19 @@ export function useDraftAutosave({
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.data && parsed.savedAt) {
+          // Check for stale draft vs server updated_at
+          const serverUpdateRaw = currentData?.updated_at || currentData?.updatedAt;
+          if (serverUpdateRaw) {
+            const serverUpdatedAt = new Date(serverUpdateRaw).getTime();
+            const draftSavedAt = new Date(parsed.savedAt).getTime();
+            if (!isNaN(serverUpdatedAt) && !isNaN(draftSavedAt) && serverUpdatedAt >= draftSavedAt) {
+              // Server has newer authoritative content than this draft — discard it!
+              localStorage.removeItem(storageKey);
+              setRecoverableDraft(null);
+              return;
+            }
+          }
+
           // If stored draft is identical to current server data, it is NOT an unsaved draft! Discard it.
           if (currentData && !isDataDifferent(parsed.data, currentData)) {
             localStorage.removeItem(storageKey);
@@ -132,7 +159,7 @@ export function useDraftAutosave({
         }
       }
     } catch {}
-  }, [active, storageKey, currentData, isDataDifferent]);
+  }, [active, entityKey, storageKey, currentData, isDataDifferent]);
 
   // Capture baseline snapshot of initial formState on form open
   useEffect(() => {
@@ -142,7 +169,7 @@ export function useDraftAutosave({
         isDirtyRef.current = false;
       } catch {}
     }
-  }, [active, currentData, serializeSnapshot]);
+  }, [active, entityKey, currentData, serializeSnapshot]);
 
   // Debounced autosave when formState changes
   useEffect(() => {

@@ -641,7 +641,7 @@ function HeroSlideshow() {
       return [
         { id: "fallback-noisemaker", src: "/covers/noisemaker.jpg", title: "NOISEMAKER", type: "image" },
         { id: "fallback-item5", src: "/covers/item5.jpg", title: "ITEM5", type: "image" },
-        { id: "fallback-love-language", src: "/covers/love-language.png", title: "LOVE LANGUAGE", type: "image" },
+        { id: "fallback-baby", src: "/covers/baby.jpg", title: "BABY", type: "image" },
       ];
     }
 
@@ -1580,8 +1580,17 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
     );
   }
 
+  const effectiveIsVideo =
+    isVideo ||
+    post?.type === "video" ||
+    post?.assetType === "VIDEO" ||
+    Boolean(post?.videoSrc) ||
+    Boolean(post?.mimeType && String(post.mimeType).toLowerCase().startsWith("video/")) ||
+    (typeof primarySrc === "string" &&
+      (primarySrc.startsWith("data:video") || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(primarySrc)));
+
   if (primarySrc) {
-    return isVideo ? (
+    return effectiveIsVideo ? (
       <GalleryCardVideo
         src={primarySrc}
         title={post.title || "Archive video"}
@@ -1593,6 +1602,9 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
         alt={post.title || "Archive item"}
         className="gallery-card-image"
         loading="lazy"
+        onError={(e) => {
+          e.currentTarget.style.display = "none";
+        }}
       />
     );
   }
@@ -1716,6 +1728,28 @@ function GallerySection() {
     const list = Array.isArray(gallery) ? gallery : [];
     if (activeCategory === "all") return list;
     const targetNorm = normalizeCat(activeCategory);
+    if (targetNorm === "videos") {
+      return list.filter((item) => {
+        if (normalizeCat(item.category) === "videos") return true;
+        if (item.type === "video" || item.assetType === "VIDEO" || item.isVideo || Boolean(item.videoSrc)) return true;
+        if (item.mimeType && String(item.mimeType).toLowerCase().startsWith("video/")) return true;
+        if (
+          Array.isArray(item.slides) &&
+          item.slides.some(
+            (s) =>
+              Boolean(
+                s?.isVideo ||
+                  s?.slideType === "video" ||
+                  s?.assetType === "VIDEO" ||
+                  (s?.mimeType && String(s.mimeType).toLowerCase().startsWith("video/"))
+              )
+          )
+        ) {
+          return true;
+        }
+        return false;
+      });
+    }
     return list.filter((item) => normalizeCat(item.category) === targetNorm);
   }, [activeCategory, gallery]);
 
@@ -1771,26 +1805,29 @@ function GallerySection() {
 
           // Stage 31 Part 13: Randomize carousel card preview thumbnail on public grid
           let carouselPreview = null;
+          let pickedSlide = null;
           if (isCarouselPost && Array.isArray(post.slides) && post.slides.length > 0) {
             const randIdx = Math.floor(Math.random() * post.slides.length);
-            const picked = post.slides[randIdx];
-            carouselPreview = typeof picked === "string" ? picked : (picked?.src || picked?.asset || null);
+            pickedSlide = post.slides[randIdx];
+            carouselPreview = typeof pickedSlide === "string" ? pickedSlide : (pickedSlide?.src || pickedSlide?.asset || null);
           }
 
-          const firstSlide = Array.isArray(post.slides) && post.slides.length > 0
-            ? (typeof post.slides[0] === "string" ? post.slides[0] : post.slides[0]?.src || post.slides[0]?.asset)
+          const firstSlideObj = Array.isArray(post.slides) && post.slides.length > 0 ? post.slides[0] : null;
+          const firstSlide = firstSlideObj
+            ? (typeof firstSlideObj === "string" ? firstSlideObj : firstSlideObj?.src || firstSlideObj?.asset)
             : null;
           const primarySrc = carouselPreview || post.src || post.asset || firstSlide || post.videoSrc;
+          const activeSlideRef = pickedSlide || firstSlideObj;
           const isVideo =
-            post.isVideo ||
+            Boolean(post.isVideo) ||
             post.type === "video" ||
             post.assetType === "VIDEO" ||
             Boolean(post.videoSrc) ||
+            Boolean(post.mimeType && String(post.mimeType).toLowerCase().startsWith("video/")) ||
+            Boolean(activeSlideRef?.isVideo || activeSlideRef?.slideType === "video" || activeSlideRef?.assetType === "VIDEO" || (activeSlideRef?.mimeType && String(activeSlideRef.mimeType).toLowerCase().startsWith("video/"))) ||
             (typeof primarySrc === "string" &&
               (primarySrc.startsWith("data:video") ||
-                primarySrc.endsWith(".mp4") ||
-                primarySrc.endsWith(".webm") ||
-                primarySrc.endsWith(".mov")));
+                /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(primarySrc)));
           const isCarousel =
             (post.type === "carousel" || post.slides?.length > 1) && post.slides?.length > 1;
           const hasSocialEmbed = Boolean(post.externalSocialUrl || post.external_social_url);
@@ -2317,6 +2354,75 @@ function ReleaseRoute() {
 }
 
 /* =========================================================
+   DEDICATED CORE CONTENT ROUTES (/music, /gallery, /about)
+   ========================================================= */
+
+function MusicRoute() {
+  const { releases, totalTracks } = useChomkaStore();
+  return (
+    <>
+      <SiteHeader beatsPage />
+      <main style={{ minHeight: "100vh", paddingTop: "80px", paddingBottom: "100px" }}>
+        <div style={{ maxWidth: "1320px", margin: "0 auto", padding: "0 clamp(16px, 4vw, 32px)" }}>
+          <nav aria-label="Breadcrumb" style={{ marginBottom: "20px" }}>
+            <ol style={{ display: "flex", gap: "8px", listStyle: "none", padding: 0, margin: 0, fontSize: "12px", color: "var(--muted)" }}>
+              <li><Link to="/" style={{ color: "var(--gold)", textDecoration: "none" }}>Home</Link></li>
+              <li>/</li>
+              <li aria-current="page" style={{ color: "var(--text-h)" }}>Music & Discography</li>
+            </ol>
+          </nav>
+          <MusicSection releases={releases} totalTracks={totalTracks} />
+        </div>
+      </main>
+      <SiteFooter />
+    </>
+  );
+}
+
+function GalleryRoute() {
+  return (
+    <>
+      <SiteHeader beatsPage />
+      <main style={{ minHeight: "100vh", paddingTop: "80px", paddingBottom: "100px" }}>
+        <div style={{ maxWidth: "1320px", margin: "0 auto", padding: "0 clamp(16px, 4vw, 32px)" }}>
+          <nav aria-label="Breadcrumb" style={{ marginBottom: "20px" }}>
+            <ol style={{ display: "flex", gap: "8px", listStyle: "none", padding: 0, margin: 0, fontSize: "12px", color: "var(--muted)" }}>
+              <li><Link to="/" style={{ color: "var(--gold)", textDecoration: "none" }}>Home</Link></li>
+              <li>/</li>
+              <li aria-current="page" style={{ color: "var(--text-h)" }}>Visual Archive & Gallery</li>
+            </ol>
+          </nav>
+          <GallerySection />
+        </div>
+      </main>
+      <SiteFooter />
+    </>
+  );
+}
+
+function AboutRoute() {
+  return (
+    <>
+      <SiteHeader beatsPage />
+      <main style={{ minHeight: "100vh", paddingTop: "80px", paddingBottom: "100px" }}>
+        <div style={{ maxWidth: "1320px", margin: "0 auto", padding: "0 clamp(16px, 4vw, 32px)" }}>
+          <nav aria-label="Breadcrumb" style={{ marginBottom: "20px" }}>
+            <ol style={{ display: "flex", gap: "8px", listStyle: "none", padding: 0, margin: 0, fontSize: "12px", color: "var(--muted)" }}>
+              <li><Link to="/" style={{ color: "var(--gold)", textDecoration: "none" }}>Home</Link></li>
+              <li>/</li>
+              <li aria-current="page" style={{ color: "var(--text-h)" }}>About & Ecosystem</li>
+            </ol>
+          </nav>
+          <AboutSection />
+          <WorldSection />
+        </div>
+      </main>
+      <SiteFooter />
+    </>
+  );
+}
+
+/* =========================================================
    NOT FOUND
    ========================================================= */
 
@@ -2495,10 +2601,10 @@ function App() {
             }
           />
 
-          {/* Core Content Route Aliases (Stage 37 SEO Reconciliation) */}
-          <Route path="/music" element={<Navigate to="/#music" replace />} />
-          <Route path="/gallery" element={<Navigate to="/#gallery" replace />} />
-          <Route path="/about" element={<Navigate to="/#about" replace />} />
+          {/* Dedicated Core Content Routes (Stage 38 Technical SEO) */}
+          <Route path="/music" element={<MusicRoute />} />
+          <Route path="/gallery" element={<GalleryRoute />} />
+          <Route path="/about" element={<AboutRoute />} />
 
           <Route
             path="/privacy"

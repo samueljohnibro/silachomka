@@ -145,7 +145,7 @@ function ThemedTimeSlotPicker({ slots, onAddSlot, onRemoveSlot }) {
 /* =========================================================
    INTERACTIVE MONTHLY STUDIO CALENDAR (REQ #11)
    ========================================================= */
-function StudioMonthlyCalendar({ availabilityList, onSelectDate, selectedDate }) {
+function StudioMonthlyCalendar({ availabilityList, onSelectDate, selectedDate, onOpenBatch }) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
   const year = currentDate.getFullYear();
@@ -213,7 +213,25 @@ function StudioMonthlyCalendar({ availabilityList, onSelectDate, selectedDate })
             Studio Booking Schedule · Closed by Default
           </span>
         </div>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          {onOpenBatch && (
+            <button
+              type="button"
+              onClick={onOpenBatch}
+              className="studio-pill-btn"
+              style={{
+                padding: "6px 14px",
+                fontSize: "12px",
+                color: "var(--gold)",
+                borderColor: "rgba(223, 194, 125, 0.4)",
+                background: "rgba(223, 194, 125, 0.1)",
+                fontWeight: 700,
+              }}
+              title="Bulk open or configure multiple dates at once"
+            >
+              ⚡ Bulk Open Dates
+            </button>
+          )}
           <button
             type="button"
             onClick={prevMonth}
@@ -447,6 +465,96 @@ export default function AdminServicesPage() {
   ]);
   const [selectedDayIsClosed, setSelectedDayIsClosed] = useState(true);
   const [selectedDayNotes, setSelectedDayNotes] = useState("");
+
+  // Batch Availability Modal State (Stage 38)
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchStartDate, setBatchStartDate] = useState("");
+  const [batchEndDate, setBatchEndDate] = useState("");
+  const [batchPreset, setBatchPreset] = useState("weekdays"); // 'all' | 'weekdays' | 'weekends'
+  const [batchSlots, setBatchSlots] = useState(["10:00 AM", "02:00 PM", "06:00 PM"]);
+  const [batchIsClosed, setBatchIsClosed] = useState(false);
+  const [batchNotes, setBatchNotes] = useState("");
+  const [isApplyingBatch, setIsApplyingBatch] = useState(false);
+  const [batchSuccessMsg, setBatchSuccessMsg] = useState(null);
+  const [batchError, setBatchError] = useState(null);
+
+  const handleOpenBatchModal = () => {
+    const today = new Date();
+    const nextMonthEnd = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+    const startStr = today.toISOString().slice(0, 10);
+    const endStr = nextMonthEnd.toISOString().slice(0, 10);
+    setBatchStartDate(startStr);
+    setBatchEndDate(endStr);
+    setBatchPreset("weekdays");
+    setBatchIsClosed(false);
+    setBatchSlots(["10:00 AM", "02:00 PM", "06:00 PM"]);
+    setBatchNotes("");
+    setBatchError(null);
+    setBatchSuccessMsg(null);
+    setShowBatchModal(true);
+  };
+
+  const getBatchMatchingDates = () => {
+    if (!batchStartDate || !batchEndDate || batchStartDate > batchEndDate) return [];
+    const dates = [];
+    let cur = new Date(batchStartDate + "T00:00:00");
+    const end = new Date(batchEndDate + "T00:00:00");
+    while (cur <= end) {
+      const dayOfWeek = cur.getDay(); // 0: Sun, 6: Sat
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      if (
+        batchPreset === "all" ||
+        (batchPreset === "weekdays" && !isWeekend) ||
+        (batchPreset === "weekends" && isWeekend)
+      ) {
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, "0");
+        const d = String(cur.getDate()).padStart(2, "0");
+        dates.push(`${y}-${m}-${d}`);
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return dates;
+  };
+
+  const handleApplyBatchAvailability = async (e) => {
+    e.preventDefault();
+    const dates = getBatchMatchingDates();
+    if (dates.length === 0) {
+      setBatchError("No dates matched your selected range and preset.");
+      return;
+    }
+
+    setIsApplyingBatch(true);
+    setBatchError(null);
+    setBatchSuccessMsg(null);
+
+    try {
+      const res = await fetch("/api/admin/services/availability/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dates,
+          slots: batchIsClosed ? [] : batchSlots,
+          isClosed: batchIsClosed,
+          notes: batchNotes.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update availability in batch");
+
+      await fetchAvailability();
+      setBatchSuccessMsg(`✓ Successfully configured ${data.affected || dates.length} studio dates!`);
+      setTimeout(() => {
+        setShowBatchModal(false);
+        setBatchSuccessMsg(null);
+      }, 1400);
+    } catch (err) {
+      setBatchError(err.message || "Failed to save batch availability");
+    } finally {
+      setIsApplyingBatch(false);
+    }
+  };
 
   const fetchOrders = async () => {
     try {
@@ -1128,6 +1236,7 @@ export default function AdminServicesPage() {
               availabilityList={availabilityList}
               selectedDate={selectedCalendarDate}
               onSelectDate={handleSelectCalendarDate}
+              onOpenBatch={handleOpenBatchModal}
             />
 
             {/* Bottom: Selected Day Inspector Card (Intentional, Balanced Full-Width Layout) */}
@@ -1309,11 +1418,19 @@ export default function AdminServicesPage() {
                   type="button"
                   onClick={() => handleDeleteDayAvailability(selectedCalendarDate)}
                   disabled={isSavingAvailability}
-                  className="cookie-btn cookie-btn-reject"
-                  style={{ padding: "10px 18px", fontSize: "12px", minWidth: "140px" }}
+                  className="studio-pill-btn"
+                  style={{
+                    padding: "10px 18px",
+                    fontSize: "12px",
+                    minWidth: "140px",
+                    color: "#ef4444",
+                    borderColor: "rgba(239, 68, 68, 0.4)",
+                    background: "rgba(239, 68, 68, 0.08)",
+                    fontWeight: 700,
+                  }}
                   title="Reset date configuration back to default closed"
                 >
-                  Reset to Closed
+                  ✕ Reset to Closed
                 </button>
                 <button
                   type="button"
@@ -1967,6 +2084,259 @@ export default function AdminServicesPage() {
                   style={{ minWidth: "120px" }}
                 >
                   {isSavingOrder ? <LoadingSpinner size={16} color="#000" /> : "Save Order"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Availability Modal (Stage 38) */}
+      {showBatchModal && (
+        <div className="modal-overlay" onClick={() => !isApplyingBatch && setShowBatchModal(false)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "580px",
+              width: "92%",
+              background: "rgba(18, 18, 24, 0.98)",
+              border: "1px solid var(--border)",
+              borderRadius: "16px",
+              padding: "clamp(20px, 3vw, 28px)",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
+              color: "var(--text-main)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "20px",
+                paddingBottom: "14px",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--gold)",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    display: "block",
+                    marginBottom: "4px",
+                  }}
+                >
+                  ⚡ Bulk Schedule Setup
+                </span>
+                <h3 style={{ margin: 0, fontSize: "20px", color: "var(--text-h)", fontWeight: 800 }}>
+                  Configure Multiple Studio Dates
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBatchModal(false)}
+                disabled={isApplyingBatch}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--muted)",
+                  fontSize: "20px",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {batchError && (
+              <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "6px", color: "#ef4444", fontSize: "12px", marginBottom: "16px" }}>
+                {batchError}
+              </div>
+            )}
+            {batchSuccessMsg && (
+              <div style={{ padding: "12px 16px", background: "rgba(52, 211, 153, 0.15)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: "6px", color: "#34d399", fontSize: "12px", marginBottom: "16px" }}>
+                {batchSuccessMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleApplyBatchAvailability} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+              {/* Date Range Inputs */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>
+                    From Date
+                  </label>
+                  <input
+                    type="date"
+                    className="studio-input"
+                    value={batchStartDate}
+                    onChange={(e) => setBatchStartDate(e.target.value)}
+                    required
+                    style={{ width: "100%", height: "40px" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>
+                    To Date
+                  </label>
+                  <input
+                    type="date"
+                    className="studio-input"
+                    value={batchEndDate}
+                    onChange={(e) => setBatchEndDate(e.target.value)}
+                    required
+                    style={{ width: "100%", height: "40px" }}
+                  />
+                </div>
+              </div>
+
+              {/* Day Preset Selector */}
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "8px" }}>
+                  Apply To Which Days?
+                </label>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {[
+                    { id: "weekdays", label: "Weekdays (Mon – Fri)" },
+                    { id: "weekends", label: "Weekends (Sat – Sun)" },
+                    { id: "all", label: "All Days (Mon – Sun)" },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setBatchPreset(p.id)}
+                      className="studio-pill-btn"
+                      style={{
+                        padding: "6px 14px",
+                        fontSize: "12px",
+                        color: batchPreset === p.id ? "var(--gold)" : "var(--muted)",
+                        borderColor: batchPreset === p.id ? "var(--gold)" : "var(--border)",
+                        background: batchPreset === p.id ? "rgba(223, 194, 125, 0.15)" : "transparent",
+                        fontWeight: batchPreset === p.id ? 700 : 500,
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Toggle */}
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "8px" }}>
+                  Studio Availability Action
+                </label>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setBatchIsClosed(false)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 16px",
+                      borderRadius: "6px",
+                      border: !batchIsClosed ? "1px solid #34d399" : "1px solid var(--border)",
+                      background: !batchIsClosed ? "rgba(52, 211, 153, 0.2)" : "rgba(255, 255, 255, 0.03)",
+                      color: !batchIsClosed ? "#34d399" : "var(--muted)",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    ✓ Open Studio For Bookings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchIsClosed(true)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 16px",
+                      borderRadius: "6px",
+                      border: batchIsClosed ? "1px solid #ef4444" : "1px solid var(--border)",
+                      background: batchIsClosed ? "rgba(239, 68, 68, 0.2)" : "rgba(255, 255, 255, 0.03)",
+                      color: batchIsClosed ? "#ef4444" : "var(--muted)",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    ✕ Set Studio Closed
+                  </button>
+                </div>
+              </div>
+
+              {/* Optional Notes */}
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>
+                  Schedule Label / Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  className="studio-input"
+                  placeholder="e.g. Standard Recording Hours / Weekend Sessions"
+                  value={batchNotes}
+                  onChange={(e) => setBatchNotes(e.target.value)}
+                  style={{ width: "100%", height: "40px" }}
+                />
+              </div>
+
+              {/* Time Slots when Open */}
+              {!batchIsClosed && (
+                <div style={{ paddingTop: "6px", borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                  <ThemedTimeSlotPicker
+                    slots={batchSlots}
+                    onAddSlot={(newSlot) => setBatchSlots((prev) => [...prev, newSlot])}
+                    onRemoveSlot={(idx) => setBatchSlots((prev) => prev.filter((_, i) => i !== idx))}
+                  />
+                </div>
+              )}
+
+              {/* Summary of matching dates */}
+              <div
+                style={{
+                  padding: "12px 16px",
+                  background: "rgba(223, 194, 125, 0.08)",
+                  border: "1px solid rgba(223, 194, 125, 0.25)",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  color: "var(--text-h)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span>Matching studio dates to update:</span>
+                <strong style={{ color: "var(--gold)", fontSize: "14px" }}>
+                  {getBatchMatchingDates().length} dates
+                </strong>
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBatchModal(false)}
+                  className="studio-pill-btn"
+                  disabled={isApplyingBatch}
+                  style={{ padding: "10px 18px", fontSize: "12px" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isApplyingBatch || getBatchMatchingDates().length === 0}
+                  className="primary-button"
+                  style={{ minWidth: "160px", padding: "10px 20px", fontSize: "13px", fontWeight: 700 }}
+                >
+                  {isApplyingBatch
+                    ? "Applying Schedule..."
+                    : `Apply to ${getBatchMatchingDates().length} Dates`}
                 </button>
               </div>
             </form>
