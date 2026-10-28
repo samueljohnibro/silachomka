@@ -1,7 +1,69 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback, Component } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import { useCurrency } from "../data/CurrencyContext";
+
+// Local Error Boundary to ensure modal issues never bubble to RootErrorBoundary
+class ModalErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.warn("Chomka AI Assistant caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="chomka-ai-empty-state" style={{ padding: "40px 20px", textAlign: "center" }}>
+          <p className="chomka-ai-empty-title" style={{ color: "var(--gold)" }}>SEARCH INDEX RESYNCHRONIZING</p>
+          <p className="chomka-ai-empty-desc">
+            The AI assistant encountered a temporary format discrepancy in the query index.
+          </p>
+          <button
+            type="button"
+            className="studio-pill-btn"
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              if (typeof this.props.onReset === "function") this.props.onReset();
+            }}
+            style={{ marginTop: "16px", background: "rgba(223, 194, 125, 0.15)", color: "var(--gold)" }}
+          >
+            Reset Query & Continue
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Safely extract string tokens from strings, arrays, or metadata objects
+function safeExtractTokens(item) {
+  if (!item) return [];
+  if (Array.isArray(item)) {
+    return item.flatMap((x) => {
+      if (typeof x === "string") return [x];
+      if (x && typeof x === "object") return [x.name, x.title, x.label, x.tag].filter(Boolean).map(String);
+      return [String(x || "")];
+    }).filter(Boolean);
+  }
+  if (typeof item === "string") {
+    return item.split(/[,\s#]+/).filter(Boolean);
+  }
+  if (typeof item === "object") {
+    return Object.values(item)
+      .filter((v) => typeof v === "string" || typeof v === "number")
+      .map(String);
+  }
+  return [String(item)];
+}
 
 // Standard studio service rate baselines for intent calculation
 const STUDIO_SERVICE_CATALOGUE = [
@@ -47,20 +109,27 @@ const STUDIO_SERVICE_CATALOGUE = [
   },
 ];
 
-// Levenshtein edit distance for fuzzy typo correction
+// Levenshtein edit distance for fuzzy typo correction (bounded for performance & stability)
 function levenshteinDistance(s1, s2) {
   const a = String(s1 || "").toLowerCase();
   const b = String(s2 || "").toLowerCase();
+  if (!a) return b.length;
+  if (!b) return a.length;
+  if (a === b) return 0;
+
+  const cleanA = a.slice(0, 80);
+  const cleanB = b.slice(0, 80);
+
   const matrix = [];
-  for (let i = 0; i <= b.length; i++) {
+  for (let i = 0; i <= cleanB.length; i++) {
     matrix[i] = [i];
   }
-  for (let j = 0; j <= a.length; j++) {
+  for (let j = 0; j <= cleanA.length; j++) {
     matrix[0][j] = j;
   }
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+  for (let i = 1; i <= cleanB.length; i++) {
+    for (let j = 1; j <= cleanA.length; j++) {
+      if (cleanB.charAt(i - 1) === cleanA.charAt(j - 1)) {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else {
         matrix[i][j] = Math.min(
@@ -71,43 +140,46 @@ function levenshteinDistance(s1, s2) {
       }
     }
   }
-  return matrix[b.length][a.length];
+  return matrix[cleanB.length][cleanA.length];
 }
 
 // Calculate similarity ratio 0..1
 function fuzzyMatchScore(term, target) {
   if (!term || !target) return 0;
-  const t = term.toLowerCase().trim();
-  const g = target.toLowerCase().trim();
-  if (g.includes(t)) return 1;
-  const dist = levenshteinDistance(t, g);
-  const maxLen = Math.max(t.length, g.length);
+  const t = String(term).toLowerCase().trim();
+  const g = String(target).toLowerCase().trim();
+  if (!t || !g) return 0;
+  if (g.includes(t)) return 1.0;
+  if (t.length < 3) return 0; // Skip fuzzy match for very short tokens
+
+  const dist = levenshteinDistance(t, g.slice(0, 60));
+  const maxLen = Math.max(t.length, Math.min(g.length, 60));
   return maxLen === 0 ? 1 : Math.max(0, 1 - dist / maxLen);
 }
 
 // Parse conversational booking stories into configured order drafts
 function parseConversationalBooking(text) {
+  if (typeof text !== "string") return null;
   const normalized = text.toLowerCase();
   const detectedServices = [];
-  let detectedMessage = text;
 
   // Extract hours if mentioned (e.g., "4 hours", "3 hrs")
   let hours = 2;
   const hourMatch = normalized.match(/(\d+)\s*(?:hour|hours|hr|hrs)/);
   if (hourMatch) {
-    hours = Math.max(1, parseInt(hourMatch[1], 10));
+    hours = Math.max(1, parseInt(hourMatch[1], 10) || 2);
   }
 
   // Extract tracks count if mentioned (e.g., "2 songs", "3 tracks")
   let tracks = 1;
   const trackMatch = normalized.match(/(\d+)\s*(?:song|songs|track|tracks|beat|beats)/);
   if (trackMatch) {
-    tracks = Math.max(1, parseInt(trackMatch[1], 10));
+    tracks = Math.max(1, parseInt(trackMatch[1], 10) || 1);
   }
 
   // Match against services
   for (const svc of STUDIO_SERVICE_CATALOGUE) {
-    const isMatched = svc.keywords.some((k) => normalized.includes(k));
+    const isMatched = Array.isArray(svc.keywords) && svc.keywords.some((k) => normalized.includes(k));
     if (isMatched) {
       let qty = 1;
       if (svc.slug === "vocal-recording") qty = hours;
@@ -145,12 +217,16 @@ export default function ChomkaAiAssistantModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recentSearches, setRecentSearches] = useState([]);
-  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'beats' | 'music' | 'services' | 'events' | 'gallery'
   const inputRef = useRef(null);
   const modalRef = useRef(null);
   const navigate = useNavigate();
 
-  const { releases, beats, gallery, events } = useChomkaStore();
+  const store = useChomkaStore();
+  const releases = Array.isArray(store?.releases) ? store.releases : [];
+  const beats = Array.isArray(store?.beats) ? store.beats : [];
+  const gallery = Array.isArray(store?.gallery) ? store.gallery : [];
+  const events = Array.isArray(store?.events) ? store.events : [];
+
   const currencyCtx = useCurrency();
   const currency = currencyCtx?.currency || "NGN";
 
@@ -165,13 +241,16 @@ export default function ChomkaAiAssistantModal() {
     try {
       const saved = localStorage.getItem("chomka_ai_recent_queries");
       if (saved) {
-        setRecentSearches(JSON.parse(saved).slice(0, 5));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setRecentSearches(parsed.slice(0, 5));
+        }
       }
     } catch {}
   }, []);
 
   const saveQuery = useCallback((text) => {
-    if (!text || text.trim().length < 2) return;
+    if (!text || typeof text !== "string" || text.trim().length < 2) return;
     try {
       const trimmed = text.trim();
       const updated = [trimmed, ...recentSearches.filter((q) => q.toLowerCase() !== trimmed.toLowerCase())].slice(0, 5);
@@ -183,7 +262,7 @@ export default function ChomkaAiAssistantModal() {
   // Global Keyboard Shortcut: Cmd+K / Ctrl+K or / to open
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key?.toLowerCase() === "k") {
         e.preventDefault();
         setIsOpen((prev) => !prev);
       } else if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(e.target?.tagName)) {
@@ -212,96 +291,146 @@ export default function ChomkaAiAssistantModal() {
 
   // Conversational Intent Detection
   const bookingProposal = useMemo(() => {
-    if (!query || query.trim().length < 8) return null;
-    const isConversational =
-      /(book|session|record|hours?|mix|master|consult|custom|beat|produce|tracks?|price|cost|how much|want to|hire)/i.test(query);
-    if (!isConversational) return null;
-    return parseConversationalBooking(query);
+    try {
+      if (!query || query.trim().length < 8) return null;
+      const isConversational =
+        /(book|session|record|hours?|mix|master|consult|custom|beat|produce|tracks?|price|cost|how much|want to|hire)/i.test(query);
+      if (!isConversational) return null;
+      return parseConversationalBooking(query);
+    } catch {
+      return null;
+    }
   }, [query]);
 
   // Multi-entity Typo-Tolerant Search Engine
   const searchResults = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    if (!trimmed) {
+    try {
+      const trimmed = (query || "").trim().toLowerCase();
+      if (!trimmed) {
+        return {
+          hasQuery: false,
+          beats: beats.slice(0, 3),
+          releases: releases.slice(0, 2),
+          services: STUDIO_SERVICE_CATALOGUE,
+          events: events.slice(0, 2),
+          gallery: gallery.slice(0, 3),
+          suggestedTerm: null,
+          totalCount: 0,
+        };
+      }
+
+      const queryTokens = trimmed.split(/\s+/).filter(Boolean);
+
+      // Score function across multiple attributes safely
+      const scoreItem = (strings) => {
+        if (!Array.isArray(strings)) return 0;
+        let maxScore = 0;
+        for (const raw of strings) {
+          if (raw == null) continue;
+          const low = String(raw).toLowerCase().trim();
+          if (!low) continue;
+          // Exact containment of full query
+          if (low.includes(trimmed)) return 1.0;
+          // Token matches
+          for (const token of queryTokens) {
+            if (!token) continue;
+            if (low.includes(token)) {
+              maxScore = Math.max(maxScore, 0.85);
+            } else if (token.length >= 3 && low.length <= 100) {
+              const fScore = fuzzyMatchScore(token, low);
+              if (fScore > 0.65) maxScore = Math.max(maxScore, fScore * 0.8);
+            }
+          }
+        }
+        return maxScore;
+      };
+
+      // Filter & score beats
+      const matchedBeats = beats
+        .map((b) => {
+          if (!b) return null;
+          const tags = safeExtractTokens(b.tags);
+          const strings = [b.title, b.genre, b.mood, b.key, b.bpm ? `${b.bpm} bpm` : "", ...tags];
+          return { item: b, score: scoreItem(strings) };
+        })
+        .filter((x) => x && x.score >= 0.5)
+        .sort((a, b) => b.score - a.score)
+        .map((x) => x.item);
+
+      // Filter & score releases
+      const matchedReleases = releases
+        .map((r) => {
+          if (!r) return null;
+          const tracks = Array.isArray(r.tracks) ? r.tracks : (Array.isArray(r.tracklist) ? r.tracklist : []);
+          const trackTitles = tracks.map((t) => (typeof t === "string" ? t : t?.title || "")).filter(Boolean);
+          const strings = [r.title, r.year, r.description, r.genre, ...trackTitles];
+          return { item: r, score: scoreItem(strings) };
+        })
+        .filter((x) => x && x.score >= 0.5)
+        .sort((a, b) => b.score - a.score)
+        .map((x) => x.item);
+
+      // Filter & score services
+      const matchedServices = STUDIO_SERVICE_CATALOGUE
+        .map((s) => {
+          if (!s) return null;
+          const strings = [s.title, s.category, s.description, ...(Array.isArray(s.keywords) ? s.keywords : [])];
+          return { item: s, score: scoreItem(strings) };
+        })
+        .filter((x) => x && x.score >= 0.5)
+        .sort((a, b) => b.score - a.score)
+        .map((x) => x.item);
+
+      // Filter & score events
+      const matchedEvents = events
+        .map((e) => {
+          if (!e) return null;
+          const lineup = safeExtractTokens(e.lineup);
+          const strings = [e.title, e.venue, e.city, e.country, e.description, e.ticket_status, ...lineup];
+          return { item: e, score: scoreItem(strings) };
+        })
+        .filter((x) => x && x.score >= 0.5)
+        .sort((a, b) => b.score - a.score)
+        .map((x) => x.item);
+
+      // Filter & score gallery
+      const matchedGallery = gallery
+        .map((g) => {
+          if (!g) return null;
+          const tags = safeExtractTokens(g.tags);
+          const strings = [g.title, g.caption, g.category, g.location, ...tags];
+          return { item: g, score: scoreItem(strings) };
+        })
+        .filter((x) => x && x.score >= 0.5)
+        .sort((a, b) => b.score - a.score)
+        .map((x) => x.item);
+
       return {
-        hasQuery: false,
-        beats: beats.slice(0, 3),
-        releases: releases.slice(0, 2),
-        services: STUDIO_SERVICE_CATALOGUE,
-        events: events.slice(0, 2),
-        gallery: gallery.slice(0, 3),
-        suggestedTerm: null,
+        hasQuery: true,
+        beats: matchedBeats,
+        releases: matchedReleases,
+        services: matchedServices,
+        events: matchedEvents,
+        gallery: matchedGallery,
+        totalCount: matchedBeats.length + matchedReleases.length + matchedServices.length + matchedEvents.length + matchedGallery.length,
+      };
+    } catch (err) {
+      console.error("AI assistant search error:", err);
+      return {
+        hasQuery: Boolean(query && query.trim()),
+        beats: [],
+        releases: [],
+        services: [],
+        events: [],
+        gallery: [],
+        totalCount: 0,
       };
     }
-
-    const queryTokens = trimmed.split(/\s+/).filter(Boolean);
-
-    // Score function across multiple attributes
-    const scoreItem = (strings) => {
-      let maxScore = 0;
-      for (const str of strings) {
-        if (!str) continue;
-        const low = String(str).toLowerCase();
-        // Exact containment
-        if (low.includes(trimmed)) return 1.0;
-        // Token match
-        for (const token of queryTokens) {
-          if (low.includes(token)) maxScore = Math.max(maxScore, 0.85);
-          const fScore = fuzzyMatchScore(token, low);
-          if (fScore > 0.65) maxScore = Math.max(maxScore, fScore * 0.8);
-        }
-      }
-      return maxScore;
-    };
-
-    // Filter & score beats
-    const matchedBeats = beats
-      .map((b) => ({ item: b, score: scoreItem([b.title, b.genre, b.mood, b.key, b.bpm ? `${b.bpm} bpm` : "", ...(b.tags || [])]) }))
-      .filter((x) => x.score >= 0.5)
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.item);
-
-    // Filter & score releases
-    const matchedReleases = releases
-      .map((r) => ({ item: r, score: scoreItem([r.title, r.year, r.description, r.genre, ...(r.tracklist?.map((t) => t.title) || [])]) }))
-      .filter((x) => x.score >= 0.5)
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.item);
-
-    // Filter & score services
-    const matchedServices = STUDIO_SERVICE_CATALOGUE
-      .map((s) => ({ item: s, score: scoreItem([s.title, s.category, s.description, ...s.keywords]) }))
-      .filter((x) => x.score >= 0.5)
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.item);
-
-    // Filter & score events
-    const matchedEvents = events
-      .map((e) => ({ item: e, score: scoreItem([e.title, e.venue, e.city, e.country, e.description, e.ticket_status]) }))
-      .filter((x) => x.score >= 0.5)
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.item);
-
-    // Filter & score gallery
-    const matchedGallery = gallery
-      .map((g) => ({ item: g, score: scoreItem([g.title, g.caption, g.category, g.location, ...(g.tags || [])]) }))
-      .filter((x) => x.score >= 0.5)
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.item);
-
-    return {
-      hasQuery: true,
-      beats: matchedBeats,
-      releases: matchedReleases,
-      services: matchedServices,
-      events: matchedEvents,
-      gallery: matchedGallery,
-      totalCount: matchedBeats.length + matchedReleases.length + matchedServices.length + matchedEvents.length + matchedGallery.length,
-    };
   }, [query, beats, releases, events, gallery]);
 
   // Handle direct navigation to service checkout with pre-filled proposal
   const handleProceedToServices = (proposal) => {
+    if (!proposal || !Array.isArray(proposal.services)) return;
     saveQuery(query);
     setIsOpen(false);
     try {
@@ -366,327 +495,329 @@ export default function ChomkaAiAssistantModal() {
           }}
         >
           <div className="chomka-ai-modal-dialog" ref={modalRef} onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="chomka-ai-header">
-              <div className="chomka-ai-header-brand">
-                <span className="chomka-ai-sparkle-icon">✦</span>
-                <div>
-                  <div className="chomka-ai-title">SILACHOMKA AI · CHOMKAMUSIC™</div>
-                  <div className="chomka-ai-status">
-                    <span className="chomka-ai-status-dot" />
-                    <span>CATALOGUE & CHOMKAMUSIC™ STUDIO CONCIERGE</span>
+            <ModalErrorBoundary onReset={() => setQuery("")}>
+              {/* Header */}
+              <div className="chomka-ai-header">
+                <div className="chomka-ai-header-brand">
+                  <span className="chomka-ai-sparkle-icon">✦</span>
+                  <div>
+                    <div className="chomka-ai-title">SILACHOMKA AI · CHOMKAMUSIC™</div>
+                    <div className="chomka-ai-status">
+                      <span className="chomka-ai-status-dot" />
+                      <span>CATALOGUE & CHOMKAMUSIC™ STUDIO CONCIERGE</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="chomka-ai-header-actions">
-                <span className="chomka-ai-esc-pill">ESC TO CLOSE</span>
-                <button
-                  type="button"
-                  className="chomka-ai-close-btn"
-                  onClick={() => setIsOpen(false)}
-                  aria-label="Close search console"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Smart Search Bar */}
-            <div className="chomka-ai-search-box">
-              <span className="chomka-ai-search-icon">🔍</span>
-              <input
-                ref={inputRef}
-                type="text"
-                className="chomka-ai-search-input"
-                placeholder="Search beats, releases, tour dates or say: 'I want to record vocals for 4 hours and mix 2 songs'..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && query.trim()) {
-                    saveQuery(query);
-                  }
-                }}
-              />
-              {query && (
-                <button
-                  type="button"
-                  className="chomka-ai-clear-btn"
-                  onClick={() => setQuery("")}
-                  aria-label="Clear input"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {/* Quick Action Chips & Recommendations */}
-            <div className="chomka-ai-chips-strip">
-              <span className="chomka-ai-chips-label">SUGGESTIONS:</span>
-              <button
-                type="button"
-                className="chomka-ai-chip"
-                onClick={() => setQuery("Book 4 hours vocal recording and mixing")}
-              >
-                🎛️ Book Vocal Session
-              </button>
-              <button
-                type="button"
-                className="chomka-ai-chip"
-                onClick={() => setQuery("Afrobeats")}
-              >
-                🥁 Afrobeats Beats
-              </button>
-              <button
-                type="button"
-                className="chomka-ai-chip"
-                onClick={() => setQuery("Events and concerts")}
-              >
-                🎟️ Live Events
-              </button>
-              <button
-                type="button"
-                className="chomka-ai-chip"
-                onClick={() => setQuery("NOISEMAKER")}
-              >
-                🔥 Latest Release
-              </button>
-              <button
-                type="button"
-                className="chomka-ai-chip"
-                onClick={() => setQuery("Custom beat production")}
-              >
-                ⚡ Custom Beats
-              </button>
-            </div>
-
-            {/* Console Body: Dynamic AI Intent or Search Results */}
-            <div className="chomka-ai-body">
-              {/* 1. Conversational Booking AI Proposal */}
-              {bookingProposal && (
-                <div className="chomka-ai-proposal-card">
-                  <div className="chomka-ai-proposal-header">
-                    <div className="chomka-ai-proposal-badge">
-                      <span>✦ AI STUDIO PROPOSAL GENERATED</span>
-                    </div>
-                    <span className="chomka-ai-proposal-sub">
-                      Organized automatically from your request
-                    </span>
-                  </div>
-
-                  <p className="chomka-ai-proposal-quote">"{bookingProposal.rawPrompt}"</p>
-
-                  <div className="chomka-ai-proposal-items">
-                    {bookingProposal.services.map((svc) => (
-                      <div key={svc.slug} className="chomka-ai-proposal-row">
-                        <div>
-                          <strong className="chomka-ai-proposal-item-title">{svc.title}</strong>
-                          <span className="chomka-ai-proposal-item-qty">
-                            ({svc.quantity} {svc.unit}{svc.quantity > 1 ? "s" : ""}) · {svc.description}
-                          </span>
-                        </div>
-                        <div className="chomka-ai-proposal-item-price">
-                          {formatAmount(currency === "NGN" ? svc.subtotalNgn : svc.subtotalUsd)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="chomka-ai-proposal-total-row">
-                    <div>
-                      <span className="chomka-ai-total-label">ESTIMATED PRODUCTION TOTAL</span>
-                      <strong className="chomka-ai-total-val">
-                        {formatAmount(currency === "NGN" ? bookingProposal.totalNgn : bookingProposal.totalUsd)}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="chomka-ai-total-label">50% STUDIO SECURING DEPOSIT</span>
-                      <strong className="chomka-ai-total-deposit">
-                        {formatAmount(currency === "NGN" ? bookingProposal.depositNgn : bookingProposal.depositUsd)}
-                      </strong>
-                    </div>
-                  </div>
-
+                <div className="chomka-ai-header-actions">
+                  <span className="chomka-ai-esc-pill">ESC TO CLOSE</span>
                   <button
                     type="button"
-                    className="chomka-ai-proposal-btn"
-                    onClick={() => handleProceedToServices(bookingProposal)}
+                    className="chomka-ai-close-btn"
+                    onClick={() => setIsOpen(false)}
+                    aria-label="Close search console"
                   >
-                    <span>CONFIRM PACKAGE & PROCEED TO SECURING DEPOSIT</span>
-                    <span>→</span>
+                    ✕
                   </button>
                 </div>
-              )}
+              </div>
 
-              {/* 2. Structured Search Results */}
-              <div className="chomka-ai-results-grid">
-                {/* Services Matches */}
-                {searchResults.services.length > 0 && (
-                  <div className="chomka-ai-result-section">
-                    <div className="chomka-ai-section-title">
-                      <span>🎛️ STUDIO SERVICES ({searchResults.services.length})</span>
+              {/* Smart Search Bar */}
+              <div className="chomka-ai-search-box">
+                <span className="chomka-ai-search-icon">🔍</span>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  className="chomka-ai-search-input"
+                  placeholder="Search beats, releases, tour dates or say: 'I want to record vocals for 4 hours and mix 2 songs'..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && query.trim()) {
+                      saveQuery(query);
+                    }
+                  }}
+                />
+                {query && (
+                  <button
+                    type="button"
+                    className="chomka-ai-clear-btn"
+                    onClick={() => setQuery("")}
+                    aria-label="Clear input"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Quick Action Chips & Recommendations */}
+              <div className="chomka-ai-chips-strip">
+                <span className="chomka-ai-chips-label">SUGGESTIONS:</span>
+                <button
+                  type="button"
+                  className="chomka-ai-chip"
+                  onClick={() => setQuery("Book 4 hours vocal recording and mixing")}
+                >
+                  🎛️ Book Vocal Session
+                </button>
+                <button
+                  type="button"
+                  className="chomka-ai-chip"
+                  onClick={() => setQuery("Afrobeats")}
+                >
+                  🥁 Afrobeats Beats
+                </button>
+                <button
+                  type="button"
+                  className="chomka-ai-chip"
+                  onClick={() => setQuery("Events and concerts")}
+                >
+                  🎟️ Live Events
+                </button>
+                <button
+                  type="button"
+                  className="chomka-ai-chip"
+                  onClick={() => setQuery("NOISEMAKER")}
+                >
+                  🔥 Latest Release
+                </button>
+                <button
+                  type="button"
+                  className="chomka-ai-chip"
+                  onClick={() => setQuery("Custom beat production")}
+                >
+                  ⚡ Custom Beats
+                </button>
+              </div>
+
+              {/* Console Body: Dynamic AI Intent or Search Results */}
+              <div className="chomka-ai-body">
+                {/* 1. Conversational Booking AI Proposal */}
+                {bookingProposal && Array.isArray(bookingProposal.services) && (
+                  <div className="chomka-ai-proposal-card">
+                    <div className="chomka-ai-proposal-header">
+                      <div className="chomka-ai-proposal-badge">
+                        <span>✦ AI STUDIO PROPOSAL GENERATED</span>
+                      </div>
+                      <span className="chomka-ai-proposal-sub">
+                        Organized automatically from your request
+                      </span>
                     </div>
-                    <div className="chomka-ai-section-list">
-                      {searchResults.services.map((svc) => (
-                        <div
-                          key={svc.slug}
-                          className="chomka-ai-result-card"
-                          onClick={() => handleSelectResult(`/services/${svc.slug}`, svc.title)}
-                        >
-                          <div className="chomka-ai-card-info">
-                            <span className="chomka-ai-card-category">{svc.category}</span>
-                            <h4 className="chomka-ai-card-title">{svc.title}</h4>
-                            <p className="chomka-ai-card-desc">{svc.description}</p>
-                          </div>
-                          <div className="chomka-ai-card-action">
-                            <span className="chomka-ai-card-price">
-                              FROM {formatAmount(currency === "NGN" ? svc.rateNgn : svc.rateUsd)}
+
+                    <p className="chomka-ai-proposal-quote">"{bookingProposal.rawPrompt}"</p>
+
+                    <div className="chomka-ai-proposal-items">
+                      {bookingProposal.services.map((svc) => (
+                        <div key={svc.slug} className="chomka-ai-proposal-row">
+                          <div>
+                            <strong className="chomka-ai-proposal-item-title">{svc.title}</strong>
+                            <span className="chomka-ai-proposal-item-qty">
+                              ({svc.quantity} {svc.unit}{svc.quantity > 1 ? "s" : ""}) · {svc.description}
                             </span>
-                            <span className="chomka-ai-card-arrow">BOOK →</span>
+                          </div>
+                          <div className="chomka-ai-proposal-item-price">
+                            {formatAmount(currency === "NGN" ? svc.subtotalNgn : svc.subtotalUsd)}
                           </div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
 
-                {/* Beats Matches */}
-                {searchResults.beats.length > 0 && (
-                  <div className="chomka-ai-result-section">
-                    <div className="chomka-ai-section-title">
-                      <span>🥁 STUDIO BEATS ({searchResults.beats.length})</span>
+                    <div className="chomka-ai-proposal-total-row">
+                      <div>
+                        <span className="chomka-ai-total-label">ESTIMATED PRODUCTION TOTAL</span>
+                        <strong className="chomka-ai-total-val">
+                          {formatAmount(currency === "NGN" ? bookingProposal.totalNgn : bookingProposal.totalUsd)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="chomka-ai-total-label">50% STUDIO SECURING DEPOSIT</span>
+                        <strong className="chomka-ai-total-deposit">
+                          {formatAmount(currency === "NGN" ? bookingProposal.depositNgn : bookingProposal.depositUsd)}
+                        </strong>
+                      </div>
                     </div>
-                    <div className="chomka-ai-section-list">
-                      {searchResults.beats.map((beat) => (
-                        <div
-                          key={beat.id}
-                          className="chomka-ai-result-card"
-                          onClick={() => handleSelectResult(`/beats/${beat.slug || beat.id}`, beat.title)}
-                        >
-                          <div className="chomka-ai-card-info">
-                            <span className="chomka-ai-card-category">{beat.genre || "BEAT"} · {beat.bpm || 120} BPM</span>
-                            <h4 className="chomka-ai-card-title">{beat.title}</h4>
-                            <p className="chomka-ai-card-desc">Key: {beat.key || "C Minor"} · {beat.mood || "Atmospheric"}</p>
-                          </div>
-                          <div className="chomka-ai-card-action">
-                            <span className="chomka-ai-card-price">
-                              {beat.price ? `₦${Number(beat.price).toLocaleString()}` : "LICENSE"}
-                            </span>
-                            <span className="chomka-ai-card-arrow">LISTEN →</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
-                {/* Music Releases Matches */}
-                {searchResults.releases.length > 0 && (
-                  <div className="chomka-ai-result-section">
-                    <div className="chomka-ai-section-title">
-                      <span>🎵 RELEASES & DISCOGRAPHY ({searchResults.releases.length})</span>
-                    </div>
-                    <div className="chomka-ai-section-list">
-                      {searchResults.releases.map((rel) => (
-                        <div
-                          key={rel.slug}
-                          className="chomka-ai-result-card"
-                          onClick={() => handleSelectResult(`/release/${rel.slug}`, rel.title)}
-                        >
-                          <div className="chomka-ai-card-info">
-                            <span className="chomka-ai-card-category">{rel.year || "RELEASE"}</span>
-                            <h4 className="chomka-ai-card-title">{rel.title}</h4>
-                            <p className="chomka-ai-card-desc">{rel.description || "Official project release."}</p>
-                          </div>
-                          <div className="chomka-ai-card-action">
-                            <span className="chomka-ai-card-arrow">EXPLORE →</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Events Matches */}
-                {searchResults.events.length > 0 && (
-                  <div className="chomka-ai-result-section">
-                    <div className="chomka-ai-section-title">
-                      <span>🎟️ EVENTS & PERFORMANCES ({searchResults.events.length})</span>
-                    </div>
-                    <div className="chomka-ai-section-list">
-                      {searchResults.events.map((evt) => (
-                        <div
-                          key={evt.id || evt.slug}
-                          className="chomka-ai-result-card"
-                          onClick={() => handleSelectResult(`/events/${evt.slug}`, evt.title)}
-                        >
-                          <div className="chomka-ai-card-info">
-                            <span className="chomka-ai-card-category">{evt.city || "LIVE"} · {evt.date}</span>
-                            <h4 className="chomka-ai-card-title">{evt.title}</h4>
-                            <p className="chomka-ai-card-desc">Venue: {evt.venue || "Announced soon"}</p>
-                          </div>
-                          <div className="chomka-ai-card-action">
-                            <span className="chomka-ai-card-price">{evt.ticket_status || "TICKETS"}</span>
-                            <span className="chomka-ai-card-arrow">DETAILS →</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Gallery Matches */}
-                {searchResults.gallery.length > 0 && (
-                  <div className="chomka-ai-result-section">
-                    <div className="chomka-ai-section-title">
-                      <span>🎬 VISUAL ARCHIVE ({searchResults.gallery.length})</span>
-                    </div>
-                    <div className="chomka-ai-section-list">
-                      {searchResults.gallery.map((post) => (
-                        <div
-                          key={post.id}
-                          className="chomka-ai-result-card"
-                          onClick={() => handleSelectResult(`/gallery/${post.id}`, post.title)}
-                        >
-                          <div className="chomka-ai-card-info">
-                            <span className="chomka-ai-card-category">{post.category || "GALLERY"}</span>
-                            <h4 className="chomka-ai-card-title">{post.title || post.caption?.slice(0, 30) || "Archive Moment"}</h4>
-                            <p className="chomka-ai-card-desc">{post.location ? `📍 ${post.location}` : "Official Vault"}</p>
-                          </div>
-                          <div className="chomka-ai-card-action">
-                            <span className="chomka-ai-card-arrow">VIEW →</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* No results empty state with recommendations */}
-                {searchResults.hasQuery && searchResults.totalCount === 0 && !bookingProposal && (
-                  <div className="chomka-ai-empty-state">
-                    <p className="chomka-ai-empty-title">NO DIRECT MATCHES FOR "{query}"</p>
-                    <p className="chomka-ai-empty-desc">
-                      Try exploring Studio Services, searching for "Afrobeats", or asking the AI Concierge to organize a booking session.
-                    </p>
                     <button
                       type="button"
-                      className="studio-pill-btn"
-                      onClick={() => setQuery("Book vocal recording and mixing")}
-                      style={{ marginTop: "12px", background: "rgba(223, 194, 125, 0.15)", color: "var(--gold)" }}
+                      className="chomka-ai-proposal-btn"
+                      onClick={() => handleProceedToServices(bookingProposal)}
                     >
-                      ✦ Plan a Studio Session with AI Concierge
+                      <span>CONFIRM PACKAGE & PROCEED TO SECURING DEPOSIT</span>
+                      <span>→</span>
                     </button>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Footer */}
-            <div className="chomka-ai-footer">
-              <span>✦ silachomka AI · chomkaMUSIC™ & Chomka Nation</span>
-              <span>POWERED BY SILACHOMKA ENGINE</span>
-            </div>
+                {/* 2. Structured Search Results */}
+                <div className="chomka-ai-results-grid">
+                  {/* Services Matches */}
+                  {Array.isArray(searchResults?.services) && searchResults.services.length > 0 && (
+                    <div className="chomka-ai-result-section">
+                      <div className="chomka-ai-section-title">
+                        <span>🎛️ STUDIO SERVICES ({searchResults.services.length})</span>
+                      </div>
+                      <div className="chomka-ai-section-list">
+                        {searchResults.services.map((svc) => (
+                          <div
+                            key={svc.slug}
+                            className="chomka-ai-result-card"
+                            onClick={() => handleSelectResult(`/services/${svc.slug}`, svc.title)}
+                          >
+                            <div className="chomka-ai-card-info">
+                              <span className="chomka-ai-card-category">{svc.category}</span>
+                              <h4 className="chomka-ai-card-title">{svc.title}</h4>
+                              <p className="chomka-ai-card-desc">{svc.description}</p>
+                            </div>
+                            <div className="chomka-ai-card-action">
+                              <span className="chomka-ai-card-price">
+                                FROM {formatAmount(currency === "NGN" ? svc.rateNgn : svc.rateUsd)}
+                              </span>
+                              <span className="chomka-ai-card-arrow">BOOK →</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Beats Matches */}
+                  {Array.isArray(searchResults?.beats) && searchResults.beats.length > 0 && (
+                    <div className="chomka-ai-result-section">
+                      <div className="chomka-ai-section-title">
+                        <span>🥁 STUDIO BEATS ({searchResults.beats.length})</span>
+                      </div>
+                      <div className="chomka-ai-section-list">
+                        {searchResults.beats.map((beat) => (
+                          <div
+                            key={beat.id}
+                            className="chomka-ai-result-card"
+                            onClick={() => handleSelectResult(`/beats/${beat.slug || beat.id}`, beat.title)}
+                          >
+                            <div className="chomka-ai-card-info">
+                              <span className="chomka-ai-card-category">{beat.genre || "BEAT"} · {beat.bpm || 120} BPM</span>
+                              <h4 className="chomka-ai-card-title">{beat.title}</h4>
+                              <p className="chomka-ai-card-desc">Key: {beat.key || "C Minor"} · {beat.mood || "Atmospheric"}</p>
+                            </div>
+                            <div className="chomka-ai-card-action">
+                              <span className="chomka-ai-card-price">
+                                {beat.price ? `₦${Number(beat.price).toLocaleString()}` : "LICENSE"}
+                              </span>
+                              <span className="chomka-ai-card-arrow">LISTEN →</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Music Releases Matches */}
+                  {Array.isArray(searchResults?.releases) && searchResults.releases.length > 0 && (
+                    <div className="chomka-ai-result-section">
+                      <div className="chomka-ai-section-title">
+                        <span>🎵 RELEASES & DISCOGRAPHY ({searchResults.releases.length})</span>
+                      </div>
+                      <div className="chomka-ai-section-list">
+                        {searchResults.releases.map((rel) => (
+                          <div
+                            key={rel.slug}
+                            className="chomka-ai-result-card"
+                            onClick={() => handleSelectResult(`/release/${rel.slug}`, rel.title)}
+                          >
+                            <div className="chomka-ai-card-info">
+                              <span className="chomka-ai-card-category">{rel.year || "RELEASE"}</span>
+                              <h4 className="chomka-ai-card-title">{rel.title}</h4>
+                              <p className="chomka-ai-card-desc">{rel.description || "Official project release."}</p>
+                            </div>
+                            <div className="chomka-ai-card-action">
+                              <span className="chomka-ai-card-arrow">EXPLORE →</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Events Matches */}
+                  {Array.isArray(searchResults?.events) && searchResults.events.length > 0 && (
+                    <div className="chomka-ai-result-section">
+                      <div className="chomka-ai-section-title">
+                        <span>🎟️ EVENTS & PERFORMANCES ({searchResults.events.length})</span>
+                      </div>
+                      <div className="chomka-ai-section-list">
+                        {searchResults.events.map((evt) => (
+                          <div
+                            key={evt.id || evt.slug}
+                            className="chomka-ai-result-card"
+                            onClick={() => handleSelectResult(`/events/${evt.slug}`, evt.title)}
+                          >
+                            <div className="chomka-ai-card-info">
+                              <span className="chomka-ai-card-category">{evt.city || "LIVE"} · {evt.date}</span>
+                              <h4 className="chomka-ai-card-title">{evt.title}</h4>
+                              <p className="chomka-ai-card-desc">Venue: {evt.venue || "Announced soon"}</p>
+                            </div>
+                            <div className="chomka-ai-card-action">
+                              <span className="chomka-ai-card-price">{evt.ticket_status || "TICKETS"}</span>
+                              <span className="chomka-ai-card-arrow">DETAILS →</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Gallery Matches */}
+                  {Array.isArray(searchResults?.gallery) && searchResults.gallery.length > 0 && (
+                    <div className="chomka-ai-result-section">
+                      <div className="chomka-ai-section-title">
+                        <span>🎬 VISUAL ARCHIVE ({searchResults.gallery.length})</span>
+                      </div>
+                      <div className="chomka-ai-section-list">
+                        {searchResults.gallery.map((post) => (
+                          <div
+                            key={post.id}
+                            className="chomka-ai-result-card"
+                            onClick={() => handleSelectResult(`/gallery/${post.id}`, post.title)}
+                          >
+                            <div className="chomka-ai-card-info">
+                              <span className="chomka-ai-card-category">{post.category || "GALLERY"}</span>
+                              <h4 className="chomka-ai-card-title">{post.title || post.caption?.slice(0, 30) || "Archive Moment"}</h4>
+                              <p className="chomka-ai-card-desc">{post.location ? `📍 ${post.location}` : "Official Vault"}</p>
+                            </div>
+                            <div className="chomka-ai-card-action">
+                              <span className="chomka-ai-card-arrow">VIEW →</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No results empty state with recommendations */}
+                  {searchResults?.hasQuery && searchResults?.totalCount === 0 && !bookingProposal && (
+                    <div className="chomka-ai-empty-state">
+                      <p className="chomka-ai-empty-title">NO DIRECT MATCHES FOR "{query}"</p>
+                      <p className="chomka-ai-empty-desc">
+                        Try exploring Studio Services, searching for "Afrobeats", or asking the AI Concierge to organize a booking session.
+                      </p>
+                      <button
+                        type="button"
+                        className="studio-pill-btn"
+                        onClick={() => setQuery("Book vocal recording and mixing")}
+                        style={{ marginTop: "12px", background: "rgba(223, 194, 125, 0.15)", color: "var(--gold)" }}
+                      >
+                        ✦ Plan a Studio Session with AI Concierge
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="chomka-ai-footer">
+                <span>✦ silachomka AI · chomkaMUSIC™ & Chomka Nation</span>
+                <span>POWERED BY SILACHOMKA ENGINE</span>
+              </div>
+            </ModalErrorBoundary>
           </div>
         </div>
       )}
