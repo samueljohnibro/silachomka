@@ -50,43 +50,64 @@ export const normalizeBeat = (b) => {
 // Normalize Gallery Posts (ensuring both src and asset, string slides + slideObjects, and social embeds work)
 export const normalizeGalleryPost = (g) => {
   if (!g) return null;
-  const rawSlides = Array.isArray(g.slides) ? g.slides : [];
+  const rawSlides = Array.isArray(g.slides) && g.slides.length > 0
+    ? g.slides
+    : Array.isArray(g.carouselSlides) && g.carouselSlides.length > 0
+    ? g.carouselSlides
+    : Array.isArray(g.slideObjects) && g.slideObjects.length > 0
+    ? g.slideObjects
+    : [];
+
   const slideObjects = rawSlides
-    .map((s) => {
+    .map((s, idx) => {
       if (typeof s === "string") {
         const isVid = /\.(mp4|mov|webm)(\?.*)?$/i.test(s);
-        return { src: s, asset: s, slideType: isVid ? "video" : "image", isVideo: isVid };
+        return {
+          id: `slide-${idx}`,
+          src: s,
+          asset: s,
+          slideType: isVid ? "video" : "image",
+          isVideo: isVid,
+          is_hero: false,
+        };
       }
       const url = s?.src || s?.asset || "";
       const isVid =
+        s?.isVideo === true ||
         s?.slideType === "video" ||
+        s?.slide_type === "video" ||
         s?.assetType === "VIDEO" ||
-        (s?.mimeType && s.mimeType.startsWith("video/")) ||
+        (s?.mimeType && String(s.mimeType).startsWith("video/")) ||
+        (s?.mime_type && String(s.mime_type).startsWith("video/")) ||
         /\.(mp4|mov|webm)(\?.*)?$/i.test(url);
       return {
         ...s,
+        id: s?.id || `slide-${idx}`,
         src: url,
         asset: url,
         slideType: isVid ? "video" : "image",
+        slide_type: isVid ? "video" : "image",
         isVideo: isVid,
+        is_hero: Boolean(s?.is_hero || s?.isHero),
       };
     })
     .filter((s) => Boolean(s.src));
 
   const primaryUrl = g.src || g.asset || g.videoSrc || slideObjects[0]?.src || "";
   const isPrimaryVideo =
+    g.isVideo === true ||
     g.type === "video" ||
     g.post_type === "video" ||
     g.assetType === "VIDEO" ||
-    (g.mimeType && g.mimeType.startsWith("video/")) ||
+    (g.mimeType && String(g.mimeType).startsWith("video/")) ||
+    (g.mime_type && String(g.mime_type).startsWith("video/")) ||
     /\.(mp4|mov|webm)(\?.*)?$/i.test(primaryUrl);
 
-  const slideUrls =
-    slideObjects.length > 0
-      ? slideObjects.map((s) => s.src)
-      : primaryUrl
-      ? [primaryUrl]
-      : [];
+  const finalSlides = slideObjects.length > 0
+    ? slideObjects
+    : primaryUrl
+    ? [{ id: "slide-0", src: primaryUrl, asset: primaryUrl, slideType: isPrimaryVideo ? "video" : "image", slide_type: isPrimaryVideo ? "video" : "image", isVideo: isPrimaryVideo, is_hero: Boolean(g.is_hero || g.isHero) }]
+    : [];
 
   return {
     ...g,
@@ -94,13 +115,8 @@ export const normalizeGalleryPost = (g) => {
     asset: primaryUrl,
     videoSrc: isPrimaryVideo ? primaryUrl : g.videoSrc || null,
     isVideo: isPrimaryVideo,
-    slides: slideUrls,
-    slideObjects:
-      slideObjects.length > 0
-        ? slideObjects
-        : primaryUrl
-        ? [{ src: primaryUrl, asset: primaryUrl, slideType: isPrimaryVideo ? "video" : "image", isVideo: isPrimaryVideo }]
-        : [],
+    slides: finalSlides,
+    slideObjects: finalSlides,
     externalSocialUrl: g.externalSocialUrl || g.external_social_url || null,
     externalSocialPlatform: g.externalSocialPlatform || g.external_social_platform || null,
   };

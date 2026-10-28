@@ -64,6 +64,7 @@ export default function GalleryPostModal({
   hasPrev,
   hasNext,
   embedded = false,
+  onSelectPost,
 }) {
   const [activeSlide, setActiveSlide] = useState(0);
   const touchStartXRef = useRef(null);
@@ -128,10 +129,14 @@ export default function GalleryPostModal({
 
   const ambientImageSrc = !currentIsVideo ? currentSlideSrc : post?.ogImage || post?.image || null;
 
-  // Reset active slide on post change
+  // Reset active slide on post change (or initialize to targetSlideIndex for isolated videos)
   useEffect(() => {
-    setActiveSlide(0);
-  }, [post?.id]);
+    if (typeof post?.targetSlideIndex === "number") {
+      setActiveSlide(post.targetSlideIndex);
+    } else {
+      setActiveSlide(0);
+    }
+  }, [post?.id, post?.targetSlideIndex]);
 
   const goToSlide = useCallback((targetIndex) => {
     if (isAnimatingRef.current) return;
@@ -526,6 +531,39 @@ export default function GalleryPostModal({
 
           {/* Scrollable Caption Body */}
           <div className="gallery-sidebar-body">
+            {post.isIsolatedVideo && post.parentPost && (
+              <div style={{ marginBottom: "14px" }}>
+                <button
+                  type="button"
+                  className="studio-pill-btn"
+                  onClick={() => {
+                    if (onSelectPost) {
+                      onSelectPost({ ...post.parentPost, targetSlideIndex: post.targetSlideIndex });
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "rgba(223, 194, 125, 0.12)",
+                    border: "1px solid rgba(223, 194, 125, 0.4)",
+                    color: "var(--gold)",
+                    padding: "7px 12px",
+                    borderRadius: "999px",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  <span aria-hidden="true">⧉</span>
+                  <span>
+                    View in Full Carousel Post (Slide {(post.targetSlideIndex ?? 0) + 1} of {post.totalSlides || 1}) →
+                  </span>
+                </button>
+              </div>
+            )}
+
             {post.title && <h3 className="gallery-modal-title">{post.title}</h3>}
 
             <div className="gallery-modal-caption">

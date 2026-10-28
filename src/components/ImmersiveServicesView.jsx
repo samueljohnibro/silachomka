@@ -74,21 +74,21 @@ export default function ImmersiveServicesView({
               fontWeight: 800,
             }}
           >
-            chomkaMUSIC™ STUDIO CONCIERGE
+            chomkaMUSIC™ • THE SACRED SANCTUARY
           </span>
           <span style={{ fontSize: "11px", color: "var(--muted)", letterSpacing: "0.06em" }}>
-            {convStep === "need" && "• Step 1 of 5: What do you need?"}
-            {convStep === "scope" && "• Step 2 of 5: How much studio time?"}
-            {convStep === "when" && "• Step 3 of 5: When should we schedule?"}
-            {convStep === "brief" && "• Step 4 of 5: Anything else to know?"}
-            {convStep === "review" && "• Step 5 of 5: Review & reserve"}
+            {convStep === "need" && "• Realm I: Which creation do you wish to manifest?"}
+            {convStep === "scope" && "• Realm II: The Sacred Dimensions & Studio Time"}
+            {convStep === "when" && "• Realm III: Harmonize Time & The Celestial Calendar"}
+            {convStep === "brief" && "• Realm IV: Inscribe Your Vision & Sacred Stems"}
+            {convStep === "review" && "• Realm V: Consecrate & Seal Your Manifestation"}
           </span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
           <div style={{ textAlign: "right" }}>
             <span style={{ fontSize: "9px", color: "var(--muted)", display: "block", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Total
+              Sacred Offering
             </span>
             <span style={{ fontSize: "15px", fontWeight: 800, color: "var(--gold)" }}>
               {hasPriceUponRequest && totalNgn === 0 ? "Price upon request" : `₦${totalNgn.toLocaleString()}`}
@@ -107,9 +107,9 @@ export default function ImmersiveServicesView({
               border: "1px solid rgba(255, 255, 255, 0.15)",
               cursor: "pointer",
             }}
-            title="Exit immersive conversation (Escape)"
+            title="Return to Temple (Escape)"
           >
-            ✕ Exit (Esc)
+            ✕ Return to Temple (Esc)
           </button>
         </div>
       </div>
@@ -117,7 +117,7 @@ export default function ImmersiveServicesView({
       {/* Immersive Console Body */}
       <div className="services-immersive-body">
         {/* ========================================================
-            STEP 1: "WHAT DO YOU NEED?"
+            STEP 1: "WHICH CREATION DO YOU WISH TO MANIFEST?"
             ======================================================== */}
         {convStep === "need" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
@@ -132,10 +132,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                What do you need?
+                Which creation do you wish to manifest?
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Tap one or more services to assemble your studio session. Clear options, zero studio jargon.
+                Step into the sanctuary. Select the sacred sonic forms you desire to bring forth into physical reality. Every masterwork is sculpted with divine clarity and timeless perfection.
               </p>
             </div>
 
@@ -282,7 +282,7 @@ export default function ImmersiveServicesView({
             {/* Navigation Row */}
             <div className="services-immersive-nav">
               <span style={{ fontSize: "13px", color: "var(--muted)" }}>
-                {selectedSlugs.length === 0 ? "Select at least 1 service to continue" : `${selectedSlugs.length} service(s) chosen`}
+                {selectedSlugs.length === 0 ? "Select at least 1 creation to enter the sanctuary" : `${selectedSlugs.length} sacred creation(s) chosen`}
               </span>
               <button
                 type="button"
@@ -298,14 +298,14 @@ export default function ImmersiveServicesView({
                   cursor: selectedSlugs.length === 0 ? "not-allowed" : "pointer",
                 }}
               >
-                Next: Scope & Duration →
+                Next: Dimensions & Scope →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 2: "HOW MUCH?" (SCOPE / DURATION)
+            STEP 2: "THE SACRED DIMENSIONS & SCOPE"
             ======================================================== */}
         {convStep === "scope" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
@@ -320,10 +320,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                How much studio time do you need?
+                The Sacred Dimensions & Scope
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Configure the duration and scope for your selected services.
+                Set the depth and hours necessary to sculpt your masterwork with unhurried perfection.
               </p>
             </div>
 
@@ -404,7 +404,7 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Choose Services
+                ← Back: Select Creations
               </button>
               <button
                 type="button"
@@ -412,14 +412,14 @@ export default function ImmersiveServicesView({
                 className="primary-button"
                 style={{ height: "44px", padding: "0 24px", fontSize: "13px", fontWeight: 700 }}
               >
-                Next: Schedule Date & Time →
+                Next: Harmonize Calendar & Time →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 3: "WHEN?" (CALENDAR & TIME SLOTS)
+            STEP 3: "HARMONIZE TIME & DATE"
             ======================================================== */}
         {convStep === "when" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
@@ -434,12 +434,12 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                When should we schedule your session?
+                Harmonize Time & Date
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
                 {hasVoiceRecording
-                  ? "Select an open studio date from the calendar, then choose your preferred time slot."
-                  : "We deliver remote projects within 3 to 5 business days from brief receipt. You can also pick a kickoff date below."}
+                  ? "Choose the exact hour the sanctuary doors open for your studio tracking session."
+                  : "We craft and consecrate remote creations within 3 to 5 business days. You may also specify an auspicious kickoff date below."}
               </p>
             </div>
 
@@ -479,7 +479,7 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Duration & Scope
+                ← Back: Dimensions & Scope
               </button>
               <button
                 type="button"
@@ -487,14 +487,14 @@ export default function ImmersiveServicesView({
                 className="primary-button"
                 style={{ height: "44px", padding: "0 24px", fontSize: "13px", fontWeight: 700 }}
               >
-                Next: Project Brief & Details →
+                Next: Inscribe Your Vision →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 4: "ANYTHING ELSE?" (BRIEF & NEUTRAL PLACEHOLDERS)
+            STEP 4: "INSCRIBE YOUR SACRED VISION"
             ======================================================== */}
         {convStep === "brief" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
@@ -509,10 +509,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Anything else we should know?
+                Inscribe Your Sacred Vision
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Enter your contact info and any vision notes, reference links, or stems for the studio engineer.
+                Entrust us with your contact details, notes, reference frequencies, and audio stems for the engineer.
               </p>
             </div>
 
@@ -657,7 +657,7 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Schedule
+                ← Back: Sacred Calendar
               </button>
               <button
                 type="button"
@@ -673,14 +673,14 @@ export default function ImmersiveServicesView({
                   cursor: !customerName.trim() || !customerEmail.trim() || !customerPhone.trim() ? "not-allowed" : "pointer",
                 }}
               >
-                Next: Review & Payment →
+                Next: Review & Consecrate →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 5: "REVIEW & RESERVE"
+            STEP 5: "REVIEW & CONSECRATE"
             ======================================================== */}
         {convStep === "review" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
@@ -695,10 +695,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Review your studio booking
+                Review & Consecrate Your Manifestation
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Everything looks ready. Review your session breakdown before confirming.
+                Every element has aligned. Review your session breakdown before sealing it into the sanctuary ledger.
               </p>
             </div>
 
@@ -841,7 +841,7 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Edit Details
+                ← Back: Edit Inscription
               </button>
 
               <button
@@ -859,7 +859,7 @@ export default function ImmersiveServicesView({
                   color: "#050507",
                 }}
               >
-                {isSubmitting ? "Locking In Session..." : "Confirm Studio Booking →"}
+                {isSubmitting ? "Consecrating Session..." : "Seal & Consecrate Manifestation →"}
               </button>
             </div>
           </div>

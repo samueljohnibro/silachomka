@@ -586,7 +586,8 @@ function HeroSlideshow() {
       // Check carousel slides
       if (Array.isArray(g.slides) && g.slides.length > 0) {
         g.slides.forEach((slide, sIdx) => {
-          const slideIsHero = Boolean(postIsHero || slide?.isHero || slide?.is_hero);
+          // Slide-level hero selection only (NOT the whole post)
+          const slideIsHero = Boolean(slide?.isHero || slide?.is_hero);
           if (!slideIsHero) return; // Only explicitly approved media appears in hero
           const slideSrc =
             typeof slide === "string" ? slide : slide?.src || slide?.asset || "";
@@ -607,10 +608,8 @@ function HeroSlideshow() {
             poster: g.asset || g.src || null,
           });
         });
-      }
-
-      // Check primary media (single image or standalone video clip)
-      if (postIsHero) {
+      } else if (postIsHero) {
+        // Standalone non-carousel media item approved for hero
         const primary =
           g.src || g.asset || g.videoSrc || g.media_url || g.video_url || null;
         if (primary && typeof primary === "string") {
@@ -1428,30 +1427,26 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
           Boolean(s?.isVideo || s?.slideType === "video" || s?.assetType === "VIDEO") ||
           Boolean(s?.mimeType && String(s?.mimeType).startsWith("video/")) ||
           (typeof url === "string" &&
-            (url.startsWith("data:video") || /\.(mp4|webm|mov)(\?.*)?$/i.test(url)));
+            (url.startsWith("data:video") || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url)));
         return {
           id: s?.id || `slide-${idx}`,
           src: url,
           isVideo: isVid,
-          poster: s?.poster || null,
+          poster: s?.poster || post?.asset || post?.src || null,
         };
       })
       .filter(Boolean);
-  }, [post.slides]);
+  }, [post.slides, post.asset, post.src]);
 
-  const [currentIndex, setCurrentIndex] = useState(() => {
-    if (slides.length > 1) {
-      return Math.floor(Math.random() * slides.length);
-    }
-    return 0;
-  });
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [confirmedIndex, setConfirmedIndex] = useState(0);
 
   const cardRef = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isInView, setIsInView] = useState(true);
   const [readyMap, setReadyMap] = useState({});
 
-  // Pre-load images in background so we never transition to unloaded images
+  // Pre-load images & videos in background so we never transition to unloaded media
   useEffect(() => {
     slides.forEach((slide) => {
       if (!slide.isVideo && slide.src) {
@@ -1496,7 +1491,7 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
       setCurrentIndex((prev) => {
         const next = (prev + 1) % slides.length;
         const nextSlide = slides[next];
-        // If next slide is video and not ready yet, keep current slide until ready
+        // If next slide is video and not ready yet, keep current slide visible
         if (nextSlide?.isVideo && !readyMap[nextSlide.src]) {
           return prev;
         }
@@ -1515,6 +1510,16 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
     };
   }, [isCarousel, slides, isPaused, isInView, rotationDuration, initialDelay, readyMap]);
 
+  // Smoothly promote currentIndex to confirmedIndex after crossfade completes
+  useEffect(() => {
+    if (currentIndex !== confirmedIndex) {
+      const timer = setTimeout(() => {
+        setConfirmedIndex(currentIndex);
+      }, 1400);
+      return () => clearTimeout(timer);
+    }
+  }, [currentIndex, confirmedIndex]);
+
   if (isCarousel && slides.length > 1) {
     return (
       <div
@@ -1530,10 +1535,14 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
           width: "100%",
           height: "100%",
           overflow: "hidden",
+          backgroundColor: "#08080c",
         }}
       >
         {slides.map((slide, idx) => {
           const isCurrent = idx === currentIndex;
+          const isConfirmed = idx === confirmedIndex;
+          const isVisible = isCurrent || isConfirmed;
+
           return slide.isVideo ? (
             <div
               key={slide.id || slide.src}
@@ -1543,9 +1552,10 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
                 width: "100%",
                 height: "100%",
                 opacity: isCurrent ? 1 : 0,
-                transition: "opacity 1.8s ease-in-out",
-                zIndex: isCurrent ? 2 : 1,
+                transition: "opacity 1.4s ease-in-out",
+                zIndex: isCurrent ? 2 : isConfirmed ? 1 : 0,
                 pointerEvents: "none",
+                visibility: isVisible ? "visible" : "hidden",
               }}
             >
               <GalleryCardVideo
@@ -1570,8 +1580,9 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
                 height: "100%",
                 objectFit: "cover",
                 opacity: isCurrent ? 1 : 0,
-                transition: "opacity 1.8s ease-in-out",
-                zIndex: isCurrent ? 2 : 1,
+                transition: "opacity 1.4s ease-in-out",
+                zIndex: isCurrent ? 2 : isConfirmed ? 1 : 0,
+                visibility: isVisible ? "visible" : "hidden",
               }}
               loading="lazy"
             />
@@ -1582,18 +1593,23 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
   }
 
   const effectiveIsVideo =
-    isVideo ||
-    post?.type === "video" ||
-    post?.assetType === "VIDEO" ||
-    Boolean(post?.videoSrc) ||
-    Boolean(post?.mimeType && String(post.mimeType).toLowerCase().startsWith("video/")) ||
-    (typeof primarySrc === "string" &&
-      (primarySrc.startsWith("data:video") || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(primarySrc)));
+    Boolean(
+      isVideo ||
+      post?.isVideo ||
+      post?.type === "video" ||
+      post?.post_type === "video" ||
+      post?.assetType === "VIDEO" ||
+      Boolean(post?.videoSrc) ||
+      Boolean(post?.mimeType && String(post.mimeType).toLowerCase().startsWith("video/")) ||
+      (typeof primarySrc === "string" &&
+        (primarySrc.startsWith("data:video") || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(primarySrc)))
+    );
 
   if (primarySrc) {
     return effectiveIsVideo ? (
       <GalleryCardVideo
         src={primarySrc}
+        poster={post.asset || post.src || null}
         title={post.title || "Archive video"}
         className="gallery-card-image"
       />
@@ -1730,26 +1746,64 @@ function GallerySection() {
     if (activeCategory === "all") return list;
     const targetNorm = normalizeCat(activeCategory);
     if (targetNorm === "videos") {
-      return list.filter((item) => {
-        if (normalizeCat(item.category) === "videos") return true;
-        if (item.type === "video" || item.assetType === "VIDEO" || item.isVideo || Boolean(item.videoSrc)) return true;
-        if (item.mimeType && String(item.mimeType).toLowerCase().startsWith("video/")) return true;
-        if (
-          Array.isArray(item.slides) &&
-          item.slides.some(
-            (s) =>
-              Boolean(
-                s?.isVideo ||
-                  s?.slideType === "video" ||
-                  s?.assetType === "VIDEO" ||
-                  (s?.mimeType && String(s.mimeType).toLowerCase().startsWith("video/"))
-              )
-          )
-        ) {
-          return true;
+      const videoItems = [];
+      list.forEach((item) => {
+        const itemCat = normalizeCat(item.category);
+        const itemIsVideoPost =
+          itemCat === "videos" ||
+          item.type === "video" ||
+          item.post_type === "video" ||
+          item.assetType === "VIDEO" ||
+          item.isVideo ||
+          Boolean(item.videoSrc) ||
+          Boolean(item.mimeType && String(item.mimeType).toLowerCase().startsWith("video/")) ||
+          (typeof item.src === "string" && (item.src.startsWith("data:video") || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(item.src)));
+
+        const slides = Array.isArray(item.slides) ? item.slides : [];
+        const videoSlideIndices = [];
+
+        slides.forEach((s, idx) => {
+          const sUrl = typeof s === "string" ? s : s?.src || s?.asset || "";
+          const isVid =
+            Boolean(s?.isVideo || s?.slideType === "video" || s?.assetType === "VIDEO") ||
+            Boolean(s?.mimeType && String(s?.mimeType).toLowerCase().startsWith("video/")) ||
+            (typeof sUrl === "string" && (sUrl.startsWith("data:video") || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(sUrl)));
+          if (isVid) {
+            videoSlideIndices.push(idx);
+          }
+        });
+
+        if (slides.length > 1 && videoSlideIndices.length > 0) {
+          // Extract each video slide as an isolated video card item so it only plays the video (no cycling through photos)
+          videoSlideIndices.forEach((sIdx) => {
+            const slideObj = slides[sIdx];
+            const slideSrc = typeof slideObj === "string" ? slideObj : slideObj?.src || slideObj?.asset || "";
+            videoItems.push({
+              ...item,
+              id: `${item.id}-video-${sIdx}`,
+              title: item.title ? `${item.title} (Video ${sIdx + 1})` : "Archive Video",
+              isIsolatedVideo: true,
+              parentPost: item,
+              targetSlideIndex: sIdx,
+              totalSlides: slides.length,
+              src: slideSrc,
+              asset: slideSrc,
+              videoSrc: slideSrc,
+              type: "video",
+              post_type: "video",
+              isVideo: true,
+              slides: [
+                typeof slideObj === "object"
+                  ? { ...slideObj, isVideo: true, slideType: "video" }
+                  : { src: slideSrc, isVideo: true, slideType: "video" }
+              ],
+            });
+          });
+        } else if (itemIsVideoPost) {
+          videoItems.push(item);
         }
-        return false;
       });
+      return videoItems;
     }
     return list.filter((item) => normalizeCat(item.category) === targetNorm);
   }, [activeCategory, gallery]);
@@ -1897,6 +1951,7 @@ function GallerySection() {
           onNext={handleNextPost}
           hasPrev={activeIndex > 0}
           hasNext={activeIndex < filteredPosts.length - 1}
+          onSelectPost={(p) => setActivePost(p)}
         />
       )}
     </section>

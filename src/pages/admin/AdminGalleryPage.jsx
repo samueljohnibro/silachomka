@@ -138,6 +138,8 @@ const AdminGalleryPage = () => {
       carouselSlides: [],
       assignedSocials: [],
       is_hero: false,
+      notify_feed: true,
+      notification_text: "",
     });
     setView("CREATE");
     setError(null);
@@ -161,11 +163,21 @@ const AdminGalleryPage = () => {
     const postSlides = slides
       .filter((s) => s.post_id === post.id)
       .sort((a, b) => a.sort_order - b.sort_order)
-      .map((s) => ({
-        asset_id: s.asset_id,
-        slide_type: s.slide_type || "image",
-        sort_order: s.sort_order,
-      }));
+      .map((s) => {
+        const assetObj = mediaAssets.find((a) => a && a.id === s.asset_id);
+        const isHero = Boolean(
+          s.is_hero ||
+          s.isHero ||
+          (assetObj?.alt_text && assetObj.alt_text.includes("[HERO]")) ||
+          assetObj?.is_hero
+        );
+        return {
+          asset_id: s.asset_id,
+          slide_type: s.slide_type || "image",
+          sort_order: s.sort_order,
+          is_hero: isHero,
+        };
+      });
 
     // If single-asset post had no rows in gallery_slides yet, seed 1 item so adding a 2nd item seamlessly creates a carousel
     let initialSlides = postSlides;
@@ -175,11 +187,18 @@ const AdminGalleryPage = () => {
         post.post_type === "video" ||
         primaryAsset?.asset_type === "VIDEO" ||
         primaryAsset?.mime_type?.startsWith("video/");
+      const isHero = Boolean(
+        post.is_hero ||
+        post.isHero ||
+        (primaryAsset?.alt_text && primaryAsset.alt_text.includes("[HERO]")) ||
+        primaryAsset?.is_hero
+      );
       initialSlides = [
         {
           asset_id: post.primary_asset_id,
           slide_type: isVid ? "video" : "image",
           sort_order: 0,
+          is_hero: isHero,
         },
       ];
     }
@@ -197,6 +216,8 @@ const AdminGalleryPage = () => {
       carouselSlides: initialSlides,
       assignedSocials: post.tags?.assignedSocials || post.assignedSocials || [],
       is_hero: Boolean(post.is_hero || post.isHero || post.tags?.is_hero || post.tags?.isHero),
+      notify_feed: post.tags?.notify_feed !== false,
+      notification_text: post.tags?.notification_text || post.notification_text || "",
     });
     setView("EDIT");
     setError(null);
@@ -401,19 +422,40 @@ const AdminGalleryPage = () => {
         external_social_url: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_platform: currentPost.external_social_platform || null,
         location: currentPost.location && currentPost.location.trim() ? currentPost.location.trim() : null,
-        is_hero: Boolean(currentPost.is_hero),
+        is_hero: activeSlides.length > 0
+          ? activeSlides.some((s) => Boolean(s.is_hero))
+          : Boolean(currentPost.is_hero),
         tags: {
           ...(currentPost.tags || {}),
           assignedSocials: currentPost.assignedSocials || [],
           location: currentPost.location && currentPost.location.trim() ? currentPost.location.trim() : null,
-          is_hero: Boolean(currentPost.is_hero),
+          is_hero: activeSlides.length > 0
+            ? activeSlides.some((s) => Boolean(s.is_hero))
+            : Boolean(currentPost.is_hero),
+          notify_feed: Boolean(currentPost.notify_feed),
+          notification_text: currentPost.notification_text || "",
+          slide_hero_flags: activeSlides.map((s) => Boolean(s.is_hero)),
         },
-        slides: activeSlides,
+        slides: activeSlides.map((s, idx) => ({
+          ...s,
+          sort_order: idx,
+          is_hero: Boolean(s.is_hero),
+        })),
       };
+
+      // Sync media asset hero flags so API/slides immediately reflect individual slide hero choices
+      for (const s of activeSlides) {
+        if (s.asset_id) {
+          adminApi.updateMediaAsset(s.asset_id, { is_hero: Boolean(s.is_hero) }).catch(() => {});
+        }
+      }
+      if (currentPost.primary_asset_id) {
+        adminApi.updateMediaAsset(currentPost.primary_asset_id, { is_hero: Boolean(payload.is_hero) }).catch(() => {});
+      }
 
       if (view === "CREATE") {
         const created = await adminApi.createGalleryPost(payload);
-        clearDraft(created);
+        clearDraft({ ...created, carouselSlides: activeSlides });
         await fetchData();
         refreshCatalogue();
         setCurrentPost({
@@ -423,7 +465,7 @@ const AdminGalleryPage = () => {
         setView("EDIT");
       } else {
         const updated = await adminApi.updateGalleryPost(currentPost.id, payload);
-        clearDraft(updated);
+        clearDraft({ ...updated, carouselSlides: activeSlides });
         await fetchData();
         refreshCatalogue();
         setCurrentPost({
@@ -908,7 +950,35 @@ const AdminGalleryPage = () => {
                             </div>
                           </div>
 
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <label
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                cursor: "pointer",
+                                padding: "4px 8px",
+                                borderRadius: 4,
+                                background: slide.is_hero ? "rgba(223, 194, 125, 0.16)" : "rgba(255, 255, 255, 0.04)",
+                                border: slide.is_hero ? "1px solid var(--gold)" : "1px solid var(--border)",
+                                fontSize: 11,
+                                color: slide.is_hero ? "var(--gold)" : "var(--muted)",
+                                fontWeight: 600,
+                              }}
+                              title="When enabled, this specific media slide can appear in the homepage hero slideshow"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={Boolean(slide.is_hero)}
+                                onChange={(e) => {
+                                  const updated = [...currentPost.carouselSlides];
+                                  updated[idx] = { ...updated[idx], is_hero: e.target.checked };
+                                  setCurrentPost((prev) => ({ ...prev, carouselSlides: updated }));
+                                }}
+                                style={{ width: 14, height: 14, accentColor: "var(--gold)", cursor: "pointer" }}
+                              />
+                              <span>{slide.is_hero ? "★ Hero Slide" : "Hero"}</span>
+                            </label>
                             <button
                               type="button"
                               onClick={() => moveCarouselSlide(idx, -1)}
@@ -1299,25 +1369,129 @@ const AdminGalleryPage = () => {
                 )}
               </div>
 
-              {/* Req #6: Homepage Hero Eligibility Checkbox */}
-              <div className="studio-field" style={{ textAlign: "left", marginTop: 12 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    name="is_hero"
-                    checked={Boolean(currentPost.is_hero)}
-                    onChange={handleChange}
-                    disabled={isSaving}
-                    style={{ width: 18, height: 18, accentColor: "var(--gold)", cursor: "pointer" }}
-                  />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
-                    Show in Homepage Hero
-                  </span>
-                </label>
-                <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
-                  When enabled, this gallery post's approved media can appear in the homepage hero slideshow.
-                </span>
+              {/* Instagram-Style Notification Feed & Broadcast Alert */}
+              <div
+                style={{
+                  marginTop: 20,
+                  padding: 16,
+                  borderRadius: 8,
+                  background: "rgba(223, 194, 125, 0.05)",
+                  border: "1px solid rgba(223, 194, 125, 0.3)",
+                  textAlign: "left",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 18 }}>🔔</span>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--gold)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                        Notification Feed & Broadcast Alert
+                      </h4>
+                      <p style={{ margin: 0, fontSize: 11, color: "var(--muted)" }}>
+                        Push notification alert sent to subscriber feed when this post goes live (Instagram style)
+                      </p>
+                    </div>
+                  </div>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, fontWeight: 700, color: currentPost.notify_feed !== false ? "var(--gold)" : "var(--muted)" }}>
+                    <input
+                      type="checkbox"
+                      name="notify_feed"
+                      checked={currentPost.notify_feed !== false}
+                      onChange={(e) => setCurrentPost((prev) => ({ ...prev, notify_feed: e.target.checked }))}
+                      style={{ width: 16, height: 16, accentColor: "var(--gold)", cursor: "pointer" }}
+                    />
+                    <span>{currentPost.notify_feed !== false ? "Notify Feed Active" : "Disabled"}</span>
+                  </label>
+                </div>
+
+                {currentPost.notify_feed !== false && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div className="studio-field">
+                      <label style={{ fontSize: 11, color: "var(--text-h)", fontWeight: 600 }}>
+                        Custom Alert Message (Optional — defaults to post caption/title)
+                      </label>
+                      <input
+                        type="text"
+                        name="notification_text"
+                        className="studio-input"
+                        placeholder={`e.g. 🚨 New visuals just dropped: ${currentPost.title || "Check out the new archive post"}...`}
+                        value={currentPost.notification_text || ""}
+                        onChange={handleChange}
+                        maxLength={140}
+                        style={{ fontSize: 13 }}
+                      />
+                      <span style={{ fontSize: 10, color: "var(--muted)", textAlign: "right", display: "block", marginTop: 2 }}>
+                        {(currentPost.notification_text || "").length}/140 characters
+                      </span>
+                    </div>
+
+                    {/* Live Instagram-style notification card preview */}
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 8,
+                        background: "rgba(10, 10, 15, 0.85)",
+                        border: "1px solid rgba(223, 194, 125, 0.2)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        maxWidth: 420,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: "50%",
+                          background: "#000",
+                          border: "1px solid var(--gold)",
+                          overflow: "hidden",
+                          flexShrink: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <img src="/silachomka.com-logo.png" alt="silachomka" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+                          <strong style={{ color: "var(--text-h)" }}>silachomka</strong>
+                          <span style={{ color: "var(--muted)", fontSize: 10 }}>• just now</span>
+                        </div>
+                        <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {currentPost.notification_text || currentPost.title || currentPost.caption || "Shared a new visual archive post"}
+                        </p>
+                      </div>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "var(--gold)", border: "1px solid rgba(223, 194, 125, 0.3)", borderRadius: 4, padding: "2px 6px" }}>
+                        View
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Single-Media Post Homepage Hero Eligibility Checkbox */}
+              {(!currentPost.carouselSlides || currentPost.carouselSlides.length <= 1) && (
+                <div className="studio-field" style={{ textAlign: "left", marginTop: 14 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      name="is_hero"
+                      checked={Boolean(currentPost.is_hero)}
+                      onChange={handleChange}
+                      disabled={isSaving}
+                      style={{ width: 18, height: 18, accentColor: "var(--gold)", cursor: "pointer" }}
+                    />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+                      Show this media in Homepage Hero
+                    </span>
+                  </label>
+                  <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
+                    When enabled, this single-media post appears in the homepage hero slideshow. (For carousels, configure each slide individually in the list above).
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1590,9 +1764,17 @@ const AdminGalleryPage = () => {
           {sortedPosts.map((post) => {
             const postSlides = slides.filter((s) => s.post_id === post.id);
             const primaryAssetId = post.primary_asset_id || (postSlides[0] ? postSlides[0].asset_id : null);
+            const primaryAssetObj = getAssetObj(primaryAssetId);
             const assetUrl = getMediaUrl(primaryAssetId);
             const formattedPostDate = post.post_date ? formatGalleryDate(post.post_date) : "";
             const displayTitle = post.title?.trim() || post.caption?.trim() || (formattedPostDate ? `Untitled Gallery Post — ${formattedPostDate}` : `Untitled ${post.post_type || "Media"} Post`);
+            const isPostVideo =
+              post.post_type === "video" ||
+              post.type === "video" ||
+              primaryAssetObj?.asset_type === "VIDEO" ||
+              (primaryAssetObj?.mime_type && primaryAssetObj.mime_type.startsWith("video/")) ||
+              postSlides[0]?.slide_type === "video" ||
+              (typeof assetUrl === "string" && (assetUrl.startsWith("data:video") || /\.(mp4|webm|mov)(\?.*)?$/i.test(assetUrl)));
 
             return (
               <div key={post.id} className="admin-item-card">
@@ -1610,14 +1792,24 @@ const AdminGalleryPage = () => {
                     }}
                   >
                     {assetUrl ? (
-                      <img
-                        src={assetUrl}
-                        alt={displayTitle}
-                        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                        onError={(e) => {
-                          e.currentTarget.src = "/og-image.png";
-                        }}
-                      />
+                      isPostVideo ? (
+                        <video
+                          src={`${assetUrl}#t=0.5`}
+                          preload="metadata"
+                          muted
+                          playsInline
+                          style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <img
+                          src={assetUrl}
+                          alt={displayTitle}
+                          style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                          onError={(e) => {
+                            e.currentTarget.src = "/og-image.png";
+                          }}
+                        />
+                      )
                     ) : (
                       <div
                         style={{
@@ -1733,9 +1925,17 @@ const AdminGalleryPage = () => {
               {sortedPosts.map((post) => {
                 const postSlides = slides.filter((s) => s.post_id === post.id);
                 const primaryAssetId = post.primary_asset_id || (postSlides[0] ? postSlides[0].asset_id : null);
+                const primaryAssetObj = getAssetObj(primaryAssetId);
                 const assetUrl = getMediaUrl(primaryAssetId);
                 const formattedPostDate = post.post_date ? formatGalleryDate(post.post_date) : "";
                 const displayTitle = post.title?.trim() || post.caption?.trim() || (formattedPostDate ? `Untitled Gallery Post — ${formattedPostDate}` : `Untitled ${post.post_type || "Media"} Post`);
+                const isPostVideo =
+                  post.post_type === "video" ||
+                  post.type === "video" ||
+                  primaryAssetObj?.asset_type === "VIDEO" ||
+                  (primaryAssetObj?.mime_type && primaryAssetObj.mime_type.startsWith("video/")) ||
+                  postSlides[0]?.slide_type === "video" ||
+                  (typeof assetUrl === "string" && (assetUrl.startsWith("data:video") || /\.(mp4|webm|mov)(\?.*)?$/i.test(assetUrl)));
 
                 return (
                   <tr key={post.id} style={{ borderBottom: "1px solid var(--border)" }}>
@@ -1753,14 +1953,24 @@ const AdminGalleryPage = () => {
                           }}
                         >
                           {assetUrl ? (
-                            <img
-                              src={assetUrl}
-                              alt={displayTitle}
-                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                              onError={(e) => {
-                                e.currentTarget.src = "/og-image.png";
-                              }}
-                            />
+                            isPostVideo ? (
+                              <video
+                                src={`${assetUrl}#t=0.5`}
+                                preload="metadata"
+                                muted
+                                playsInline
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              />
+                            ) : (
+                              <img
+                                src={assetUrl}
+                                alt={displayTitle}
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                onError={(e) => {
+                                  e.currentTarget.src = "/og-image.png";
+                                }}
+                              />
+                            )
                           ) : (
                             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 10 }}>
                               No Media

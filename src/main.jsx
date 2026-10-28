@@ -6,7 +6,8 @@ import { Analytics } from "@vercel/analytics/react";
 import App from "./App";
 import "./index.css";
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+const rootElement = document.getElementById("root");
+const appElement = (
   <React.StrictMode>
     <HelmetProvider>
       <BrowserRouter>
@@ -16,3 +17,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </HelmetProvider>
   </React.StrictMode>
 );
+
+if (rootElement && rootElement.hasChildNodes()) {
+  ReactDOM.hydrateRoot(rootElement, appElement);
+} else if (rootElement) {
+  ReactDOM.createRoot(rootElement).render(appElement);
+}

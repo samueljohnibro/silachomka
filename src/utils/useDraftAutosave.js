@@ -33,6 +33,7 @@ export function useDraftAutosave({
   const currentDataRef = useRef(currentData);
   const isDirtyRef = useRef(false);
   const prevEntityKeyRef = useRef(entityKey);
+  const justSavedRef = useRef(false);
 
   // Reset baseline and dirty state whenever entityKey changes (Stage 38)
   useEffect(() => {
@@ -51,7 +52,7 @@ export function useDraftAutosave({
     currentDataRef.current = currentData;
   }, [currentData]);
 
-  // Normalization helper to strip transient metadata for clean dirty comparisons
+  // Normalization helper to strip transient metadata and reconcile type differences
   const normalizeData = useCallback((obj) => {
     if (!obj || typeof obj !== 'object') return obj;
     const copy = { ...obj };
@@ -59,6 +60,8 @@ export function useDraftAutosave({
     delete copy.updated_at;
     delete copy.created_at;
     delete copy.last_saved_at;
+    delete copy.id; // ID may be generated on creation
+    delete copy.carouselSlides; // Reconciled with slides
     return copy;
   }, []);
 
@@ -67,10 +70,27 @@ export function useDraftAutosave({
     const norm = normalizeData(obj);
     const sorted = {};
     for (const k of Object.keys(norm).sort()) {
-      sorted[k] = norm[k] === undefined ? null : norm[k];
+      let val = norm[k];
+      // Normalize empty strings, undefined and null to null
+      if (val === undefined || val === '' || val === null) {
+        val = null;
+      }
+      sorted[k] = val;
     }
     return JSON.stringify(sorted);
   }, [normalizeData]);
+
+  const hasMeaningfulContent = useCallback((obj) => {
+    if (!obj || typeof obj !== 'object') return false;
+    return Object.entries(obj).some(([k, v]) => {
+      if (['status', 'id', 'created_at', 'updated_at', '_draftStatus', 'post_type', 'type'].includes(k)) return false;
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === 'string') return v.trim().length > 0;
+      if (typeof v === 'number') return v !== 0;
+      if (typeof v === 'boolean') return v === true;
+      return false;
+    });
+  }, []);
 
   const isDataDifferent = useCallback((a, b) => {
     if (!a || !b) return Boolean(a !== b);
@@ -83,7 +103,7 @@ export function useDraftAutosave({
 
   // Synchronous flush handler
   const flushDraft = useCallback(() => {
-    if (!active || !isDirtyRef.current || !currentDataRef.current) return;
+    if (!active || !isDirtyRef.current || justSavedRef.current || !currentDataRef.current) return;
     try {
       const serialized = serializeSnapshot(currentDataRef.current);
       if (serialized === initialJsonRef.current) return; // Do not flush if identical to saved state!
@@ -136,6 +156,13 @@ export function useDraftAutosave({
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.data && parsed.savedAt) {
+          // If stored draft has no meaningful content or is empty, discard it immediately
+          if (!hasMeaningfulContent(parsed.data)) {
+            localStorage.removeItem(storageKey);
+            setRecoverableDraft(null);
+            return;
+          }
+
           // Check for stale draft vs server updated_at
           const serverUpdateRaw = currentData?.updated_at || currentData?.updatedAt;
           if (serverUpdateRaw) {
@@ -159,7 +186,7 @@ export function useDraftAutosave({
         }
       }
     } catch {}
-  }, [active, entityKey, storageKey, currentData, isDataDifferent]);
+  }, [active, entityKey, storageKey, currentData, isDataDifferent, hasMeaningfulContent]);
 
   // Capture baseline snapshot of initial formState on form open
   useEffect(() => {
@@ -173,7 +200,7 @@ export function useDraftAutosave({
 
   // Debounced autosave when formState changes
   useEffect(() => {
-    if (!active || !currentData) return;
+    if (!active || !currentData || justSavedRef.current) return;
 
     let serialized = '';
     try {
@@ -236,10 +263,16 @@ export function useDraftAutosave({
   }, [recoverableDraft, restoreCallback]);
 
   const clearDraft = useCallback((savedData) => {
+    justSavedRef.current = true;
     isDirtyRef.current = false;
     if (timerRef.current) clearTimeout(timerRef.current);
     try {
       localStorage.removeItem(storageKey);
+      // If this entity was created from a _new form, also purge the _new key
+      if (entityKey.includes('_')) {
+        const prefix = entityKey.split('_')[0];
+        localStorage.removeItem(`chomka_cms_draft_${prefix}_new`);
+      }
     } catch {}
     setRecoverableDraft(null);
     setAutosaveStatus('IDLE');
@@ -253,7 +286,10 @@ export function useDraftAutosave({
         initialJsonRef.current = serializeSnapshot(currentDataRef.current);
       } catch {}
     }
-  }, [storageKey, serializeSnapshot]);
+    setTimeout(() => {
+      justSavedRef.current = false;
+    }, 2500);
+  }, [storageKey, entityKey, serializeSnapshot]);
 
   return {
     autosaveStatus,
@@ -450,8 +486,20 @@ export function useExistingDraft(entityKey) {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed?.data && parsed?.savedAt) {
-          setDraft(parsed);
-          return;
+          const hasContent = Object.entries(parsed.data).some(([k, v]) => {
+            if (['status', 'id', 'created_at', 'updated_at', '_draftStatus', 'post_type', 'type'].includes(k)) return false;
+            if (Array.isArray(v)) return v.length > 0;
+            if (typeof v === 'string') return v.trim().length > 0;
+            if (typeof v === 'number') return v !== 0;
+            if (typeof v === 'boolean') return v === true;
+            return false;
+          });
+          if (hasContent) {
+            setDraft(parsed);
+            return;
+          } else {
+            localStorage.removeItem(storageKey);
+          }
         }
       }
       setDraft(null);

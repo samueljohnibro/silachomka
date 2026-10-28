@@ -1091,7 +1091,7 @@ export default function ServicesPage() {
                 margin: 0,
               }}
             >
-              chomkaMUSIC™ STUDIO CONCIERGE
+              chomkaMUSIC™ • THE SACRED SANCTUARY
             </p>
 
             <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1108,7 +1108,7 @@ export default function ServicesPage() {
                   cursor: "pointer",
                 }}
               >
-                {isImmersive ? "✕ Classic View (Esc)" : "⚡ Immersive View"}
+                {isImmersive ? "✕ Classic View (Esc)" : "✨ Sacred Immersive View"}
               </button>
 
               <SharePageButton
@@ -1395,7 +1395,7 @@ export default function ServicesPage() {
                   lineHeight: 1.2,
                 }}
               >
-                What are we creating?
+                Which creation do you wish to manifest?
               </h1>
               <p
                 style={{
@@ -1405,7 +1405,7 @@ export default function ServicesPage() {
                   margin: 0,
                 }}
               >
-                Tell me what you're trying to get done and I'll help you assemble the right studio session.
+                Welcome to the sanctuary. Select the sonic forms you desire to bring forth into reality, and we will sculpt the path to manifestation.
               </p>
             </div>
 
