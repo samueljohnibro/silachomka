@@ -36,7 +36,7 @@ function openDB() {
   });
 }
 
-async function dbGet(key) {
+export async function dbGet(key) {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
