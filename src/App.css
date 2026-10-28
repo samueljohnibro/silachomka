@@ -291,20 +291,21 @@ a:focus-visible {
   left: auto;
   display: inline-flex;
   align-items: center;
-  height: 22px;
+  justify-content: center;
+  height: 16px;
   line-height: 1;
-  padding: 0 16px 0 22px;
-  font-size: 7.5px;
-  font-weight: 800;
-  letter-spacing: 0.24em;
+  padding: 0 8px 0 14px;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
   color: var(--gold);
-  background: linear-gradient(135deg, rgba(223, 194, 125, 0.20) 0%, rgba(22, 20, 16, 0.96) 100%);
+  background: linear-gradient(135deg, rgba(223, 194, 125, 0.22) 0%, rgba(22, 20, 16, 0.96) 100%);
   border-bottom: 1px solid rgba(223, 194, 125, 0.45);
   border-top: none;
   border-right: none;
   border-left: none;
-  clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%);
-  filter: drop-shadow(-2px 3px 6px rgba(0, 0, 0, 0.5));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 5px 50%);
+  filter: drop-shadow(-1px 2px 4px rgba(0, 0, 0, 0.5));
   pointer-events: none;
   user-select: none;
   text-transform: uppercase;
@@ -468,6 +469,8 @@ a:focus-visible {
 
   display: flex;
   align-items: flex-end;
+  justify-content: flex-start;
+  text-align: left;
 
   padding: 8vw 7vw;
 
@@ -609,6 +612,13 @@ a:focus-visible {
   position: relative;
   z-index: 3;
   max-width: 900px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  margin-left: 0;
+  margin-right: auto;
 }
 
 .eyebrow {
@@ -618,6 +628,8 @@ a:focus-visible {
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
+  text-align: left;
+  align-self: flex-start;
 }
 
 .hero h1 {
@@ -627,6 +639,8 @@ a:focus-visible {
   letter-spacing: -0.04em;
   word-break: normal;
   text-shadow: 0 4px 35px rgba(0, 0, 0, 0.7), 0 0 55px var(--gold-glow);
+  text-align: left;
+  align-self: flex-start;
 }
 
 .hero-copy {
@@ -635,13 +649,19 @@ a:focus-visible {
   font-size: clamp(14px, 1.5vw, 20px);
   line-height: 1.65;
   max-width: 680px;
+  text-align: left;
+  align-self: flex-start;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
   gap: 14px;
   margin-top: 32px;
+  width: 100%;
+  text-align: left;
 }
 
 .primary-button,
@@ -4300,6 +4320,8 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
   .hero h1 { font-size: clamp(34px, 11.5vw, 56px); }
   .hero-actions {
     flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
     width: 100%;
   }
   .hero-actions .primary-button,
@@ -8004,8 +8026,10 @@ select.studio-input,
   z-index: 998;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 18px 10px 14px;
+  justify-content: flex-start;
+  height: 48px;
+  width: 48px;
+  padding: 0;
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(20, 16, 32, 0.94), rgba(10, 8, 16, 0.96));
   border: 1.5px solid var(--gold);
@@ -8016,12 +8040,31 @@ select.studio-input,
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.75), 0 0 24px var(--gold-glow);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   user-select: none;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.25s ease,
+              color 0.25s ease,
+              transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s ease,
+              border-color 0.25s ease;
+}
+
+.chomka-magic-ai-trigger:hover,
+.chomka-magic-ai-trigger:focus-visible,
+.chomka-magic-ai-trigger.is-expanded {
+  width: 216px;
+}
+
+.chomka-magic-ai-trigger.is-expanded {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, rgba(28, 22, 42, 0.96), rgba(16, 12, 26, 0.98));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 32px var(--gold-glow);
 }
 
 .chomka-magic-ai-trigger:hover {
-  transform: translateY(-2px) scale(1.04);
+  transform: translateY(-2px) scale(1.03);
   background: var(--gold);
   color: #050507;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 35px var(--gold-glow);
@@ -8048,10 +8091,24 @@ select.studio-input,
 }
 
 .chomka-magic-ai-sparkle {
-  font-size: 16px;
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 18px;
   line-height: 1;
   color: inherit;
   animation: spinSlow 8s linear infinite;
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), padding 0.35s ease;
+}
+
+.chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle,
+.chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle,
+.chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle {
+  width: 38px;
+  padding-left: 6px;
 }
 
 @keyframes spinSlow {
@@ -8066,6 +8123,23 @@ select.studio-input,
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-4px);
+  transition: opacity 0.22s ease, max-width 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s ease;
+}
+
+.chomka-magic-ai-trigger:hover .chomka-magic-ai-label,
+.chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-label,
+.chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-label {
+  opacity: 1;
+  max-width: 175px;
+  pointer-events: auto;
+  transform: translateX(0);
+  padding-right: 14px;
 }
 
 .chomka-magic-ai-badge {
@@ -8575,7 +8649,28 @@ select.studio-input,
   .chomka-magic-ai-trigger {
     bottom: 88px; /* Elevated on mobile to stay above mobile bars */
     right: 16px;
-    padding: 8px 14px 8px 12px;
+    height: 44px;
+    width: 44px;
+    padding: 0;
+  }
+  .chomka-magic-ai-sparkle {
+    width: 44px;
+    height: 44px;
+    font-size: 16px;
+  }
+  .chomka-magic-ai-trigger:hover,
+  .chomka-magic-ai-trigger:focus-visible,
+  .chomka-magic-ai-trigger.is-expanded {
+    width: 164px;
+  }
+  .chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle,
+  .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle,
+  .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle {
+    width: 32px;
+    padding-left: 4px;
+  }
+  .chomka-magic-ai-label {
+    font-size: 11px;
   }
   .chomka-magic-ai-badge {
     display: none;

@@ -217,9 +217,26 @@ export default function ChomkaAiAssistantModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recentSearches, setRecentSearches] = useState([]);
+  const [isAutoExpanded, setIsAutoExpanded] = useState(false);
   const inputRef = useRef(null);
   const modalRef = useRef(null);
   const navigate = useNavigate();
+
+  // Auto-expand teaser after 10 seconds on the site, display full label for ~4.5 seconds, then collapse to circle
+  useEffect(() => {
+    let collapseTimer;
+    const expandTimer = setTimeout(() => {
+      setIsAutoExpanded(true);
+      collapseTimer = setTimeout(() => {
+        setIsAutoExpanded(false);
+      }, 4500);
+    }, 10000);
+
+    return () => {
+      clearTimeout(expandTimer);
+      if (collapseTimer) clearTimeout(collapseTimer);
+    };
+  }, []);
 
   const store = useChomkaStore();
   const releases = Array.isArray(store?.releases) ? store.releases : [];
@@ -471,15 +488,18 @@ export default function ChomkaAiAssistantModal() {
           ========================================================= */}
       <button
         type="button"
-        className="chomka-magic-ai-trigger"
-        onClick={() => setIsOpen(true)}
-        aria-label="Open silachomka AI Search & Studio Concierge (Ctrl+K)"
-        title="Open silachomka AI Assistant (Ctrl+K)"
+        className={`chomka-magic-ai-trigger ${isAutoExpanded ? "is-expanded" : ""}`}
+        onClick={() => {
+          setIsAutoExpanded(false);
+          setIsOpen(true);
+        }}
+        aria-label="Open CHOMKA AI Search & Studio Concierge (Ctrl+K)"
+        title="Open CHOMKA AI Assistant (Ctrl+K)"
       >
         <div className="chomka-magic-ai-glow" aria-hidden="true" />
-        <div className="chomka-magic-ai-sparkle">✦</div>
+        <div className="chomka-magic-ai-sparkle" aria-hidden="true">✦</div>
         <div className="chomka-magic-ai-label">
-          <span>Ask silachomka AI</span>
+          <span>ASK CHOMKA AI</span>
           <span className="chomka-magic-ai-badge">⌘K</span>
         </div>
       </button>
@@ -501,7 +521,7 @@ export default function ChomkaAiAssistantModal() {
                 <div className="chomka-ai-header-brand">
                   <span className="chomka-ai-sparkle-icon">✦</span>
                   <div>
-                    <div className="chomka-ai-title">SILACHOMKA AI · CHOMKAMUSIC™</div>
+                    <div className="chomka-ai-title">CHOMKA AI · CHOMKAMUSIC™</div>
                     <div className="chomka-ai-status">
                       <span className="chomka-ai-status-dot" />
                       <span>CATALOGUE & CHOMKAMUSIC™ STUDIO CONCIERGE</span>
@@ -814,7 +834,7 @@ export default function ChomkaAiAssistantModal() {
 
               {/* Footer */}
               <div className="chomka-ai-footer">
-                <span>✦ silachomka AI · chomkaMUSIC™ & Chomka Nation</span>
+                <span>✦ CHOMKA AI · chomkaMUSIC™ & Chomka Nation</span>
                 <span>POWERED BY SILACHOMKA ENGINE</span>
               </div>
             </ModalErrorBoundary>
