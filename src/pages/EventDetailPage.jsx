@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { useParams, Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import { fetchEventBySlug } from "../data/api";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
 import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
 import { canonicalUrl } from "../data/siteConfig";
+import { getCalendarReturnUrl } from "../utils/calendarNavigation";
 
 function formatDateDisplay(dateStr) {
   if (!dateStr) return "";
@@ -88,6 +89,11 @@ function EventDetailCountdown({ targetDate, startTime }) {
 export default function EventDetailPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const calendarReturnUrl = useMemo(() => {
+    return getCalendarReturnUrl(location, searchParams);
+  }, [location, searchParams]);
   const { events, releases, beats, gallery } = useChomkaStore();
 
   const [eventData, setEventData] = useState(() => {
@@ -106,7 +112,7 @@ export default function EventDetailPage() {
         if (mounted && fetched) {
           setEventData(fetched);
         }
-      } catch (err) {
+      } catch {
         if (mounted && !eventData) {
           setError("Gathering not found or inactive.");
         }
@@ -160,9 +166,16 @@ export default function EventDetailPage() {
         <div className="events-empty-icon">🏛️</div>
         <h2>Gathering Not Found</h2>
         <p style={{ margin: "20px 0 30px" }}>The requested event date or sanctuary session could not be located.</p>
-        <button type="button" className="primary-button" onClick={() => navigate("/events")}>
-          Return to Events
-        </button>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+          {calendarReturnUrl && (
+            <Link className="primary-button" to={calendarReturnUrl}>
+              ← Back to Calendar
+            </Link>
+          )}
+          <button type="button" className="primary-button" onClick={() => navigate("/events")}>
+            Return to Events
+          </button>
+        </div>
       </div>
     );
   }
@@ -228,11 +241,36 @@ export default function EventDetailPage() {
           <ol>
             <li><Link to="/">Home</Link></li>
             <li>/</li>
+            {calendarReturnUrl && (
+              <>
+                <li>
+                  <Link
+                    to={calendarReturnUrl}
+                    style={{ color: "var(--gold)", fontWeight: 700 }}
+                  >
+                    Calendar
+                  </Link>
+                </li>
+                <li>/</li>
+              </>
+            )}
             <li><Link to="/events">Events</Link></li>
             <li>/</li>
             <li aria-current="page">{eventData.title}</li>
           </ol>
         </nav>
+
+        {calendarReturnUrl && (
+          <div style={{ marginBottom: "20px" }}>
+            <Link
+              className="release-breadcrumb calendar-return-link"
+              to={calendarReturnUrl}
+              style={{ marginBottom: 0 }}
+            >
+              ← Back to Calendar
+            </Link>
+          </div>
+        )}
 
         {/* Hero Section */}
         <div className="event-hero-grid">

@@ -2311,6 +2311,33 @@ video.gallery-card-image,
 
 .release-breadcrumb:hover { transform: translateX(-4px); }
 
+.release-breadcrumb-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 45px;
+}
+
+.release-breadcrumb-group .release-breadcrumb {
+  margin-bottom: 0 !important;
+}
+
+.calendar-return-link {
+  color: var(--gold) !important;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.calendar-return-link:hover {
+  color: #fff !important;
+  transform: translateX(-4px);
+}
+
 .release-hero-grid {
   display: grid;
   grid-template-columns: 420px minmax(0, 1fr);
