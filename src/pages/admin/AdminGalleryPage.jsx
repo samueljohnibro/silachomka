@@ -137,7 +137,7 @@ const AdminGalleryPage = () => {
       status: "DRAFT",
       carouselSlides: [],
       assignedSocials: [],
-      is_hero: false,
+      is_hero: true,
       notify_feed: true,
       notification_text: "",
     });
@@ -262,6 +262,7 @@ const AdminGalleryPage = () => {
           asset_id: newAsset.id,
           slide_type: isVid ? "video" : "image",
           sort_order: i,
+          is_hero: true,
         });
       }
 
@@ -307,9 +308,10 @@ const AdminGalleryPage = () => {
   // Library modal select handler — automatically determines Single Image, Video, or Carousel (Req #9)
   const handleSelectFromLibrary = (asset) => {
     const isVid = asset.asset_type === "VIDEO" || asset.mime_type?.startsWith("video/");
+    const isHero = asset.is_hero !== undefined ? Boolean(asset.is_hero) : true;
     setCurrentPost((prev) => {
       const existingSlides = Array.isArray(prev.carouselSlides) ? prev.carouselSlides : [];
-      const newItem = { asset_id: asset.id, slide_type: isVid ? "video" : "image", sort_order: 0 };
+      const newItem = { asset_id: asset.id, slide_type: isVid ? "video" : "image", sort_order: 0, is_hero: isHero };
       let combined;
       if (libraryTarget === "primary" || libraryTarget === "replace") {
         combined = [newItem];

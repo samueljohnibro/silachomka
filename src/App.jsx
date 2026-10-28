@@ -1999,6 +1999,14 @@ function GallerySection() {
           (typeof item.src === "string" && (item.src.startsWith("data:video") || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(item.src)));
 
         const slides = Array.isArray(item.slides) ? item.slides : [];
+        const hasVideoSlide = Array.isArray(item.slides) && item.slides.some((s) => {
+          const sUrl = typeof s === "string" ? s : s?.src || s?.asset || "";
+          return (
+            Boolean(s?.isVideo || s?.slideType === "video" || s?.assetType === "VIDEO") ||
+            Boolean(s?.mimeType && String(s?.mimeType).toLowerCase().startsWith("video/")) ||
+            (typeof sUrl === "string" && (sUrl.startsWith("data:video") || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(sUrl)))
+          );
+        });
         const videoSlideIndices = [];
 
         slides.forEach((s, idx) => {

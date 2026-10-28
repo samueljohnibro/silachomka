@@ -122,6 +122,7 @@ function renderSocialMetadata({
   imageAlt,
   type = "website",
   audio = null,
+  jsonLd = null,
 }) {
   const canonicalUrl = toAbsoluteUrl(canonicalPath);
   const imageUrl = toAbsoluteUrl(image || DEFAULT_SOCIAL_IMAGE);
@@ -137,6 +138,9 @@ function renderSocialMetadata({
     : "";
   const audioTags = audio
     ? `\n    <meta property="og:audio" content="${escapeHtml(toAbsoluteUrl(audio))}" />\n    <meta property="og:audio:type" content="audio/mpeg" />`
+    : "";
+  const jsonLdTag = jsonLd
+    ? `\n    <script type="application/ld+json">\n${JSON.stringify(jsonLd, null, 2)}\n    </script>`
     : "";
 
   return `<!-- SOCIAL_METADATA:START -->
@@ -163,7 +167,7 @@ function renderSocialMetadata({
     <meta name="twitter:title" content="${escapedTitle}" />
     <meta name="twitter:description" content="${escapedDescription}" />
     <meta name="twitter:image" content="${escapedImageUrl}" />
-    <meta name="twitter:image:alt" content="${escapedImageAlt}" />
+    <meta name="twitter:image:alt" content="${escapedImageAlt}" />${jsonLdTag}
     <!-- SOCIAL_METADATA:END -->`;
 }
 
@@ -198,6 +202,32 @@ function createHomeMetadata() {
     canonicalPath: "/",
     image: DEFAULT_SOCIAL_IMAGE,
     imageAlt: "silachomka official logo",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": `${siteUrl}/#website`,
+          "url": `${siteUrl}/`,
+          "name": "silachomka",
+          "description":
+            "Official artist website of silachomka. Music, visuals, beat store, studio services.",
+          "publisher": { "@id": `${siteUrl}/#person` }
+        },
+        {
+          "@type": "Person",
+          "@id": `${siteUrl}/#person`,
+          "name": "silachomka",
+          "alternateName": "Samuel Silachomka John-Ibro",
+          "url": `${siteUrl}/`,
+          "jobTitle": "Recording Artist & Music Producer",
+          "sameAs": [
+            "https://www.instagram.com/silachomka",
+            "https://x.com/silachomka"
+          ]
+        }
+      ]
+    }
   };
 }
 
@@ -210,6 +240,21 @@ function createBeatHubMetadata() {
     canonicalPath: "/beats",
     image: "/beats-image.png",
     imageAlt: "chomkaMUSIC™ Studio Beats by silachomka",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "name": title,
+      "url": `${siteUrl}/beats`,
+      "description":
+        "Explore original studio beats by silachomka. Listen, license on Selar, and craft your next release with chomkaMUSIC™ Studio.",
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+          { "@type": "ListItem", "position": 2, "name": "Beats", "item": `${siteUrl}/beats` }
+        ]
+      }
+    }
   };
 }
 
@@ -242,6 +287,25 @@ function createBeatMetadata(beat) {
       canonicalPath
     ),
     imageAlt: `${beat.title} beat by silachomka`,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "MusicRecording",
+      "name": beat.title,
+      "byArtist": {
+        "@type": "Person",
+        "name": "silachomka"
+      },
+      "url": `${siteUrl}/beats/${encodeURIComponent(beatKey)}`,
+      "description": beat.description || `${beat.title} beat by silachomka`,
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+          { "@type": "ListItem", "position": 2, "name": "Beats", "item": `${siteUrl}/beats` },
+          { "@type": "ListItem", "position": 3, "name": beat.title, "item": `${siteUrl}/beats/${encodeURIComponent(beatKey)}` }
+        ]
+      }
+    }
   };
 }
 
@@ -322,6 +386,25 @@ function createReleaseMetadata(release) {
       canonicalPath
     ),
     imageAlt: `${release.title} official cover art`,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "MusicAlbum",
+      "name": release.title,
+      "byArtist": {
+        "@type": "Person",
+        "name": "silachomka"
+      },
+      "url": `${siteUrl}/release/${encodeURIComponent(release.slug)}`,
+      "description": fullDesc,
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+          { "@type": "ListItem", "position": 2, "name": "Music", "item": `${siteUrl}/music` },
+          { "@type": "ListItem", "position": 3, "name": release.title, "item": `${siteUrl}/release/${encodeURIComponent(release.slug)}` }
+        ]
+      }
+    }
   };
 }
 
@@ -538,6 +621,54 @@ function renderBeatDetailBodyHtml(beat) {
   ${renderSemanticFooter()}`;
 }
 
+function renderEventsBodyHtml(events) {
+  const publishedEvents = (events || []).filter(e => Boolean(e.is_published));
+  return `${renderSemanticNav()}
+  <main style="max-width: 1000px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <span>Live Sanctuary &amp; Events</span></nav>
+    <h1>silachomka Live Gatherings &amp; Tour Dates</h1>
+    <p>Official calendar of live acoustic sanctuary sessions, festival appearances, and live shows by silachomka.</p>
+    <section style="margin-top: 32px;">
+      ${publishedEvents.length === 0 ? `
+        <p style="color: #888; font-style: italic;">No public tour dates or live events currently scheduled. Check back soon or explore the release catalogue.</p>
+      ` : publishedEvents.map(e => `
+        <article style="margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <h2><a href="/events/${escapeHtml(e.slug)}" style="color: #dfc27d; text-decoration: none;">${escapeHtml(e.title)}</a></h2>
+          <p>${escapeHtml(e.subtitle || e.description || '')}</p>
+          <p style="font-size: 13px; color: #888;">Date: ${escapeHtml(e.start_time ? new Date(e.start_time).toLocaleDateString() : 'TBA')} &middot; Venue: ${escapeHtml(e.venue_name || 'Sanctuary')} (${escapeHtml(e.city || '')})</p>
+        </article>
+      `).join('')}
+    </section>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderCalendarBodyHtml() {
+  return `${renderSemanticNav()}
+  <main style="max-width: 1000px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <span>Activity Calendar</span></nav>
+    <h1>silachomka Unified Activity Calendar</h1>
+    <p>Chronological timeline across music releases, studio beats, visual archive posts, and live events by silachomka.</p>
+    <section style="margin-top: 32px;">
+      <p style="color: #888;">Browse all historical discography milestones, beats, visual posts, and upcoming releases in unified chronological order.</p>
+    </section>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
+function renderEventDetailBodyHtml(evt) {
+  return `${renderSemanticNav()}
+  <main style="max-width: 900px; margin: 40px auto; padding: 0 6vw;">
+    <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <a href="/events">Events</a> / <span>${escapeHtml(evt.title)}</span></nav>
+    <h1>${escapeHtml(evt.title)} &mdash; Live at ${escapeHtml(evt.venue_name || 'Sanctuary')}</h1>
+    <p style="font-size: 14px; color: #dfc27d; font-weight: 700;">Date: ${escapeHtml(evt.start_time ? new Date(evt.start_time).toLocaleDateString() : 'TBA')} &middot; Location: ${escapeHtml(evt.city || 'Lagos')}, ${escapeHtml(evt.country || 'Nigeria')}</p>
+    <p>${escapeHtml(evt.description || evt.subtitle || '')}</p>
+    ${evt.ticket_url ? `<p><a href="${escapeHtml(evt.ticket_url)}" style="display: inline-block; padding: 10px 20px; background: #dfc27d; color: #000; text-decoration: none; border-radius: 4px; font-weight: 600;">Get Tickets / RSVP</a></p>` : ''}
+    <p><a href="/events">&larr; Back to Live Events</a></p>
+  </main>
+  ${renderSemanticFooter()}`;
+}
+
 async function generateSocialPages() {
   const [liveBeats, liveGallery, liveReleases, liveEvents] = await Promise.all([
     fetchLiveEndpoint("/api/beats"),
@@ -594,6 +725,22 @@ async function generateSocialPages() {
         type: "website",
         image: DEFAULT_SOCIAL_IMAGE,
         imageAlt: "Chomka Studio Services | silachomka",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "ProfessionalService",
+          "name": "Chomka Studio Services | silachomka",
+          "url": `${siteUrl}/services`,
+          "description":
+            "Professional music production, custom beats, mixing & mastering, vocal recording, sound design, and studio audio engineering by silachomka at Chomka Studio.",
+          "provider": { "@type": "Person", "name": "silachomka" },
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+              { "@type": "ListItem", "position": 2, "name": "Services", "item": `${siteUrl}/services` }
+            ]
+          }
+        }
       },
       renderServicesBodyHtml()
     )
@@ -654,6 +801,21 @@ async function generateSocialPages() {
         type: "music.album",
         image: DEFAULT_SOCIAL_IMAGE,
         imageAlt: "silachomka music catalogue",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          "name": "Music Catalogue & Discography | silachomka",
+          "url": `${siteUrl}/music`,
+          "description":
+            "Explore the complete music discography, singles, and albums by silachomka (Samuel Silachomka John-Ibro) under chomkaMUSIC™.",
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+              { "@type": "ListItem", "position": 2, "name": "Music", "item": `${siteUrl}/music` }
+            ]
+          }
+        }
       },
       renderMusicBodyHtml(canonicalReleases)
     )
@@ -669,6 +831,21 @@ async function generateSocialPages() {
         canonicalPath: "/gallery",
         image: DEFAULT_SOCIAL_IMAGE,
         imageAlt: "silachomka visual archive",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          "name": "Visual Archive & Gallery | silachomka",
+          "url": `${siteUrl}/gallery`,
+          "description":
+            "Explore behind-the-scenes photography, portraits, style, and visual stories from silachomka.",
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+              { "@type": "ListItem", "position": 2, "name": "Gallery", "item": `${siteUrl}/gallery` }
+            ]
+          }
+        }
       },
       renderGalleryBodyHtml(canonicalGallery)
     )
@@ -684,48 +861,135 @@ async function generateSocialPages() {
         canonicalPath: "/about",
         image: DEFAULT_SOCIAL_IMAGE,
         imageAlt: "About silachomka",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "AboutPage",
+          "name": "About silachomka — Samuel Silachomka John-Ibro | Artist & Producer",
+          "url": `${siteUrl}/about`,
+          "description":
+            "Official biography and story of silachomka (Samuel Silachomka John-Ibro) — Nigerian recording artist, producer, and audio engineer under chomkaMUSIC™.",
+          "mainEntity": {
+            "@type": "Person",
+            "name": "silachomka",
+            "alternateName": "Samuel Silachomka John-Ibro"
+          },
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+              { "@type": "ListItem", "position": 2, "name": "About", "item": `${siteUrl}/about` }
+            ]
+          }
+        }
       },
       renderAboutBodyHtml()
     )
   );
   await writePage(
     ["events"],
-    withSocialMetadata(baseHtml, {
-      title: "Live Sanctuary & Events | silachomka",
-      description:
-        "Official calendar of live gatherings, acoustic sanctuaries, festivals, and tour appearances for silachomka.",
-      canonicalPath: "/events",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "Live Sanctuary & Events | silachomka",
-    })
+    withSocialMetadata(
+      baseHtml,
+      {
+        title: "Live Sanctuary & Events | silachomka",
+        description:
+          "Official calendar of live gatherings, acoustic sanctuaries, festivals, and tour appearances for silachomka.",
+        canonicalPath: "/events",
+        image: DEFAULT_SOCIAL_IMAGE,
+        imageAlt: "Live Sanctuary & Events | silachomka",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          "name": "Live Sanctuary & Events | silachomka",
+          "url": `${siteUrl}/events`,
+          "description":
+            "Official calendar of live gatherings, acoustic sanctuaries, festivals, and tour appearances for silachomka.",
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+              { "@type": "ListItem", "position": 2, "name": "Events", "item": `${siteUrl}/events` }
+            ]
+          }
+        }
+      },
+      renderEventsBodyHtml(canonicalEvents)
+    )
   );
   await writePage(
     ["calendar"],
-    withSocialMetadata(baseHtml, {
-      title: "Unified Activity Calendar | silachomka",
-      description:
-        "Explore the comprehensive chronological timeline of silachomka music releases, studio beats, visual archive moments, and live concert events.",
-      canonicalPath: "/calendar",
-      image: DEFAULT_SOCIAL_IMAGE,
-      imageAlt: "Unified Activity Calendar | silachomka",
-    })
+    withSocialMetadata(
+      baseHtml,
+      {
+        title: "Unified Activity Calendar | silachomka",
+        description:
+          "Explore the comprehensive chronological timeline of silachomka music releases, studio beats, visual archive moments, and live concert events.",
+        canonicalPath: "/calendar",
+        image: DEFAULT_SOCIAL_IMAGE,
+        imageAlt: "Unified Activity Calendar | silachomka",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          "name": "Unified Activity Calendar | silachomka",
+          "url": `${siteUrl}/calendar`,
+          "description":
+            "Explore the comprehensive chronological timeline of silachomka music releases, studio beats, visual archive moments, and live concert events.",
+          "breadcrumb": {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+              { "@type": "ListItem", "position": 2, "name": "Calendar", "item": `${siteUrl}/calendar` }
+            ]
+          }
+        }
+      },
+      renderCalendarBodyHtml()
+    )
   );
 
   await Promise.all([
     ...canonicalEvents.map((evt) =>
       writePage(
         ["events", encodeURIComponent(evt.slug.trim())],
-        withSocialMetadata(baseHtml, {
-          title: `${evt.title} — Live at ${evt.venue_name || "Sanctuary"} | silachomka`,
-          description: normalizeDescription(
-            evt.subtitle || evt.description,
-            `Live appearance and sanctuary session by silachomka at ${evt.venue_name || "Sanctuary"}.`
-          ),
-          canonicalPath: `/events/${encodeURIComponent(evt.slug.trim())}`,
-          image: evt.primary_artwork_url || evt.cover || DEFAULT_SOCIAL_IMAGE,
-          imageAlt: `${evt.title} flyer`,
-          type: "music.event",
-        })
+        withSocialMetadata(
+          baseHtml,
+          {
+            title: `${evt.title} — Live at ${evt.venue_name || "Sanctuary"} | silachomka`,
+            description: normalizeDescription(
+              evt.subtitle || evt.description,
+              `Live appearance and sanctuary session by silachomka at ${evt.venue_name || "Sanctuary"}.`
+            ),
+            canonicalPath: `/events/${encodeURIComponent(evt.slug.trim())}`,
+            image: evt.primary_artwork_url || evt.cover || DEFAULT_SOCIAL_IMAGE,
+            imageAlt: `${evt.title} flyer`,
+            type: "music.event",
+            jsonLd: {
+              "@context": "https://schema.org",
+              "@type": "Event",
+              "name": evt.title,
+              "startDate": evt.start_time || undefined,
+              "location": {
+                "@type": "Place",
+                "name": evt.venue_name || "Sanctuary",
+                "address": {
+                  "@type": "PostalAddress",
+                  "addressLocality": evt.city || "Lagos",
+                  "addressCountry": evt.country || "Nigeria"
+                }
+              },
+              "url": `${siteUrl}/events/${encodeURIComponent(evt.slug.trim())}`,
+              "description": evt.subtitle || evt.description || "",
+              "breadcrumb": {
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                  { "@type": "ListItem", "position": 1, "name": "Home", "item": `${siteUrl}/` },
+                  { "@type": "ListItem", "position": 2, "name": "Events", "item": `${siteUrl}/events` },
+                  { "@type": "ListItem", "position": 3, "name": evt.title, "item": `${siteUrl}/events/${encodeURIComponent(evt.slug.trim())}` }
+                ]
+              }
+            }
+          },
+          renderEventDetailBodyHtml(evt)
+        )
       )
     ),
     ...canonicalBeats.map((beat) =>
