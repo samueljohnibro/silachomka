@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { fetchAllCatalogue } from "./api";
+import canonicalReleases from "./releases";
+import canonicalBeats from "./beats";
+import canonicalGallery from "./gallery";
+import canonicalVideos from "./videos";
+import { ARTIST_SOCIALS, ECOSYSTEM_SOCIALS } from "./socials";
 
 const DB_NAME = "silachomka_db";
 const DB_VERSION = 1;
@@ -97,7 +102,19 @@ export async function refreshCatalogue() {
     globalIsLoaded = true;
     globalError = null;
   } catch (err) {
-    globalError = err.message;
+    console.warn("API catalogue fetch encountered an error, falling back to bundled archive:", err);
+    memoryStore.releases = canonicalReleases;
+    memoryStore.beats = canonicalBeats;
+    memoryStore.gallery = canonicalGallery;
+    memoryStore.videos = canonicalVideos;
+    memoryStore.events = [];
+    globalSocials = {
+      artist: ARTIST_SOCIALS || [],
+      ecosystem: ECOSYSTEM_SOCIALS || [],
+      galleryEligible: ARTIST_SOCIALS || [],
+    };
+    globalIsLoaded = true;
+    globalError = null;
   } finally {
     isFetching = false;
     notifyUpdate();
