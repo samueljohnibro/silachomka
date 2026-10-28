@@ -1102,11 +1102,18 @@ a:focus-visible {
 
 .gallery-card video,
 .gallery-card-frame video,
-video.gallery-card-image {
+video.gallery-card-image,
+.gallery-card-image video {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
   width: 100% !important;
   height: 100% !important;
+  min-width: 100% !important;
+  min-height: 100% !important;
   object-fit: cover !important;
-  display: block;
+  object-position: center !important;
+  display: block !important;
 }
 
 .gallery-card:hover .gallery-card-image {

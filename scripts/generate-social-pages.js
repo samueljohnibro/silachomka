@@ -573,8 +573,8 @@ function renderServicesBodyHtml() {
   return `${renderSemanticNav()}
   <main style="max-width: 1000px; margin: 40px auto; padding: 0 6vw;">
     <nav aria-label="Breadcrumb" style="font-size: 12px; margin-bottom: 20px;"><a href="/">Home</a> / <span>Studio Services</span></nav>
-    <h1>Chomka Studio Services</h1>
-    <p>Professional music production, custom beats, vocal recording, mixing &amp; mastering, and studio audio engineering by silachomka at Chomka Studio.</p>
+    <h1>chomkaMUSIC™ Studio Services</h1>
+    <p>Professional music production, custom beats, vocal recording, mixing &amp; mastering, and studio audio engineering by silachomka at chomkaMUSIC™ Studios.</p>
     <section style="margin-top: 32px;">
       <h2>Available Studio Services</h2>
       <ul>
@@ -717,20 +717,20 @@ async function generateSocialPages() {
     withSocialMetadata(
       baseHtml,
       {
-        title: "Chomka Studio Services | silachomka",
+        title: "chomkaMUSIC™ Studio Services | silachomka",
         description:
-          "Professional music production, custom beats, mixing & mastering, vocal recording, sound design, and studio audio engineering by silachomka at Chomka Studio.",
+          "Professional music production, custom beats, mixing & mastering, vocal recording, sound design, and studio audio engineering by silachomka at chomkaMUSIC™ Studios.",
         canonicalPath: "/services",
         type: "website",
         image: DEFAULT_SOCIAL_IMAGE,
-        imageAlt: "Chomka Studio Services | silachomka",
+        imageAlt: "chomkaMUSIC™ Studio Services | silachomka",
         jsonLd: {
           "@context": "https://schema.org",
           "@type": "ProfessionalService",
-          "name": "Chomka Studio Services | silachomka",
+          "name": "chomkaMUSIC™ Studio Services | silachomka",
           "url": `${siteUrl}/services`,
           "description":
-            "Professional music production, custom beats, mixing & mastering, vocal recording, sound design, and studio audio engineering by silachomka at Chomka Studio.",
+            "Professional music production, custom beats, mixing & mastering, vocal recording, sound design, and studio audio engineering by silachomka at chomkaMUSIC™ Studios.",
           "provider": { "@type": "Person", "name": "silachomka" },
           "breadcrumb": {
             "@type": "BreadcrumbList",

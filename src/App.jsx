@@ -1688,12 +1688,25 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
   // Pre-load images & videos in background so we never transition to unloaded media
   useEffect(() => {
     slides.forEach((slide) => {
-      if (!slide.isVideo && slide.src) {
+      if (!slide.src) return;
+      if (!slide.isVideo) {
         const img = new Image();
         img.src = slide.src;
         img.onload = () => {
           setReadyMap((prev) => ({ ...prev, [slide.src]: true }));
         };
+      } else {
+        const v = document.createElement("video");
+        v.src = slide.src;
+        v.preload = "auto";
+        v.muted = true;
+        v.playsInline = true;
+        const markReady = () => {
+          setReadyMap((prev) => ({ ...prev, [slide.src]: true }));
+        };
+        v.addEventListener("canplay", markReady, { once: true });
+        v.addEventListener("loadeddata", markReady, { once: true });
+        v.load();
       }
     });
   }, [slides]);
@@ -1704,7 +1717,7 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
     6500 + Math.floor(Math.random() * 3000)
   ).current;
 
-  // Staggered initial delay so cards never rotate in sync
+  // Staggered initial delay (500-3000ms) prevents synchronized slide changes
   const initialDelay = useRef(
     500 + Math.floor(Math.random() * 2500)
   ).current;
@@ -1728,18 +1741,26 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
     let intervalId;
     const advanceSlide = () => {
       setCurrentIndex((prev) => {
-        for (let i = 1; i <= slides.length; i++) {
-          const candidateIndex = (prev + i) % slides.length;
-          const candidate = slides[candidateIndex];
-          if (!candidate) continue;
-          if (candidate.isVideo) {
-            if (readyMap[candidate.src]) {
-              return candidateIndex;
-            }
-          } else {
-            return candidateIndex;
+        // Collect all slides that are confirmed downloaded/ready
+        const readyIndices = [];
+        slides.forEach((s, idx) => {
+          if (readyMap[s.src] || (!s.isVideo && idx === 0)) {
+            readyIndices.push(idx);
           }
+        });
+
+        // If no ready slides or only 1, stay on current
+        if (readyIndices.length <= 1) {
+          return readyIndices[0] ?? prev;
         }
+
+        // Pick a random NEXT ready slide (excluding current to ensure fresh crossfade)
+        const otherReady = readyIndices.filter((idx) => idx !== prev);
+        if (otherReady.length > 0) {
+          const randomIndex = Math.floor(Math.random() * otherReady.length);
+          return otherReady[randomIndex];
+        }
+
         return (prev + 1) % slides.length;
       });
     };
@@ -1797,7 +1818,7 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
                 width: "100%",
                 height: "100%",
                 opacity: isCurrent ? 1 : 0,
-                transition: "opacity 1.4s ease-in-out",
+                transition: "opacity 1.8s ease-in-out",
                 zIndex: isCurrent ? 2 : isConfirmed ? 1 : 0,
                 pointerEvents: "none",
                 visibility: isVisible ? "visible" : "hidden",
@@ -1825,7 +1846,7 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
                 height: "100%",
                 objectFit: "cover",
                 opacity: isCurrent ? 1 : 0,
-                transition: "opacity 1.4s ease-in-out",
+                transition: "opacity 1.8s ease-in-out",
                 zIndex: isCurrent ? 2 : isConfirmed ? 1 : 0,
                 visibility: isVisible ? "visible" : "hidden",
               }}

@@ -31,7 +31,7 @@ const AdminSidebar = ({ mobileOpen, setMobileOpen }) => {
     <aside className={`admin-sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="admin-sidebar-header">
         <div className="admin-sidebar-logo">
-          chomka<span>STUDIO</span>
+          chomkaMUSIC<span>™ STUDIO</span>
         </div>
       </div>
       <nav className="admin-sidebar-nav">
@@ -48,7 +48,7 @@ const AdminSidebar = ({ mobileOpen, setMobileOpen }) => {
         ))}
       </nav>
       <div className="admin-sidebar-footer">
-        Silachomka Admin CMS
+        silachomka · chomkaMUSIC™ CMS
       </div>
     </aside>
   );

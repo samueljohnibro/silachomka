@@ -91,6 +91,13 @@ export default function GalleryCardVideo({
     const video = videoRef.current;
     if (!video) return;
     if (isActive) {
+      try {
+        const dur = video.duration;
+        if (Number.isFinite(dur) && dur > SNIPPET_DURATION) {
+          const maxStart = Math.max(0, dur - SNIPPET_DURATION);
+          video.currentTime = Math.random() * maxStart;
+        }
+      } catch {}
       video.play().catch(() => {});
     } else {
       video.pause();
@@ -109,9 +116,15 @@ export default function GalleryCardVideo({
       className={className}
       aria-label={title}
       style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
         width: "100%",
         height: "100%",
+        minWidth: "100%",
+        minHeight: "100%",
         objectFit: "cover",
+        objectPosition: "center",
         display: "block",
         background: "#08080c",
       }}

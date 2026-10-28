@@ -1031,14 +1031,14 @@ export default function ServicesPage() {
       }}
     >
       <SeoHead
-        title="Chomka Studio Services | silachomka"
-        description="Book professional music production, vocal recording, mixing, mastering, and artist collaborations directly with Chomka Music Studio."
+        title="chomkaMUSIC™ Studio Services | silachomka"
+        description="Book professional music production, vocal recording, mixing, mastering, and artist collaborations directly with chomkaMUSIC™ Studios."
         path="/services"
         image="/beats-image.png"
         jsonLd={{
           "@context": "https://schema.org",
           "@type": "Service",
-          name: "Chomka Studio Services",
+          name: "chomkaMUSIC™ Studio Services",
           serviceType: "Music Production & Audio Engineering",
           provider: {
             "@type": "Person",
@@ -1047,10 +1047,10 @@ export default function ServicesPage() {
           },
           url: canonicalUrl("/services"),
           description:
-            "Professional music production, vocal recording, mixing, mastering, and custom beat licensing by silachomka at Chomka Studio.",
+            "Professional music production, vocal recording, mixing, mastering, and custom beat licensing by silachomka at chomkaMUSIC™ Studios.",
           hasOfferCatalog: {
             "@type": "OfferCatalog",
-            name: "Chomka Studio Audio Services",
+            name: "chomkaMUSIC™ Studio Audio Services",
             itemListElement: activeServiceList.map((svc) => ({
               "@type": "Offer",
               itemOffered: {
@@ -1112,7 +1112,7 @@ export default function ServicesPage() {
               </button>
 
               <SharePageButton
-                title="Chomka Studio Services | silachomka"
+                title="chomkaMUSIC™ Studio Services | silachomka"
                 label="Share"
               />
 
@@ -2697,7 +2697,7 @@ export default function ServicesPage() {
                       <span style={{ display: "block", fontSize: "11px", color: "var(--muted)" }}>
                         {uploadProgress
                           ? `${uploadProgress.loadedFormatted} of ${uploadProgress.totalFormatted} transferred (${uploadProgress.percent}%)`
-                          : "Streaming securely to Chomka Studio Cloud Storage"}
+                          : "Streaming securely to chomkaMUSIC™ Studio Cloud Storage"}
                       </span>
                     </div>
                     <span style={{ fontSize: "12px", fontWeight: 800 }}>

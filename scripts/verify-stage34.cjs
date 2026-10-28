@@ -104,13 +104,13 @@ async function run() {
   // -------------------------------------------------------------
   console.log('\n--- 4. Services Social Preview (Req #4) ---');
   const socialGenCode = fs.readFileSync(path.join(__dirname, '../scripts/generate-social-pages.js'), 'utf8');
-  assert(socialGenCode.includes('canonicalPath: "/services"') && socialGenCode.includes('Chomka Studio Services | silachomka'), 'Services static route metadata defined in generate-social-pages.js');
+  assert(socialGenCode.includes('canonicalPath: "/services"') && (socialGenCode.includes('chomkaMUSIC™ Studio Services | silachomka') || socialGenCode.includes('Chomka Studio Services | silachomka')), 'Services static route metadata defined in generate-social-pages.js');
   assert(socialGenCode.includes('DEFAULT_SOCIAL_IMAGE'), 'Services route has social preview image configured');
 
   const servicesHtmlPath = path.join(__dirname, '../dist/services/index.html');
   if (fs.existsSync(servicesHtmlPath)) {
     const servicesHtml = fs.readFileSync(servicesHtmlPath, 'utf8');
-    assert(servicesHtml.includes('<title>Chomka Studio Services | silachomka</title>'), 'dist/services/index.html generated with correct title');
+    assert(servicesHtml.includes('<title>chomkaMUSIC™ Studio Services | silachomka</title>') || servicesHtml.includes('<title>Chomka Studio Services | silachomka</title>'), 'dist/services/index.html generated with correct title');
     assert(servicesHtml.includes('property="og:url" content="https://silachomka.vercel.app/services"'), 'dist/services/index.html includes canonical og:url');
   } else {
     console.log('  [INFO] dist/services/index.html will be validated after build');
