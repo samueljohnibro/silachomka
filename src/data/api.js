@@ -131,25 +131,62 @@ const normalizeSocials = (socialsArray) => {
   }));
 };
 
+export async function fetchEvents() {
+  try {
+    const res = await fetch(`${API_URL}/api/events`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn("Failed to fetch events:", err);
+    return [];
+  }
+}
+
+export async function fetchEventBySlug(slug) {
+  try {
+    const res = await fetch(`${API_URL}/api/events/${encodeURIComponent(slug)}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.warn("Failed to fetch event detail:", err);
+    return null;
+  }
+}
+
+export async function fetchCalendarActivities() {
+  try {
+    const res = await fetch(`${API_URL}/api/calendar`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn("Failed to fetch calendar activities:", err);
+    return [];
+  }
+}
+
 export async function fetchAllCatalogue() {
-  const [releasesRes, beatsRes, galleryRes, videosRes, socialsRes] = await Promise.all([
+  const [releasesRes, beatsRes, galleryRes, videosRes, socialsRes, eventsRes] = await Promise.all([
     fetch(`${API_URL}/api/releases`),
     fetch(`${API_URL}/api/beats`),
     fetch(`${API_URL}/api/gallery`),
     fetch(`${API_URL}/api/music-videos`),
     fetch(`${API_URL}/api/social-links`),
+    fetch(`${API_URL}/api/events`).catch(() => ({ ok: false })),
   ]);
 
   if (!releasesRes.ok || !beatsRes.ok || !galleryRes.ok || !videosRes.ok || !socialsRes.ok) {
     throw new Error("Failed to fetch catalogue data from API");
   }
 
-  const [releasesData, beatsData, galleryData, videosData, socialsData] = await Promise.all([
+  const [releasesData, beatsData, galleryData, videosData, socialsData, eventsData] = await Promise.all([
     releasesRes.json(),
     beatsRes.json(),
     galleryRes.json(),
     videosRes.json(),
     socialsRes.json(),
+    eventsRes.ok ? eventsRes.json().catch(() => []) : [],
   ]);
 
   return {
@@ -157,6 +194,7 @@ export async function fetchAllCatalogue() {
     beats: (Array.isArray(beatsData) ? beatsData : []).map(normalizeBeat),
     gallery: (Array.isArray(galleryData) ? galleryData : []).map(normalizeGalleryPost),
     videos: Array.isArray(videosData) ? videosData : [],
+    events: Array.isArray(eventsData) ? eventsData : [],
     socials: {
       artist: normalizeSocials(socialsData.artist),
       ecosystem: normalizeSocials(socialsData.ecosystem),

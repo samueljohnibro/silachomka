@@ -243,4 +243,19 @@ export const adminApi = {
     method: 'DELETE'
   }),
   getSubscriberNotifications: async () => fetchAdmin('/subscriber-notifications'),
+
+  // Events CRUD
+  getEvents: async () => fetchAdmin('/events'),
+  getEvent: async (id) => fetchAdmin(`/events/${id}`),
+  createEvent: async (data) => fetchAdmin('/events', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  updateEvent: async (id, data) => fetchAdmin(`/events/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  }),
+  deleteEvent: async (id) => fetchAdmin(`/events/${id}`, {
+    method: 'DELETE'
+  }),
 };

@@ -3,6 +3,7 @@ import { UpRightArrowIcon, RightArrowIcon } from "../components/Icons";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
+import { useChomkaStore } from "../data/store";
 import ShareLinkBox from "./ShareLinkBox";
 import SocialPostEmbed from "./SocialPostEmbed";
 import GalleryVideoPlayer from "./GalleryVideoPlayer";
@@ -262,6 +263,12 @@ export default function GalleryPostModal({
         console.warn("Failed to fetch gallery social links:", err);
       });
   }, []);
+
+  const { events } = useChomkaStore();
+  const taggedEvent = useMemo(() => {
+    if (!post?.id || !Array.isArray(events)) return null;
+    return events.find((e) => Array.isArray(e.tagged_gallery_post_ids) && e.tagged_gallery_post_ids.map(String).includes(String(post.id)));
+  }, [post?.id, events]);
 
   // Pick random social link with session anti-repeat logic (Req #22: per-post assigned links support)
   const selectedSocial = useMemo(() => {
@@ -592,6 +599,31 @@ export default function GalleryPostModal({
                     {tag}
                   </span>
                 ))}
+              </div>
+            )}
+
+            {/* Tagged Live Event Badge */}
+            {taggedEvent && (
+              <div style={{ marginTop: "12px", marginBottom: "8px" }}>
+                <Link
+                  to={`/events/${taggedEvent.slug}`}
+                  onClick={onClose}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "rgba(212, 175, 55, 0.12)",
+                    border: "1px solid rgba(212, 175, 55, 0.4)",
+                    color: "var(--gold)",
+                    borderRadius: "999px",
+                    padding: "5px 12px",
+                    fontSize: "12px",
+                    textDecoration: "none",
+                    fontWeight: "600"
+                  }}
+                >
+                  🎟️ Captured Live at: {taggedEvent.title} →
+                </Link>
               </div>
             )}
           </div>

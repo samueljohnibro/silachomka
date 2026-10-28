@@ -539,10 +539,11 @@ function renderBeatDetailBodyHtml(beat) {
 }
 
 async function generateSocialPages() {
-  const [liveBeats, liveGallery, liveReleases] = await Promise.all([
+  const [liveBeats, liveGallery, liveReleases, liveEvents] = await Promise.all([
     fetchLiveEndpoint("/api/beats"),
     fetchLiveEndpoint("/api/gallery"),
     fetchLiveEndpoint("/api/releases"),
+    fetchLiveEndpoint("/api/events"),
   ]);
 
   const mergedBeats = mergeByKey(staticBeats, liveBeats, "id");
@@ -552,6 +553,7 @@ async function generateSocialPages() {
   const canonicalBeats = validEntries(mergedBeats, "id", true);
   const canonicalGallery = validEntries(mergedGallery, "id", false);
   const canonicalReleases = validEntries(mergedReleases, "slug", true);
+  const canonicalEvents = Array.isArray(liveEvents) ? liveEvents.filter((e) => Boolean(e.slug)) : [];
 
   const baseHtmlPath = path.join(outputDirectory, "index.html");
   let baseHtml = await readFile(baseHtmlPath, "utf8");
@@ -686,8 +688,46 @@ async function generateSocialPages() {
       renderAboutBodyHtml()
     )
   );
+  await writePage(
+    ["events"],
+    withSocialMetadata(baseHtml, {
+      title: "Live Sanctuary & Events | silachomka",
+      description:
+        "Official calendar of live gatherings, acoustic sanctuaries, festivals, and tour appearances for silachomka.",
+      canonicalPath: "/events",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Live Sanctuary & Events | silachomka",
+    })
+  );
+  await writePage(
+    ["calendar"],
+    withSocialMetadata(baseHtml, {
+      title: "Unified Activity Calendar | silachomka",
+      description:
+        "Explore the comprehensive chronological timeline of silachomka music releases, studio beats, visual archive moments, and live concert events.",
+      canonicalPath: "/calendar",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "Unified Activity Calendar | silachomka",
+    })
+  );
 
   await Promise.all([
+    ...canonicalEvents.map((evt) =>
+      writePage(
+        ["events", encodeURIComponent(evt.slug.trim())],
+        withSocialMetadata(baseHtml, {
+          title: `${evt.title} — Live at ${evt.venue_name || "Sanctuary"} | silachomka`,
+          description: normalizeDescription(
+            evt.subtitle || evt.description,
+            `Live appearance and sanctuary session by silachomka at ${evt.venue_name || "Sanctuary"}.`
+          ),
+          canonicalPath: `/events/${encodeURIComponent(evt.slug.trim())}`,
+          image: evt.primary_artwork_url || evt.cover || DEFAULT_SOCIAL_IMAGE,
+          imageAlt: `${evt.title} flyer`,
+          type: "music.event",
+        })
+      )
+    ),
     ...canonicalBeats.map((beat) =>
       writePage(
         ["beats", encodeURIComponent(beat.id.trim())],
@@ -743,7 +783,9 @@ async function generateSocialPages() {
     { loc: `${siteUrl}/`, changefreq: "daily", priority: "1.0" },
     { loc: `${siteUrl}/music`, changefreq: "weekly", priority: "0.9" },
     { loc: `${siteUrl}/beats`, changefreq: "weekly", priority: "0.9" },
+    { loc: `${siteUrl}/events`, changefreq: "weekly", priority: "0.9" },
     { loc: `${siteUrl}/services`, changefreq: "weekly", priority: "0.9" },
+    { loc: `${siteUrl}/calendar`, changefreq: "daily", priority: "0.8" },
     { loc: `${siteUrl}/gallery`, changefreq: "weekly", priority: "0.8" },
     { loc: `${siteUrl}/about`, changefreq: "monthly", priority: "0.7" },
     { loc: `${siteUrl}/studio`, changefreq: "monthly", priority: "0.7" },
@@ -765,6 +807,16 @@ async function generateSocialPages() {
     sitemapXml += `  <url>\n    <loc>${url}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n`;
     if (coverUrl) {
       sitemapXml += `    <image:image>\n      <image:loc>${escapeHtml(coverUrl)}</image:loc>\n      <image:title>${escapeHtml(rel.title)} Cover Art</image:title>\n    </image:image>\n`;
+    }
+    sitemapXml += `  </url>\n`;
+  }
+
+  for (const evt of canonicalEvents) {
+    const url = `${siteUrl}/events/${encodeURIComponent(evt.slug.trim())}`;
+    const flyer = evt.primary_artwork_url || evt.cover ? toAbsoluteUrl(evt.primary_artwork_url || evt.cover) : null;
+    sitemapXml += `  <url>\n    <loc>${url}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n`;
+    if (flyer) {
+      sitemapXml += `    <image:image>\n      <image:loc>${escapeHtml(flyer)}</image:loc>\n      <image:title>${escapeHtml(evt.title)} Flyer</image:title>\n    </image:image>\n`;
     }
     sitemapXml += `  </url>\n`;
   }

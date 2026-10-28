@@ -70,6 +70,7 @@ const memoryStore = {
   beats: [],
   gallery: [],
   videos: [],
+  events: [],
 };
 
 let globalSocials = { artist: [], ecosystem: [] };
@@ -91,6 +92,7 @@ export async function refreshCatalogue() {
     memoryStore.beats = data.beats;
     memoryStore.gallery = data.gallery;
     memoryStore.videos = data.videos;
+    memoryStore.events = data.events || [];
     globalSocials = data.socials;
     globalIsLoaded = true;
     globalError = null;
@@ -227,6 +229,10 @@ export function getVideos() {
   return [...memoryStore.videos];
 }
 
+export function getEvents() {
+  return [...(memoryStore.events || [])];
+}
+
 export async function saveVideo(video) {
   const current = getVideos();
   const existingIdx = current.findIndex((v) => v.id === video.id);
@@ -261,6 +267,7 @@ export function useChomkaStore() {
   const [beats, setBeats] = useState(getBeats);
   const [gallery, setGallery] = useState(getGallery);
   const [videos, setVideos] = useState(getVideos);
+  const [events, setEvents] = useState(getEvents);
   const [socials, setSocials] = useState(globalSocials);
   const [isLoading, setIsLoading] = useState(!globalIsLoaded);
   const [error, setError] = useState(globalError);
@@ -271,6 +278,7 @@ export function useChomkaStore() {
       setBeats(getBeats());
       setGallery(getGallery());
       setVideos(getVideos());
+      setEvents(getEvents());
       setSocials(globalSocials);
       setIsLoading(!globalIsLoaded && isFetching);
       setError(globalError);
@@ -285,6 +293,7 @@ export function useChomkaStore() {
     beats,
     gallery,
     videos,
+    events,
     socials,
     isLoading,
     error,

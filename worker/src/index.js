@@ -977,6 +977,257 @@ app.get('/api/gallery/:slug', async (c) => {
 })
 
 // ------------------------------------------
+// Events & Tour Dates (/api/events)
+// ------------------------------------------
+app.get('/api/events', async (c) => {
+  const sql = c.get('sql')
+  const rows = await sql`
+    SELECT 
+      e.id,
+      e.title,
+      e.slug,
+      e.subtitle,
+      e.event_date::text as "event_date",
+      e.event_date::text as "date",
+      e.start_time,
+      e.end_time,
+      e.venue_name,
+      e.venue_address,
+      e.city,
+      e.country,
+      e.ticket_url,
+      e.ticket_price,
+      e.ticket_status,
+      e.primary_artwork_id,
+      COALESCE(
+        e.primary_artwork_url,
+        CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE NULL END
+      ) as "primary_artwork_url",
+      COALESCE(
+        e.primary_artwork_url,
+        CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE NULL END
+      ) as "cover",
+      COALESCE(
+        e.primary_artwork_url,
+        CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE NULL END
+      ) as "image",
+      e.additional_artworks,
+      e.lineup,
+      e.description,
+      e.tagged_gallery_post_ids,
+      e.tagged_release_ids,
+      e.tagged_beat_ids,
+      e.is_published,
+      e.is_featured,
+      e.created_at,
+      CASE 
+        WHEN e.event_date >= CURRENT_DATE THEN 'UPCOMING'
+        WHEN e.event_date >= (CURRENT_DATE - INTERVAL '14 days') THEN 'RECENT'
+        ELSE 'PAST'
+      END as status,
+      (e.event_date >= CURRENT_DATE) as "isFuture"
+    FROM events e
+    LEFT JOIN media_assets m ON e.primary_artwork_id = m.id
+    WHERE e.deleted_at IS NULL AND e.is_published = true
+    ORDER BY 
+      CASE WHEN e.event_date >= CURRENT_DATE THEN 0 ELSE 1 END ASC,
+      CASE WHEN e.event_date >= CURRENT_DATE THEN e.event_date END ASC,
+      CASE WHEN e.event_date < CURRENT_DATE THEN e.event_date END DESC
+  `
+  return c.json(rows)
+})
+
+app.get('/api/events/:slug', async (c) => {
+  const sql = c.get('sql')
+  const slug = String(c.req.param('slug') || '').trim().toLowerCase()
+  const rows = await sql`
+    SELECT 
+      e.id,
+      e.title,
+      e.slug,
+      e.subtitle,
+      e.event_date::text as "event_date",
+      e.event_date::text as "date",
+      e.start_time,
+      e.end_time,
+      e.venue_name,
+      e.venue_address,
+      e.city,
+      e.country,
+      e.ticket_url,
+      e.ticket_price,
+      e.ticket_status,
+      e.primary_artwork_id,
+      COALESCE(
+        e.primary_artwork_url,
+        CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE NULL END
+      ) as "primary_artwork_url",
+      COALESCE(
+        e.primary_artwork_url,
+        CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE NULL END
+      ) as "cover",
+      COALESCE(
+        e.primary_artwork_url,
+        CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE NULL END
+      ) as "image",
+      e.additional_artworks,
+      e.lineup,
+      e.description,
+      e.tagged_gallery_post_ids,
+      e.tagged_release_ids,
+      e.tagged_beat_ids,
+      e.is_published,
+      e.is_featured,
+      e.created_at,
+      CASE 
+        WHEN e.event_date >= CURRENT_DATE THEN 'UPCOMING'
+        WHEN e.event_date >= (CURRENT_DATE - INTERVAL '14 days') THEN 'RECENT'
+        ELSE 'PAST'
+      END as status,
+      (e.event_date >= CURRENT_DATE) as "isFuture"
+    FROM events e
+    LEFT JOIN media_assets m ON e.primary_artwork_id = m.id
+    WHERE (e.slug = ${slug} OR e.id::text = ${slug}) 
+      AND e.deleted_at IS NULL
+    LIMIT 1
+  `
+  if (rows.length === 0) return c.json({ error: 'Event not found' }, 404)
+  const event = rows[0]
+
+  // Resolve tagged gallery posts
+  let taggedGallery = []
+  const taggedPostIds = Array.isArray(event.tagged_gallery_post_ids) ? event.tagged_gallery_post_ids : []
+  if (taggedPostIds.length > 0) {
+    try {
+      taggedGallery = await sql`
+        SELECT g.id, g.title, g.slug, g.category, g.caption, g.type,
+               COALESCE('/api/media/asset/' || m.id, '') as src,
+               COALESCE(
+                 (SELECT json_agg(json_build_object(
+                   'id', gs.id,
+                   'src', '/api/media/asset/' || sm.id,
+                   'slideType', gs.slide_type,
+                   'isVideo', gs.slide_type = 'video'
+                 ) ORDER BY gs.sort_order ASC)
+                 FROM gallery_slides gs
+                 LEFT JOIN media_assets sm ON gs.asset_id = sm.id
+                 WHERE gs.post_id = g.id),
+                 '[]'::json
+               ) as slides
+        FROM gallery_posts g
+        LEFT JOIN media_assets m ON g.primary_asset_id = m.id
+        WHERE g.deleted_at IS NULL AND (g.id::text = ANY(${taggedPostIds}) OR g.slug = ANY(${taggedPostIds}))
+      `
+    } catch (e) {
+      console.warn('Failed to resolve tagged gallery posts for event:', e)
+    }
+  }
+
+  // Resolve tagged releases
+  let taggedReleases = []
+  const taggedRelIds = Array.isArray(event.tagged_release_ids) ? event.tagged_release_ids : []
+  if (taggedRelIds.length > 0) {
+    try {
+      taggedReleases = await sql`
+        SELECT r.id, r.title, r.slug, r.type, r.release_date::text as "release_date",
+               COALESCE('/api/media/asset/' || m.id, '') as cover
+        FROM releases r
+        LEFT JOIN media_assets m ON r.cover_asset_id = m.id
+        WHERE r.deleted_at IS NULL AND (r.id::text = ANY(${taggedRelIds}) OR r.slug = ANY(${taggedRelIds}))
+      `
+    } catch (e) {
+      console.warn('Failed to resolve tagged releases for event:', e)
+    }
+  }
+
+  // Resolve tagged beats
+  let taggedBeats = []
+  const taggedBIds = Array.isArray(event.tagged_beat_ids) ? event.tagged_beat_ids : []
+  if (taggedBIds.length > 0) {
+    try {
+      taggedBeats = await sql`
+        SELECT b.id, b.title, b.slug, b.genre, b.bpm, b.key,
+               COALESCE('/api/media/asset/' || m.id, '') as cover,
+               COALESCE('/api/media/asset/' || a.id, '') as "audioUrl"
+        FROM beats b
+        LEFT JOIN media_assets m ON b.artwork_asset_id = m.id
+        LEFT JOIN media_assets a ON b.audio_asset_id = a.id
+        WHERE b.deleted_at IS NULL AND (b.id::text = ANY(${taggedBIds}) OR b.slug = ANY(${taggedBIds}))
+      `
+    } catch (e) {
+      console.warn('Failed to resolve tagged beats for event:', e)
+    }
+  }
+
+  return c.json({
+    ...event,
+    taggedGallery,
+    taggedReleases,
+    taggedBeats
+  })
+})
+
+// ------------------------------------------
+// Unified Chronological Activity Calendar (/api/calendar)
+// ------------------------------------------
+app.get('/api/calendar', async (c) => {
+  const sql = c.get('sql')
+  try {
+    const [releases, beats, gallery, events] = await Promise.all([
+      sql`
+        SELECT r.id, r.title, r.slug, r.type as subtype, r.release_date::text as date,
+               COALESCE('/api/media/asset/' || m.id, '') as image,
+               'release' as type, 'MUSIC RELEASE' as badge,
+               (r.release_date >= CURRENT_DATE) as "isFuture"
+        FROM releases r
+        LEFT JOIN media_assets m ON r.cover_asset_id = m.id
+        WHERE r.deleted_at IS NULL AND r.status = 'PUBLISHED'
+      `,
+      sql`
+        SELECT b.id, b.title, b.slug, b.genre as subtype, b.created_at::date::text as date,
+               COALESCE('/api/media/asset/' || m.id, '') as image,
+               'beat' as type, 'BEAT' as badge,
+               false as "isFuture"
+        FROM beats b
+        LEFT JOIN media_assets m ON b.image_asset_id = m.id
+        WHERE b.deleted_at IS NULL AND b.status = 'PUBLISHED'
+      `,
+      sql`
+        SELECT g.id, g.title, g.slug, g.category as subtype, COALESCE(g.display_date::date::text, g.created_at::date::text) as date,
+               COALESCE('/api/media/asset/' || m.id, '') as image,
+               'gallery' as type, 'GALLERY MOMENT' as badge,
+               false as "isFuture"
+        FROM gallery_posts g
+        LEFT JOIN media_assets m ON g.primary_asset_id = m.id
+        WHERE g.deleted_at IS NULL AND g.status = 'PUBLISHED'
+      `,
+      sql`
+        SELECT e.id, e.title, e.slug, (e.venue_name || ', ' || COALESCE(e.city, '')) as subtype, e.event_date::text as date,
+               COALESCE(e.primary_artwork_url, CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '' END) as image,
+               'event' as type, 'LIVE EVENT' as badge,
+               (e.event_date >= CURRENT_DATE) as "isFuture"
+        FROM events e
+        LEFT JOIN media_assets m ON e.primary_artwork_id = m.id
+        WHERE e.deleted_at IS NULL AND e.is_published = true
+      `
+    ])
+
+    const allActivities = [
+      ...releases.map(r => ({ ...r, url: `/release/${r.slug}` })),
+      ...beats.map(b => ({ ...b, url: `/beats/${b.id || b.slug}` })),
+      ...gallery.map(g => ({ ...g, url: `/gallery/${g.id || g.slug}` })),
+      ...events.map(e => ({ ...e, url: `/events/${e.slug}` }))
+    ].filter(a => Boolean(a.date))
+     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+    return c.json(allActivities)
+  } catch (err) {
+    console.error('Failed to aggregate calendar:', err)
+    return c.json({ error: 'Failed to load calendar' }, 500)
+  }
+})
+
+// ------------------------------------------
 // Music Services & Studio Orders (/api/services)
 // ------------------------------------------
 app.get('/api/services', async (c) => {
@@ -1824,6 +2075,32 @@ app.get('/api/share/:type/:slug', async (c) => {
         description: desc,
         url: `${siteOrigin}/services`,
         image: `${siteOrigin}/beats-image.png`,
+        type: 'website'
+      })
+      return c.html(html)
+    }
+  }
+
+  if (shareType === 'events' || shareType === 'event') {
+    const rows = await sql`
+      SELECT e.id, e.title, e.subtitle, e.event_date::text as event_date, e.venue_name, e.city, e.country,
+             e.description, COALESCE(e.primary_artwork_url, CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '' END) as image
+      FROM events e
+      LEFT JOIN media_assets m ON e.primary_artwork_id = m.id
+      WHERE (e.slug = ${cleanSlug} OR e.id::text = ${cleanSlug}) AND e.deleted_at IS NULL
+      LIMIT 1
+    `
+    if (rows.length > 0) {
+      const e = rows[0]
+      const desc = e.description
+        ? (e.description.length > 250 ? e.description.substring(0, 247) + '...' : e.description)
+        : `Live event with silachomka on ${e.event_date} at ${e.venue_name}, ${e.city || ''}.`
+      const imagePath = e.image || '/og-image.png'
+      const html = buildShareHtml({
+        title: `${e.title} — Live Event | silachomka`,
+        description: `${e.subtitle ? e.subtitle + ' · ' : ''}${desc}`,
+        url: `${siteOrigin}/events/${cleanSlug}`,
+        image: resolvePublicMediaUrl(imagePath, workerOrigin, siteOrigin),
         type: 'website'
       })
       return c.html(html)

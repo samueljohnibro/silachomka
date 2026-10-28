@@ -4,6 +4,7 @@ import { adminApi } from '../../data/adminApi';
 
 export const AdminDashboard = () => {
   const [stats, setStats] = useState({
+    events: 0,
     releases: 0,
     tracks: 0,
     beats: 0,
@@ -18,7 +19,8 @@ export const AdminDashboard = () => {
     let mounted = true;
     const fetchStats = async () => {
       try {
-        const [releases, tracks, beats, videos, gallery, links] = await Promise.all([
+        const [events, releases, tracks, beats, videos, gallery, links] = await Promise.all([
+          adminApi.getEvents().catch(() => []),
           adminApi.getReleases().catch(() => []),
           adminApi.getTracks().catch(() => []),
           adminApi.getBeats().catch(() => []),
@@ -29,6 +31,7 @@ export const AdminDashboard = () => {
 
         if (mounted) {
           setStats({
+            events: events.length || 0,
             releases: releases.length || 0,
             tracks: tracks.length || 0,
             beats: beats.length || 0,
@@ -57,6 +60,16 @@ export const AdminDashboard = () => {
       {error && <div className="admin-login-error" style={{ marginBottom: 24 }}>{error}</div>}
       
       <div className="admin-stat-grid">
+        <Link to="/admin/events" className="admin-stat-card" style={{ textDecoration: 'none', cursor: 'pointer', display: 'block' }}>
+          <div className="admin-stat-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Live Events</span>
+            <span style={{ fontSize: 12, color: 'var(--gold)' }}>→</span>
+          </div>
+          <div className="admin-stat-value">
+            {isLoading ? <span className="beat-loading-spinner" style={{ display: 'inline-block' }}/> : stats.events}
+          </div>
+        </Link>
+
         <Link to="/admin/music" className="admin-stat-card" style={{ textDecoration: 'none', cursor: 'pointer', display: 'block' }}>
           <div className="admin-stat-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>Releases</span>

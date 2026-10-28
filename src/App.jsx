@@ -42,6 +42,7 @@ import AdminVideosPage from "./pages/admin/AdminVideosPage";
 import AdminRecycleBinPage from "./pages/admin/AdminRecycleBinPage";
 import AdminSubscribersPage from "./pages/admin/AdminSubscribersPage";
 import AdminServicesPage from "./pages/admin/AdminServicesPage";
+import AdminEventsPage from "./pages/admin/AdminEventsPage";
 import SubscriberNewsletterBox from "./components/SubscriberNewsletterBox";
 
 import MediaSlideshow from "./components/MediaSlideshow";
@@ -57,6 +58,9 @@ import StudioPublisherPage from "./pages/StudioPublisherPage";
 import ServicesPage from "./pages/ServicesPage";
 import ServiceOrderDetailPage from "./pages/ServiceOrderDetailPage";
 import GalleryPostPage from "./pages/GalleryPostPage";
+import EventsPage from "./pages/EventsPage";
+import EventDetailPage from "./pages/EventDetailPage";
+import CalendarPage from "./pages/CalendarPage";
 import SeoHead from "./components/SeoHead";
 import SharePageButton from "./components/SharePageButton";
 import { formatGalleryDate } from "./utils/dateFormatter";
@@ -142,6 +146,11 @@ function getTrackCount(release) {
 function SiteHeader({
   beatsPage = false,
 }) {
+  const { events } = useChomkaStore();
+  const hasActiveEvents = useMemo(() => {
+    return Array.isArray(events) && events.some(e => Boolean(e.is_published) && (e.status === 'UPCOMING' || e.status === 'RECENT' || e.isFuture));
+  }, [events]);
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -204,6 +213,22 @@ function SiteHeader({
             >
               Services
             </Link>
+
+            {hasActiveEvents && (
+              <Link
+                to="/events"
+                className={location.pathname.startsWith("/events") ? "is-active" : ""}
+              >
+                Events
+              </Link>
+            )}
+
+            <Link
+              to="/calendar"
+              className={location.pathname.startsWith("/calendar") ? "is-active" : ""}
+            >
+              Calendar
+            </Link>
           </nav>
 
           <span
@@ -264,6 +289,16 @@ function SiteHeader({
             <Link to="/services" onClick={closeMobileMenu} className={location.pathname.startsWith("/services") ? "active" : ""}>
               Services
             </Link>
+
+            {hasActiveEvents && (
+              <Link to="/events" onClick={closeMobileMenu} className={location.pathname.startsWith("/events") ? "active" : ""}>
+                Events
+              </Link>
+            )}
+
+            <Link to="/calendar" onClick={closeMobileMenu} className={location.pathname.startsWith("/calendar") ? "active" : ""}>
+              Calendar
+            </Link>
           </div>
 
           <div className="mobile-nav-footer">
@@ -318,6 +353,16 @@ function SiteHeader({
 
           <Link to="/services">
             Services
+          </Link>
+
+          {hasActiveEvents && (
+            <Link to="/events">
+              Events
+            </Link>
+          )}
+
+          <Link to="/calendar">
+            Calendar
           </Link>
         </nav>
 
@@ -378,6 +423,16 @@ function SiteHeader({
 
           <Link to="/services" onClick={closeMobileMenu}>
             Services
+          </Link>
+
+          {hasActiveEvents && (
+            <Link to="/events" onClick={closeMobileMenu}>
+              Events
+            </Link>
+          )}
+
+          <Link to="/calendar" onClick={closeMobileMenu}>
+            Calendar
           </Link>
         </div>
 
@@ -669,6 +724,11 @@ function HeroSlideshow() {
    ========================================================= */
 
 function HomeHero() {
+  const { events } = useChomkaStore();
+  const hasActiveEvents = useMemo(() => {
+    return Array.isArray(events) && events.some(e => Boolean(e.is_published) && (e.status === 'UPCOMING' || e.status === 'RECENT' || e.isFuture));
+  }, [events]);
+
   return (
     <section className="hero">
       <HeroSlideshow />
@@ -719,6 +779,15 @@ function HomeHero() {
             Explore services
           </Link>
 
+          {hasActiveEvents && (
+            <Link
+              to="/events"
+              className="secondary-button"
+            >
+              Explore events
+            </Link>
+          )}
+
           <SharePageButton
             title="silachomka — Official Home"
             label="Share Page"
@@ -740,15 +809,14 @@ function HomeHero() {
 }
 
 /* =========================================================
-   UPCOMING RELEASE (COMING SOON)
+   UPCOMING RELEASES & GATHERINGS COUNTDOWN SHOWCASE
    ========================================================= */
 
-function UpcomingReleaseSection({ release }) {
-  if (!release) return null;
-
+function UpcomingCountdownCard({ item }) {
+  const isEvent = item.itemType === 'event';
   const targetTime = useMemo(() => {
-    return new Date(release.release_date || release.date).getTime();
-  }, [release.release_date, release.date]);
+    return new Date(item.targetDate).getTime();
+  }, [item.targetDate]);
 
   const [timeLeft, setTimeLeft] = useState(() => Math.max(0, targetTime - Date.now()));
 
@@ -765,111 +833,282 @@ function UpcomingReleaseSection({ release }) {
   const seconds = Math.floor((timeLeft / 1000) % 60);
 
   const upcomingPreviewPool = useMemo(() => {
+    if (isEvent) return [];
     const list = [];
-    if (Array.isArray(release?.preview_audio_urls)) {
-      for (const u of release.preview_audio_urls) {
-        if (typeof u === 'string' && u.trim() && !list.includes(u.trim())) {
-          list.push(u.trim());
-        }
+    if (Array.isArray(item.preview_audio_urls)) {
+      for (const u of item.preview_audio_urls) {
+        if (typeof u === 'string' && u.trim() && !list.includes(u.trim())) list.push(u.trim());
       }
     }
-    if (Array.isArray(release?.tracks)) {
-      for (const t of release.tracks) {
+    if (Array.isArray(item.tracks)) {
+      for (const t of item.tracks) {
         if (t?.preview_audio_url && typeof t.preview_audio_url === 'string' && t.preview_audio_url.trim() && !list.includes(t.preview_audio_url.trim())) {
           list.push(t.preview_audio_url.trim());
         }
       }
     }
     return list;
-  }, [release]);
+  }, [isEvent, item]);
+
+  return (
+    <div className="upcoming-release-card">
+      <Link
+        to={item.url}
+        className="upcoming-art-frame"
+        aria-label={`Open ${item.title}`}
+      >
+        {item.cover && (
+          <img
+            src={item.cover}
+            alt={`${item.title} upcoming cover art`}
+            className="upcoming-cover-image"
+            loading="eager"
+            decoding="async"
+            onError={(e) => {
+              if (!e.target.dataset.tried) {
+                e.target.dataset.tried = "true";
+                e.target.src = "/og-image.png";
+              }
+            }}
+          />
+        )}
+        <span className="upcoming-cover-overlay" aria-hidden="true" />
+        <span className="upcoming-art-badge">
+          {isEvent ? "UPCOMING EVENT" : "COMING SOON"}
+        </span>
+      </Link>
+
+      <div className="upcoming-details">
+        <div className="upcoming-countdown-container">
+          <span className="upcoming-countdown-label">
+            {isEvent ? "COUNTDOWN TO LIVE GATHERING" : "COUNTDOWN TO OFFICIAL RELEASE"}
+          </span>
+          <div className="countdown-timer-grid">
+            <div className="countdown-timer-box">
+              <span className="countdown-timer-num">{String(days).padStart(2, "0")}</span>
+              <span className="countdown-timer-unit">Days</span>
+            </div>
+            <div className="countdown-timer-colon">:</div>
+            <div className="countdown-timer-box">
+              <span className="countdown-timer-num">{String(hours).padStart(2, "0")}</span>
+              <span className="countdown-timer-unit">Hours</span>
+            </div>
+            <div className="countdown-timer-colon">:</div>
+            <div className="countdown-timer-box">
+              <span className="countdown-timer-num">{String(minutes).padStart(2, "0")}</span>
+              <span className="countdown-timer-unit">Minutes</span>
+            </div>
+            <div className="countdown-timer-colon">:</div>
+            <div className="countdown-timer-box">
+              <span className="countdown-timer-num">{String(seconds).padStart(2, "0")}</span>
+              <span className="countdown-timer-unit">Seconds</span>
+            </div>
+          </div>
+        </div>
+
+        {upcomingPreviewPool.length > 0 && (
+          <div className="upcoming-preview-wrap">
+            <RandomPreviewPlayer
+              audioUrl={upcomingPreviewPool[0]}
+              audioUrls={upcomingPreviewPool}
+              projectTitle={item.title}
+              title={`${item.title} — PREVIEW`}
+            />
+          </div>
+        )}
+
+        {isEvent && item.venue && (
+          <p style={{ fontSize: "14px", color: "var(--muted)", margin: "10px 0" }}>
+            📍 {item.venue} {item.city ? `• ${item.city}` : ""}
+          </p>
+        )}
+
+        <div className="upcoming-actions">
+          <Link className="primary-button" to={item.url}>
+            {isEvent ? "View Event Details & Passes" : "View Pre-Release Details"}
+          </Link>
+          {isEvent && item.ticket_url && (
+            <a
+              href={item.ticket_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="secondary-button"
+            >
+              Get Tickets ↗
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpcomingCountdownShowcase({ releases = [], events = [] }) {
+  const upcomingItems = useMemo(() => {
+    const items = [];
+    const now = Date.now();
+
+    // Future releases
+    (releases || []).forEach((r) => {
+      const d = new Date(r.release_date || r.date);
+      if (!isNaN(d.getTime()) && d.getTime() > now) {
+        items.push({
+          id: `rel-${r.id || r.slug}`,
+          title: r.title,
+          subtitle: r.artist !== "silachomka" ? r.artist : null,
+          targetDate: r.release_date || r.date,
+          displayDate: r.displayDate || (r.release_date || r.date),
+          cover: r.cover,
+          url: `/release/${r.slug}`,
+          itemType: "release",
+          preview_audio_urls: r.preview_audio_urls,
+          tracks: r.tracks,
+        });
+      }
+    });
+
+    // Future events
+    (events || []).forEach((e) => {
+      if (e.is_published && (e.status === "UPCOMING" || e.isFuture)) {
+        const timePart = e.start_time ? `T${e.start_time}:00` : "T00:00:00";
+        const d = new Date(`${e.event_date}${timePart}`);
+        const dateVal = isNaN(d.getTime()) ? new Date(e.event_date).getTime() : d.getTime();
+        if (dateVal >= now || e.status === "UPCOMING") {
+          items.push({
+            id: `evt-${e.id}`,
+            title: e.title,
+            subtitle: e.subtitle,
+            venue: e.venue_name,
+            city: e.city,
+            ticket_url: e.ticket_url,
+            targetDate: `${e.event_date}${timePart}`,
+            displayDate: e.event_date,
+            cover: e.primary_artwork_url || e.cover,
+            url: `/events/${e.slug}`,
+            itemType: "event",
+          });
+        }
+      }
+    });
+
+    return items.sort((a, b) => new Date(a.targetDate).getTime() - new Date(b.targetDate).getTime());
+  }, [releases, events]);
+
+  if (upcomingItems.length === 0) return null;
 
   return (
     <section className="upcoming-section">
       <div className="section-heading">
         <div>
           <p className="eyebrow upcoming-eyebrow">
-            COMING SOON
+            UPCOMING SHOWCASE & COUNTDOWNS
           </p>
-
-          <h2>{release.title}</h2>
-          {release.artist && release.artist !== "silachomka" && (
-            <p className="release-artist">{release.artist}</p>
+          <h2>
+            {upcomingItems.length === 1 ? upcomingItems[0].title : `Upcoming Releases & Gatherings (${upcomingItems.length})`}
+          </h2>
+          {upcomingItems.length === 1 && upcomingItems[0].subtitle && (
+            <p className="release-artist">{upcomingItems[0].subtitle}</p>
           )}
         </div>
 
-        <span className="upcoming-launch-date">
-          Official Launch: {release.displayDate}
-        </span>
+        {upcomingItems.length === 1 && (
+          <span className="upcoming-launch-date">
+            Target: {upcomingItems[0].displayDate}
+          </span>
+        )}
       </div>
 
-      <div className="upcoming-release-card">
-        <Link
-          to={`/release/${release.slug}`}
-          className="upcoming-art-frame"
-          aria-label={`Open ${release.title} pre-release`}
-        >
-          {release.cover && (
-            <img
-              src={release.cover}
-              alt={`${release.title} upcoming cover art`}
-              className="upcoming-cover-image"
-              loading="eager"
-              decoding="async"
-              onError={(e) => {
-                if (!e.target.dataset.tried) {
-                  e.target.dataset.tried = "true";
-                  e.target.src = "/og-image.png";
-                }
-              }}
-            />
-          )}
-          <span className="upcoming-cover-overlay" aria-hidden="true" />
-          <span className="upcoming-art-badge">COMING SOON</span>
-        </Link>
+      <div className="home-countdown-carousel">
+        {upcomingItems.map((item) => (
+          <UpcomingCountdownCard key={item.id} item={item} />
+        ))}
+      </div>
+    </section>
+  );
+}
 
-        <div className="upcoming-details">
-          <div className="upcoming-countdown-container">
-            <span className="upcoming-countdown-label">COUNTDOWN TO OFFICIAL RELEASE</span>
-            <div className="countdown-timer-grid">
-              <div className="countdown-timer-box">
-                <span className="countdown-timer-num">{String(days).padStart(2, "0")}</span>
-                <span className="countdown-timer-unit">Days</span>
-              </div>
-              <div className="countdown-timer-colon">:</div>
-              <div className="countdown-timer-box">
-                <span className="countdown-timer-num">{String(hours).padStart(2, "0")}</span>
-                <span className="countdown-timer-unit">Hours</span>
-              </div>
-              <div className="countdown-timer-colon">:</div>
-              <div className="countdown-timer-box">
-                <span className="countdown-timer-num">{String(minutes).padStart(2, "0")}</span>
-                <span className="countdown-timer-unit">Minutes</span>
-              </div>
-              <div className="countdown-timer-colon">:</div>
-              <div className="countdown-timer-box">
-                <span className="countdown-timer-num">{String(seconds).padStart(2, "0")}</span>
-                <span className="countdown-timer-unit">Seconds</span>
-              </div>
-            </div>
-          </div>
+const UpcomingReleaseSection = ({ release }) => {
+  if (!release) return null;
+  return <UpcomingCountdownShowcase releases={[release]} events={[]} />;
+};
 
-          {upcomingPreviewPool.length > 0 && (
-            <div className="upcoming-preview-wrap">
-              <RandomPreviewPlayer
-                audioUrl={upcomingPreviewPool[0]}
-                audioUrls={upcomingPreviewPool}
-                projectTitle={release.title}
-                title={`${release.title} — PREVIEW`}
-              />
-            </div>
-          )}
+/* =========================================================
+   HOMEPAGE EVENTS SECTION (DYNAMICALLY VISIBLE)
+   ========================================================= */
 
-          <div className="upcoming-actions">
-            <Link className="primary-button" to={`/release/${release.slug}`}>
-              View Pre-Release Details
-            </Link>
-          </div>
+function HomepageEventsSection() {
+  const { events } = useChomkaStore();
+
+  const activeEvents = useMemo(() => {
+    return (events || []).filter(
+      (e) => Boolean(e.is_published) && (e.status === "UPCOMING" || e.status === "RECENT" || e.isFuture)
+    );
+  }, [events]);
+
+  // If there are no active/recent events, this section completely disappears!
+  if (activeEvents.length === 0) return null;
+
+  return (
+    <section id="events" className="home-events-section">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">SANCTUARY & TOUR ARCHIVE</p>
+          <h2>Live Gatherings & Tour Dates</h2>
         </div>
+        <Link to="/events" className="section-link">
+          Explore All Events ({events.filter((e) => e.is_published).length}) →
+        </Link>
+      </div>
+
+      <div className="events-cards-grid">
+        {activeEvents.slice(0, 3).map((evt) => (
+          <article key={evt.id} className="event-card is-upcoming">
+            <Link to={`/events/${evt.slug}`} className="event-card-art-frame">
+              <img
+                src={evt.primary_artwork_url || evt.cover || "/og-image.png"}
+                alt={evt.title}
+                className="event-card-art"
+                loading="lazy"
+                onError={(e) => { e.target.src = "/og-image.png"; }}
+              />
+              <div className="event-card-badge">
+                {evt.ticket_status || "UPCOMING"}
+              </div>
+            </Link>
+
+            <div className="event-card-body">
+              <div className="event-card-date">
+                <span>{evt.event_date}</span>
+                {evt.start_time && <span>• {evt.start_time}</span>}
+              </div>
+
+              <h3 className="event-card-title">
+                <Link to={`/events/${evt.slug}`}>{evt.title}</Link>
+              </h3>
+
+              <div className="event-card-venue">
+                <span>📍 {evt.venue_name || "Sanctuary"}</span>
+                {evt.city && <span>, {evt.city}</span>}
+              </div>
+
+              <div className="event-card-actions">
+                <Link to={`/events/${evt.slug}`} className="event-card-link">
+                  View Gathering →
+                </Link>
+                {evt.ticket_url && (
+                  <a
+                    href={evt.ticket_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="event-card-ticket-btn"
+                  >
+                    Passes ↗
+                  </a>
+                )}
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -2256,11 +2495,10 @@ function HomePage() {
       <main id="top">
         <HomeHero />
 
-        {upcomingRelease && (
-          <UpcomingReleaseSection
-            release={upcomingRelease}
-          />
-        )}
+        <UpcomingCountdownShowcase
+          releases={sortedReleases}
+          events={events}
+        />
 
         {latestRelease && (
           <LatestReleaseSection
@@ -2274,6 +2512,8 @@ function HomePage() {
         />
 
         <VideosSection />
+
+        <HomepageEventsSection />
 
         <GallerySection />
 
@@ -2478,6 +2718,36 @@ function AboutRoute() {
   );
 }
 
+function EventsRoute() {
+  return (
+    <>
+      <SiteHeader beatsPage />
+      <EventsPage />
+      <SiteFooter />
+    </>
+  );
+}
+
+function EventDetailRoute() {
+  return (
+    <>
+      <SiteHeader beatsPage />
+      <EventDetailPage />
+      <SiteFooter />
+    </>
+  );
+}
+
+function CalendarRoute() {
+  return (
+    <>
+      <SiteHeader beatsPage />
+      <CalendarPage />
+      <SiteFooter />
+    </>
+  );
+}
+
 /* =========================================================
    NOT FOUND
    ========================================================= */
@@ -2661,6 +2931,9 @@ function App() {
           <Route path="/music" element={<MusicRoute />} />
           <Route path="/gallery" element={<GalleryRoute />} />
           <Route path="/about" element={<AboutRoute />} />
+          <Route path="/events" element={<EventsRoute />} />
+          <Route path="/events/:slug" element={<EventDetailRoute />} />
+          <Route path="/calendar" element={<CalendarRoute />} />
 
           <Route
             path="/privacy"
@@ -2715,6 +2988,7 @@ function App() {
           >
             <Route index element={<AdminDashboard />} />
             <Route path="services" element={<AdminServicesPage />} />
+            <Route path="events" element={<AdminEventsPage />} />
             <Route path="gallery" element={<AdminGalleryPage />} />
             <Route path="music" element={<AdminMusicPage />} />
             <Route path="tracks" element={<AdminTracksPage />} />

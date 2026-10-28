@@ -1352,6 +1352,8 @@ adminApp.get('/recycle-bin', async (c) => {
       SELECT id, name AS title, 'social_links' AS table_name, deleted_at FROM social_links WHERE deleted_at IS NOT NULL
       UNION ALL
       SELECT id, name AS title, 'merchandise' AS table_name, deleted_at FROM merchandise WHERE deleted_at IS NOT NULL
+      UNION ALL
+      SELECT id, title, 'events' AS table_name, deleted_at FROM events WHERE deleted_at IS NOT NULL
       ORDER BY deleted_at DESC
     `
     return c.json(rows)
@@ -1364,7 +1366,7 @@ adminApp.post('/recycle-bin/restore', async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
   const { table, id } = body || {}
-  const allowedTables = ['releases', 'tracks', 'beats', 'music_videos', 'gallery_posts', 'media_assets', 'social_links', 'merchandise']
+  const allowedTables = ['releases', 'tracks', 'beats', 'music_videos', 'gallery_posts', 'media_assets', 'social_links', 'merchandise', 'events']
   if (!allowedTables.includes(table) || !id) {
     return c.json({ error: 'Invalid table or id' }, 400)
   }
@@ -1436,6 +1438,9 @@ adminApp.post('/recycle-bin/restore', async (c) => {
       case 'merchandise':
         rows = await sql`UPDATE merchandise SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`
         break
+      case 'events':
+        rows = await sql`UPDATE events SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`
+        break
     }
     if (!rows || !rows.length) return c.json({ error: 'Item not found in recycle bin' }, 404)
     await logAudit(sql, c.get('user').sub, 'RESTORE', table, id, null, rows[0])
@@ -1449,7 +1454,7 @@ adminApp.delete('/recycle-bin/permanent', requireSuperadmin, async (c) => {
   const sql = c.get('sql')
   const body = await c.req.json()
   const { table, id } = body || {}
-  const allowedTables = ['releases', 'tracks', 'beats', 'music_videos', 'gallery_posts', 'media_assets', 'social_links', 'merchandise']
+  const allowedTables = ['releases', 'tracks', 'beats', 'music_videos', 'gallery_posts', 'media_assets', 'social_links', 'merchandise', 'events']
   if (!allowedTables.includes(table) || !id) {
     return c.json({ error: 'Invalid table or id' }, 400)
   }
@@ -1480,6 +1485,9 @@ adminApp.delete('/recycle-bin/permanent', requireSuperadmin, async (c) => {
       case 'merchandise':
         await sql`DELETE FROM merchandise WHERE id = ${id} AND deleted_at IS NOT NULL`
         break
+      case 'events':
+        await sql`DELETE FROM events WHERE id = ${id} AND deleted_at IS NOT NULL`
+        break
     }
     await logAudit(sql, c.get('user').sub, 'PERMANENT_DELETE', table, id, null, null)
     return c.json({ success: true })
@@ -1500,9 +1508,11 @@ adminApp.post('/recycle-bin/purge-expired', requireSuperadmin, async (c) => {
     const r6 = await sql`DELETE FROM media_assets WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
     const r7 = await sql`DELETE FROM social_links WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
     const r8 = await sql`DELETE FROM merchandise WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
+    const r9 = await sql`DELETE FROM events WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`
 
     const total = (r1.length || 0) + (r2.length || 0) + (r3.length || 0) + (r4.length || 0) +
-                  (r5.length || 0) + (r6.length || 0) + (r7.length || 0) + (r8.length || 0)
+                  (r5.length || 0) + (r6.length || 0) + (r7.length || 0) + (r8.length || 0) +
+                  (r9.length || 0)
 
     await logAudit(sql, c.get('user').sub, 'PURGE_EXPIRED', 'recycle_bin', null, null, { purgedCount: total })
     return c.json({ success: true, count: total })
@@ -1817,4 +1827,284 @@ adminApp.put('/service-orders/:id', async (c) => {
   `
   if (updated.length === 0) return c.json({ error: 'Order not found' }, 404)
   return c.json(updated[0])
+})
+
+// ---------------------------------------------------------
+// 14. EVENTS MANAGEMENT
+// ---------------------------------------------------------
+
+adminApp.get('/events', async (c) => {
+  const sql = c.get('sql')
+  const rows = await sql`
+    SELECT 
+      e.id,
+      e.title,
+      e.slug,
+      e.subtitle,
+      e.event_date::text as "event_date",
+      e.start_time,
+      e.end_time,
+      e.venue_name,
+      e.venue_address,
+      e.city,
+      e.country,
+      e.ticket_url,
+      e.ticket_price,
+      e.ticket_status,
+      e.primary_artwork_id,
+      COALESCE(
+        e.primary_artwork_url,
+        CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE NULL END
+      ) as "primary_artwork_url",
+      e.additional_artworks,
+      e.lineup,
+      e.description,
+      e.tagged_gallery_post_ids,
+      e.tagged_release_ids,
+      e.tagged_beat_ids,
+      e.is_published,
+      e.is_featured,
+      e.created_at,
+      e.updated_at,
+      CASE 
+        WHEN e.event_date >= CURRENT_DATE THEN 'UPCOMING'
+        WHEN e.event_date >= (CURRENT_DATE - INTERVAL '14 days') THEN 'RECENT'
+        ELSE 'PAST'
+      END as status,
+      (e.event_date >= CURRENT_DATE) as "isFuture"
+    FROM events e
+    LEFT JOIN media_assets m ON e.primary_artwork_id = m.id
+    WHERE e.deleted_at IS NULL
+    ORDER BY e.event_date DESC, e.created_at DESC
+  `
+  return c.json(rows)
+})
+
+adminApp.get('/events/:id', async (c) => {
+  const sql = c.get('sql')
+  const id = c.req.param('id')
+  const rows = await sql`
+    SELECT 
+      e.id,
+      e.title,
+      e.slug,
+      e.subtitle,
+      e.event_date::text as "event_date",
+      e.start_time,
+      e.end_time,
+      e.venue_name,
+      e.venue_address,
+      e.city,
+      e.country,
+      e.ticket_url,
+      e.ticket_price,
+      e.ticket_status,
+      e.primary_artwork_id,
+      COALESCE(
+        e.primary_artwork_url,
+        CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE NULL END
+      ) as "primary_artwork_url",
+      e.additional_artworks,
+      e.lineup,
+      e.description,
+      e.tagged_gallery_post_ids,
+      e.tagged_release_ids,
+      e.tagged_beat_ids,
+      e.is_published,
+      e.is_featured,
+      e.created_at,
+      e.updated_at
+    FROM events e
+    LEFT JOIN media_assets m ON e.primary_artwork_id = m.id
+    WHERE (e.id::text = ${id} OR e.slug = ${id}) AND e.deleted_at IS NULL
+    LIMIT 1
+  `
+  if (rows.length === 0) return c.json({ error: 'Not found' }, 404)
+  return c.json(rows[0])
+})
+
+adminApp.post('/events', async (c) => {
+  const sql = c.get('sql')
+  const user = c.get('user')
+  const body = await c.req.json()
+
+  const {
+    title,
+    slug: rawSlug,
+    subtitle = null,
+    event_date,
+    start_time = null,
+    end_time = null,
+    venue_name,
+    venue_address = null,
+    city = null,
+    country = null,
+    ticket_url = null,
+    ticket_price = null,
+    ticket_status = 'AVAILABLE',
+    primary_artwork_id = null,
+    primary_artwork_url = null,
+    additional_artworks = [],
+    lineup = [],
+    description = null,
+    tagged_gallery_post_ids = [],
+    tagged_release_ids = [],
+    tagged_beat_ids = [],
+    is_published = true,
+    is_featured = false,
+  } = body || {}
+
+  if (!title || !title.trim()) {
+    return c.json({ error: 'Title is required' }, 400)
+  }
+  if (!event_date) {
+    return c.json({ error: 'Event date is required' }, 400)
+  }
+  if (!venue_name || !venue_name.trim()) {
+    return c.json({ error: 'Venue name is required' }, 400)
+  }
+
+  const baseSlug = rawSlug && rawSlug.trim() ? slugify(rawSlug) : slugify(title)
+  let candidate = baseSlug
+  let suffix = 2
+  while (true) {
+    const existing = await sql`SELECT id FROM events WHERE slug = ${candidate} LIMIT 1`
+    if (existing.length === 0) break
+    candidate = `${baseSlug}-${suffix++}`
+  }
+
+  const rows = await sql`
+    INSERT INTO events (
+      title,
+      slug,
+      subtitle,
+      event_date,
+      start_time,
+      end_time,
+      venue_name,
+      venue_address,
+      city,
+      country,
+      ticket_url,
+      ticket_price,
+      ticket_status,
+      primary_artwork_id,
+      primary_artwork_url,
+      additional_artworks,
+      lineup,
+      description,
+      tagged_gallery_post_ids,
+      tagged_release_ids,
+      tagged_beat_ids,
+      is_published,
+      is_featured
+    ) VALUES (
+      ${title.trim()},
+      ${candidate},
+      ${subtitle},
+      ${event_date},
+      ${start_time},
+      ${end_time},
+      ${venue_name.trim()},
+      ${venue_address},
+      ${city},
+      ${country},
+      ${ticket_url},
+      ${ticket_price},
+      ${ticket_status},
+      ${primary_artwork_id || null},
+      ${primary_artwork_url || null},
+      ${JSON.stringify(additional_artworks)}::jsonb,
+      ${JSON.stringify(lineup)}::jsonb,
+      ${description},
+      ${JSON.stringify(tagged_gallery_post_ids)}::jsonb,
+      ${JSON.stringify(tagged_release_ids)}::jsonb,
+      ${JSON.stringify(tagged_beat_ids)}::jsonb,
+      ${Boolean(is_published)},
+      ${Boolean(is_featured)}
+    )
+    RETURNING *
+  `
+  const newEvent = rows[0]
+  await logAudit(sql, user?.id || user?.sub, 'CREATE_EVENT', 'events', newEvent.id, null, newEvent)
+
+  if (newEvent.is_published) {
+    await queueSubscriberNotifications(sql, 'EVENT', newEvent.id, newEvent.title)
+  }
+
+  return c.json(newEvent, 201)
+})
+
+adminApp.put('/events/:id', async (c) => {
+  const sql = c.get('sql')
+  const user = c.get('user')
+  const id = c.req.param('id')
+  const body = await c.req.json()
+
+  const existing = await sql`SELECT * FROM events WHERE id::text = ${id} AND deleted_at IS NULL LIMIT 1`
+  if (existing.length === 0) return c.json({ error: 'Not found' }, 404)
+  const current = existing[0]
+
+  let targetSlug = current.slug
+  if (body.slug && body.slug.trim() && body.slug.trim() !== current.slug) {
+    const baseSlug = slugify(body.slug)
+    let candidate = baseSlug
+    let suffix = 2
+    while (true) {
+      const conflict = await sql`SELECT id FROM events WHERE slug = ${candidate} AND id != ${current.id} LIMIT 1`
+      if (conflict.length === 0) break
+      candidate = `${baseSlug}-${suffix++}`
+    }
+    targetSlug = candidate
+  }
+
+  const rows = await sql`
+    UPDATE events
+    SET
+      title = COALESCE(${body.title !== undefined ? body.title.trim() : null}, title),
+      slug = ${targetSlug},
+      subtitle = CASE WHEN ${body.subtitle !== undefined} THEN ${body.subtitle} ELSE subtitle END,
+      event_date = CASE WHEN ${body.event_date !== undefined} THEN ${body.event_date}::date ELSE event_date END,
+      start_time = CASE WHEN ${body.start_time !== undefined} THEN ${body.start_time} ELSE start_time END,
+      end_time = CASE WHEN ${body.end_time !== undefined} THEN ${body.end_time} ELSE end_time END,
+      venue_name = COALESCE(${body.venue_name !== undefined ? body.venue_name.trim() : null}, venue_name),
+      venue_address = CASE WHEN ${body.venue_address !== undefined} THEN ${body.venue_address} ELSE venue_address END,
+      city = CASE WHEN ${body.city !== undefined} THEN ${body.city} ELSE city END,
+      country = CASE WHEN ${body.country !== undefined} THEN ${body.country} ELSE country END,
+      ticket_url = CASE WHEN ${body.ticket_url !== undefined} THEN ${body.ticket_url} ELSE ticket_url END,
+      ticket_price = CASE WHEN ${body.ticket_price !== undefined} THEN ${body.ticket_price} ELSE ticket_price END,
+      ticket_status = CASE WHEN ${body.ticket_status !== undefined} THEN ${body.ticket_status} ELSE ticket_status END,
+      primary_artwork_id = CASE WHEN ${body.primary_artwork_id !== undefined} THEN ${body.primary_artwork_id} ELSE primary_artwork_id END,
+      primary_artwork_url = CASE WHEN ${body.primary_artwork_url !== undefined} THEN ${body.primary_artwork_url} ELSE primary_artwork_url END,
+      additional_artworks = CASE WHEN ${body.additional_artworks !== undefined} THEN ${JSON.stringify(body.additional_artworks)}::jsonb ELSE additional_artworks END,
+      lineup = CASE WHEN ${body.lineup !== undefined} THEN ${JSON.stringify(body.lineup)}::jsonb ELSE lineup END,
+      description = CASE WHEN ${body.description !== undefined} THEN ${body.description} ELSE description END,
+      tagged_gallery_post_ids = CASE WHEN ${body.tagged_gallery_post_ids !== undefined} THEN ${JSON.stringify(body.tagged_gallery_post_ids)}::jsonb ELSE tagged_gallery_post_ids END,
+      tagged_release_ids = CASE WHEN ${body.tagged_release_ids !== undefined} THEN ${JSON.stringify(body.tagged_release_ids)}::jsonb ELSE tagged_release_ids END,
+      tagged_beat_ids = CASE WHEN ${body.tagged_beat_ids !== undefined} THEN ${JSON.stringify(body.tagged_beat_ids)}::jsonb ELSE tagged_beat_ids END,
+      is_published = CASE WHEN ${body.is_published !== undefined} THEN ${Boolean(body.is_published)} ELSE is_published END,
+      is_featured = CASE WHEN ${body.is_featured !== undefined} THEN ${Boolean(body.is_featured)} ELSE is_featured END,
+      updated_at = NOW()
+    WHERE id = ${current.id}
+    RETURNING *
+  `
+  const updatedEvent = rows[0]
+  await logAudit(sql, user?.id || user?.sub, 'UPDATE_EVENT', 'events', updatedEvent.id, current, updatedEvent)
+
+  return c.json(updatedEvent)
+})
+
+adminApp.delete('/events/:id', requireSuperadmin, async (c) => {
+  const sql = c.get('sql')
+  const user = c.get('user')
+  const id = c.req.param('id')
+
+  const existing = await sql`SELECT * FROM events WHERE id::text = ${id} AND deleted_at IS NULL LIMIT 1`
+  if (existing.length === 0) return c.json({ error: 'Not found' }, 404)
+  const current = existing[0]
+
+  await sql`UPDATE events SET deleted_at = NOW(), updated_at = NOW() WHERE id = ${current.id}`
+  await logAudit(sql, user?.id || user?.sub, 'DELETE_EVENT', 'events', current.id, current, null)
+
+  return c.json({ message: 'Event moved to recycle bin', id: current.id })
 })

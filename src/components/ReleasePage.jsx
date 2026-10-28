@@ -188,6 +188,7 @@ export default function ReleasePage({ release: propRelease }) {
     releases: storeReleases,
     videos: storeVideos,
     gallery: storeGallery,
+    events: storeEvents,
     isLoading: isStoreLoading,
   } = useChomkaStore();
 
@@ -398,6 +399,16 @@ export default function ReleasePage({ release: propRelease }) {
             g.related_release_id === release.id
         )
       : [];
+
+  const associatedEvents = useMemo(() => {
+    if (!release?.id || !Array.isArray(storeEvents)) return [];
+    return storeEvents.filter(
+      (e) =>
+        e.is_published &&
+        Array.isArray(e.tagged_release_ids) &&
+        e.tagged_release_ids.map(String).includes(String(release.id))
+    );
+  }, [release?.id, storeEvents]);
 
   const trackCount = tracks.length;
   const releaseNumber = String(release.number ?? "").padStart(2, "0");
@@ -1198,6 +1209,67 @@ export default function ReleasePage({ release: propRelease }) {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {associatedEvents.length > 0 && (
+            <div
+              className="release-events-section"
+              style={{ marginTop: "36px" }}
+            >
+              <div
+                className="platform-section-title"
+                style={{ marginBottom: "16px" }}
+              >
+                Live Gatherings & Tour Appearances Featuring this Release ({associatedEvents.length})
+              </div>
+              <div
+                className="release-events-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "16px",
+                }}
+              >
+                {associatedEvents.map((evt) => (
+                  <Link
+                    key={evt.id}
+                    to={`/events/${evt.slug}`}
+                    style={{
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "10px",
+                      padding: "16px",
+                      textDecoration: "none",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "14px",
+                      transition: "all 0.2s ease",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--gold)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                  >
+                    <div style={{ width: "60px", height: "60px", borderRadius: "8px", overflow: "hidden", background: "#000", flexShrink: 0 }}>
+                      <img
+                        src={evt.primary_artwork_url || evt.cover || "/og-image.png"}
+                        alt={evt.title}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    </div>
+                    <div style={{ overflow: "hidden" }}>
+                      <span style={{ fontSize: "11px", color: "var(--gold)", fontWeight: 700, textTransform: "uppercase" }}>
+                        🎟️ {evt.ticket_status || "LIVE GATHERING"}
+                      </span>
+                      <h4 style={{ fontSize: "15px", color: "var(--text-h)", margin: "4px 0 2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {evt.title}
+                      </h4>
+                      <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
+                        {evt.event_date} {evt.venue_name ? `• ${evt.venue_name}` : ""}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </div>
           )}
