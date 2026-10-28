@@ -194,7 +194,7 @@ function SiteHeader({
             </Link>
 
             <Link to="/#world" className="nav-item-world">
-              <span className="nav-world-text">The<br className="nav-world-break" />World</span>
+              The World
             </Link>
 
             <Link to="/#connect">
@@ -337,7 +337,7 @@ function SiteHeader({
           </a>
 
           <a href="#world" className="nav-item-world">
-            <span className="nav-world-text">The<br className="nav-world-break" />World</span>
+            The World
           </a>
 
           <a href="#connect">

@@ -145,7 +145,8 @@ a:focus-visible {
 
   min-height: 72px;
   height: 72px;
-  padding: 0 4vw;
+  padding: 0 7vw;
+  box-sizing: border-box;
 
   border-bottom: 1px solid var(--line);
 
@@ -169,6 +170,7 @@ a:focus-visible {
 
   color: var(--text);
   flex-shrink: 0;
+  margin-right: clamp(20px, 2.5vw, 48px);
 
   transition:
     color var(--transition-fast) ease,
@@ -185,18 +187,20 @@ a:focus-visible {
 .site-header nav {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: clamp(16px, 2.2vw, 34px);
+  justify-content: flex-end;
+  gap: clamp(8px, 1.25vw, 22px);
   height: 40px;
-  margin: 0 auto;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
 
-  font-size: 12px;
+  font-size: clamp(10px, 0.82vw, 12px);
   font-weight: 600;
 
   color: var(--muted);
 
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: clamp(0.08em, 0.1vw, 0.14em);
 }
 
 .site-header nav a {
@@ -208,6 +212,7 @@ a:focus-visible {
   line-height: 1;
   padding: 0 4px;
   white-space: nowrap;
+  flex-shrink: 0;
 
   transition:
     color var(--transition-fast) ease,
@@ -215,19 +220,19 @@ a:focus-visible {
 }
 
 .site-header nav a.nav-item-world {
-  line-height: 1.1;
+  line-height: 1;
   text-align: center;
 }
 
 .site-header nav a.nav-item-world .nav-world-text {
   display: inline-block;
-  font-size: 10px;
-  line-height: 1.1;
-  letter-spacing: 0.12em;
+  font-size: inherit;
+  line-height: 1;
+  letter-spacing: inherit;
 }
 
 .site-header nav a.nav-item-world .nav-world-break {
-  display: inline;
+  display: none;
 }
 
 .site-header nav a::after {
@@ -282,27 +287,29 @@ a:focus-visible {
 .header-brand-badge {
   position: absolute;
   top: 0;
-  left: 0;
+  right: 0;
+  left: auto;
   display: inline-flex;
   align-items: center;
-  height: 20px;
+  height: 22px;
   line-height: 1;
-  padding: 0 10px;
+  padding: 0 16px 0 22px;
   font-size: 7.5px;
   font-weight: 800;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.24em;
   color: var(--gold);
-  background: rgba(223, 194, 125, 0.08);
-  border-right: 1px solid rgba(223, 194, 125, 0.4);
-  border-bottom: 1px solid rgba(223, 194, 125, 0.4);
+  background: linear-gradient(135deg, rgba(223, 194, 125, 0.20) 0%, rgba(22, 20, 16, 0.96) 100%);
+  border-bottom: 1px solid rgba(223, 194, 125, 0.45);
   border-top: none;
+  border-right: none;
   border-left: none;
-  border-radius: 0 0 2px 0;
+  clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%);
+  filter: drop-shadow(-2px 3px 6px rgba(0, 0, 0, 0.5));
   pointer-events: none;
   user-select: none;
   text-transform: uppercase;
   z-index: 10;
-  opacity: 0.95;
+  opacity: 0.98;
 }
 
 /* =========================================================
@@ -7950,8 +7957,9 @@ select.studio-input,
    ========================================================= */
 
 .home-events-section {
-  padding: 80px 0;
+  padding: 100px 7vw;
   border-top: 1px solid var(--line);
+  box-sizing: border-box;
 }
 
 .home-countdown-carousel {
