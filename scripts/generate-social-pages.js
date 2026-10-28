@@ -704,8 +704,7 @@ async function generateSocialPages() {
 
   const homeHtml = withSocialMetadata(
     baseHtml,
-    createHomeMetadata(),
-    renderHomeBodyHtml(canonicalReleases, canonicalBeats)
+    createHomeMetadata()
   );
 
   await writeFile(baseHtmlPath, homeHtml, "utf8");

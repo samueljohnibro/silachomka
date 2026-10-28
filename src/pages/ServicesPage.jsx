@@ -1091,7 +1091,7 @@ export default function ServicesPage() {
                 margin: 0,
               }}
             >
-              chomkaMUSIC™ • THE SACRED SANCTUARY
+              chomkaMUSIC™ • CREATIVE SANCTUARY
             </p>
 
             <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1108,7 +1108,7 @@ export default function ServicesPage() {
                   cursor: "pointer",
                 }}
               >
-                {isImmersive ? "✕ Classic View (Esc)" : "✨ Sacred Immersive View"}
+                {isImmersive ? "✕ Grid View (Esc)" : "✦ Guided Studio Experience"}
               </button>
 
               <SharePageButton

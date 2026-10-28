@@ -759,7 +759,7 @@ app.get('/api/beats/:slug', async (c) => {
     LEFT JOIN media_assets img ON b.image_asset_id = img.id
     LEFT JOIN media_assets vid ON b.video_asset_id = vid.id
     LEFT JOIN media_assets aud ON b.audio_asset_id = aud.id
-    WHERE b.slug = ${slug} 
+    WHERE (b.slug = ${slug} OR b.id::text = ${slug}) 
       AND b.deleted_at IS NULL 
       AND (b.status = 'PUBLISHED' OR (b.status = 'SCHEDULED' AND b.scheduled_at <= NOW()))
   `
@@ -968,7 +968,7 @@ app.get('/api/gallery/:slug', async (c) => {
       ) as slides
     FROM gallery_posts g
     LEFT JOIN media_assets m ON g.primary_asset_id = m.id
-    WHERE g.slug = ${slug} 
+    WHERE (g.slug = ${slug} OR g.id::text = ${slug}) 
       AND g.deleted_at IS NULL 
       AND (g.status = 'PUBLISHED' OR (g.status = 'SCHEDULED' AND g.scheduled_at <= NOW()))
   `
@@ -1213,10 +1213,10 @@ app.get('/api/calendar', async (c) => {
     ])
 
     const allActivities = [
-      ...releases.map(r => ({ ...r, url: `/release/${r.slug}` })),
-      ...beats.map(b => ({ ...b, url: `/beats/${b.id || b.slug}` })),
-      ...gallery.map(g => ({ ...g, url: `/gallery/${g.id || g.slug}` })),
-      ...events.map(e => ({ ...e, url: `/events/${e.slug}` }))
+      ...releases.map(r => ({ ...r, url: `/release/${r.slug || r.id}` })),
+      ...beats.map(b => ({ ...b, url: `/beats/${b.slug || b.id}` })),
+      ...gallery.map(g => ({ ...g, url: `/gallery/${g.slug || g.id}` })),
+      ...events.map(e => ({ ...e, url: `/events/${e.slug || e.id}` }))
     ].filter(a => Boolean(a.date))
      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 

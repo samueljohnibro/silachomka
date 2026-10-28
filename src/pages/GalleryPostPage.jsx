@@ -40,7 +40,7 @@ export default function GalleryPostPage() {
 
   const storePost = useMemo(() => {
     if (!Array.isArray(gallery)) return null;
-    return gallery.find((item) => item.id === id) || null;
+    return gallery.find((item) => item.id === id || item.slug === id || item.db_id === id) || null;
   }, [gallery, id]);
 
   useEffect(() => {

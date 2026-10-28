@@ -18,8 +18,8 @@ const appElement = (
   </React.StrictMode>
 );
 
-if (rootElement && rootElement.hasChildNodes()) {
-  ReactDOM.hydrateRoot(rootElement, appElement);
-} else if (rootElement) {
+if (rootElement) {
+  // Clear any prerendered crawler nodes to eliminate text flash and hydration crashes
+  rootElement.replaceChildren();
   ReactDOM.createRoot(rootElement).render(appElement);
 }

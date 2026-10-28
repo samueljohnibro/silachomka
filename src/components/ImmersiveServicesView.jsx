@@ -74,21 +74,21 @@ export default function ImmersiveServicesView({
               fontWeight: 800,
             }}
           >
-            chomkaMUSIC™ • THE SACRED SANCTUARY
+            chomkaMUSIC™ • CREATIVE SANCTUARY
           </span>
           <span style={{ fontSize: "11px", color: "var(--muted)", letterSpacing: "0.06em" }}>
-            {convStep === "need" && "• Realm I: Which creation do you wish to manifest?"}
-            {convStep === "scope" && "• Realm II: The Sacred Dimensions & Studio Time"}
-            {convStep === "when" && "• Realm III: Harmonize Time & The Celestial Calendar"}
-            {convStep === "brief" && "• Realm IV: Inscribe Your Vision & Sacred Stems"}
-            {convStep === "review" && "• Realm V: Consecrate & Seal Your Manifestation"}
+            {convStep === "need" && "• Step 1: Select Your Services"}
+            {convStep === "scope" && "• Step 2: Duration & Studio Time"}
+            {convStep === "when" && "• Step 3: Session Schedule"}
+            {convStep === "brief" && "• Step 4: Project Vision & Audio Stems"}
+            {convStep === "review" && "• Step 5: Review & Confirmation"}
           </span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
           <div style={{ textAlign: "right" }}>
             <span style={{ fontSize: "9px", color: "var(--muted)", display: "block", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Sacred Offering
+              Total Estimate
             </span>
             <span style={{ fontSize: "15px", fontWeight: 800, color: "var(--gold)" }}>
               {hasPriceUponRequest && totalNgn === 0 ? "Price upon request" : `₦${totalNgn.toLocaleString()}`}
@@ -132,10 +132,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Which creation do you wish to manifest?
+                Which services do you need?
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Step into the sanctuary. Select the sacred sonic forms you desire to bring forth into physical reality. Every masterwork is sculpted with divine clarity and timeless perfection.
+                Select the studio services for your project. Every record is crafted with precision, depth, and sonic excellence.
               </p>
             </div>
 
@@ -282,7 +282,7 @@ export default function ImmersiveServicesView({
             {/* Navigation Row */}
             <div className="services-immersive-nav">
               <span style={{ fontSize: "13px", color: "var(--muted)" }}>
-                {selectedSlugs.length === 0 ? "Select at least 1 creation to enter the sanctuary" : `${selectedSlugs.length} sacred creation(s) chosen`}
+                {selectedSlugs.length === 0 ? "Select at least 1 service to continue" : `${selectedSlugs.length} service(s) selected`}
               </span>
               <button
                 type="button"
@@ -298,14 +298,14 @@ export default function ImmersiveServicesView({
                   cursor: selectedSlugs.length === 0 ? "not-allowed" : "pointer",
                 }}
               >
-                Next: Dimensions & Scope →
+                Next: Duration & Scope →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 2: "THE SACRED DIMENSIONS & SCOPE"
+            STEP 2: "STUDIO DURATION & SCOPE"
             ======================================================== */}
         {convStep === "scope" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
@@ -320,10 +320,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                The Sacred Dimensions & Scope
+                Studio Duration & Scope
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Set the depth and hours necessary to sculpt your masterwork with unhurried perfection.
+                Configure duration, deliverables, and specific session options for your project.
               </p>
             </div>
 
@@ -494,7 +494,7 @@ export default function ImmersiveServicesView({
         )}
 
         {/* ========================================================
-            STEP 4: "INSCRIBE YOUR SACRED VISION"
+            STEP 4: "PROJECT VISION & DETAILS"
             ======================================================== */}
         {convStep === "brief" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
@@ -509,10 +509,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Inscribe Your Sacred Vision
+                Project Vision & Details
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Entrust us with your contact details, notes, reference frequencies, and audio stems for the engineer.
+                Provide your contact information, creative notes, reference links, and audio stems for the engineer.
               </p>
             </div>
 
@@ -657,7 +657,7 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Sacred Calendar
+                ← Back: Schedule Calendar
               </button>
               <button
                 type="button"

@@ -17,6 +17,7 @@ import { useChomkaStore } from "./data/store";
 import { CurrencyProvider } from "./data/CurrencyContext";
 import { CookieConsentProvider, useCookieConsent } from "./data/CookieConsentContext";
 import CookieConsentBanner from "./components/CookieConsentBanner";
+import ChomkaAiAssistantModal from "./components/ChomkaAiAssistantModal";
 import { PrivacyPolicyPage, CookiePolicyPage, TermsOfUsePage } from "./pages/LegalPages";
 
 // Admin CMS Imports
@@ -214,14 +215,12 @@ function SiteHeader({
               Services
             </Link>
 
-            {hasActiveEvents && (
-              <Link
-                to="/events"
-                className={location.pathname.startsWith("/events") ? "is-active" : ""}
-              >
-                Events
-              </Link>
-            )}
+            <Link
+              to="/events"
+              className={location.pathname.startsWith("/events") ? "is-active" : ""}
+            >
+              Events
+            </Link>
 
             <Link
               to="/calendar"
@@ -290,11 +289,9 @@ function SiteHeader({
               Services
             </Link>
 
-            {hasActiveEvents && (
-              <Link to="/events" onClick={closeMobileMenu} className={location.pathname.startsWith("/events") ? "active" : ""}>
-                Events
-              </Link>
-            )}
+            <Link to="/events" onClick={closeMobileMenu} className={location.pathname.startsWith("/events") ? "active" : ""}>
+              Events
+            </Link>
 
             <Link to="/calendar" onClick={closeMobileMenu} className={location.pathname.startsWith("/calendar") ? "active" : ""}>
               Calendar
@@ -355,11 +352,9 @@ function SiteHeader({
             Services
           </Link>
 
-          {hasActiveEvents && (
-            <Link to="/events">
-              Events
-            </Link>
-          )}
+          <Link to="/events">
+            Events
+          </Link>
 
           <Link to="/calendar">
             Calendar
@@ -425,11 +420,9 @@ function SiteHeader({
             Services
           </Link>
 
-          {hasActiveEvents && (
-            <Link to="/events" onClick={closeMobileMenu}>
-              Events
-            </Link>
-          )}
+          <Link to="/events" onClick={closeMobileMenu}>
+            Events
+          </Link>
 
           <Link to="/calendar" onClick={closeMobileMenu}>
             Calendar
@@ -779,19 +772,26 @@ function HomeHero() {
             Explore services
           </Link>
 
-          {hasActiveEvents && (
-            <Link
-              to="/events"
-              className="secondary-button"
-            >
-              Explore events
-            </Link>
-          )}
+          <Link
+            to="/events"
+            className="secondary-button"
+          >
+            Explore events
+          </Link>
 
           <SharePageButton
             title="silachomka — Official Home"
             label="Share Page"
-            style={{ height: "42px", padding: "0 18px" }}
+            className="secondary-button"
+            style={{
+              minHeight: "48px",
+              height: "48px",
+              padding: "0 24px",
+              borderRadius: "3px",
+              fontSize: "11px",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
           />
         </div>
       </div>
@@ -1728,13 +1728,19 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
     let intervalId;
     const advanceSlide = () => {
       setCurrentIndex((prev) => {
-        const next = (prev + 1) % slides.length;
-        const nextSlide = slides[next];
-        // If next slide is video and not ready yet, keep current slide visible
-        if (nextSlide?.isVideo && !readyMap[nextSlide.src]) {
-          return prev;
+        for (let i = 1; i <= slides.length; i++) {
+          const candidateIndex = (prev + i) % slides.length;
+          const candidate = slides[candidateIndex];
+          if (!candidate) continue;
+          if (candidate.isVideo) {
+            if (readyMap[candidate.src]) {
+              return candidateIndex;
+            }
+          } else {
+            return candidateIndex;
+          }
         }
-        return next;
+        return (prev + 1) % slides.length;
       });
     };
 
@@ -3019,6 +3025,7 @@ function App() {
         </Routes>
 
         <CookieConsentBanner />
+        <ChomkaAiAssistantModal />
       </>
       </CurrencyProvider>
       </CookieConsentProvider>

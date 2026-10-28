@@ -256,6 +256,7 @@ export default function GalleryVideoPlayer({
           maxHeight: "78vh",
           objectFit: "contain",
           display: "block",
+          paddingBottom: "58px",
         }}
       />
 

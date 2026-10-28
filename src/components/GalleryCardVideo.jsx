@@ -21,9 +21,6 @@ export default function GalleryCardVideo({
   onError,
 }) {
   const videoRef = useRef(null);
-  const snippetStartRef = useRef(0);
-  const snippetEndRef = useRef(SNIPPET_DURATION);
-  const isSettingTimeRef = useRef(false);
   const [hasLoadedData, setHasLoadedData] = useState(false);
 
   useEffect(() => {
@@ -32,27 +29,7 @@ export default function GalleryCardVideo({
 
     video.muted = true;
     video.playsInline = true;
-
-    const setupRandomSnippet = () => {
-      const dur = video.duration;
-      if (Number.isFinite(dur) && dur > SNIPPET_DURATION + 0.2) {
-        const maxStart = Math.max(0, dur - SNIPPET_DURATION);
-        const randomStart = Math.random() * maxStart;
-        snippetStartRef.current = randomStart;
-        snippetEndRef.current = randomStart + SNIPPET_DURATION;
-        try {
-          isSettingTimeRef.current = true;
-          video.currentTime = randomStart;
-        } catch {}
-      } else if (Number.isFinite(dur) && dur > 0) {
-        snippetStartRef.current = 0;
-        snippetEndRef.current = dur;
-        try {
-          isSettingTimeRef.current = true;
-          video.currentTime = 0.05;
-        } catch {}
-      }
-    };
+    video.loop = true;
 
     const handleCanPlay = () => {
       setHasLoadedData(true);
@@ -63,16 +40,11 @@ export default function GalleryCardVideo({
     };
 
     const handleLoadedMetadata = () => {
-      setupRandomSnippet();
       if (video.readyState >= 2) {
         handleCanPlay();
       }
     };
 
-    // Immediate check if video is already cached or loaded
-    if (video.readyState >= 1) {
-      setupRandomSnippet();
-    }
     if (video.readyState >= 2) {
       handleCanPlay();
     }
@@ -81,46 +53,16 @@ export default function GalleryCardVideo({
       if (onError) onError(src, e);
     };
 
-    const handleTimeUpdate = () => {
-      if (isSettingTimeRef.current) {
-        isSettingTimeRef.current = false;
-        return;
-      }
-      const dur = video.duration;
-      if (!Number.isFinite(dur)) return;
-
-      if (video.currentTime >= snippetEndRef.current) {
-        // Pick next 5s snippet or loop
-        if (dur > 5.2) {
-          const maxStart = dur - 5.0;
-          const nextStart = Math.random() * maxStart;
-          snippetStartRef.current = nextStart;
-          snippetEndRef.current = nextStart + 5.0;
-          try {
-            isSettingTimeRef.current = true;
-            video.currentTime = nextStart;
-          } catch {}
-        } else {
-          try {
-            isSettingTimeRef.current = true;
-            video.currentTime = 0;
-          } catch {}
-        }
-      }
-    };
-
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
     video.addEventListener("canplay", handleCanPlay);
     video.addEventListener("loadeddata", handleCanPlay);
     video.addEventListener("error", handleError);
-    video.addEventListener("timeupdate", handleTimeUpdate);
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (!videoRef.current) return;
           const v = videoRef.current;
-
           if (entry.isIntersecting && entry.intersectionRatio >= 0.25 && isActive) {
             v.play().catch(() => {});
           } else {
@@ -128,9 +70,7 @@ export default function GalleryCardVideo({
           }
         });
       },
-      {
-        threshold: [0, 0.25, 0.8],
-      }
+      { threshold: [0, 0.25, 0.8] }
     );
 
     observer.observe(video);
@@ -139,8 +79,8 @@ export default function GalleryCardVideo({
       observer.disconnect();
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
       video.removeEventListener("canplay", handleCanPlay);
+      video.removeEventListener("loadeddata", handleCanPlay);
       video.removeEventListener("error", handleError);
-      video.removeEventListener("timeupdate", handleTimeUpdate);
       try {
         video.pause();
       } catch {}
@@ -164,6 +104,7 @@ export default function GalleryCardVideo({
       poster={poster || undefined}
       muted
       playsInline
+      loop
       preload="auto"
       className={className}
       aria-label={title}

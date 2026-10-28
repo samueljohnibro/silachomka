@@ -383,7 +383,7 @@ export default function GalleryPostModal({
         <div className="gallery-modal-media">
           {isCarousel ? (
             <div
-              className="gallery-carousel-wrapper"
+              className={`gallery-carousel-wrapper ${currentIsVideo ? "has-video-active" : ""}`}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
@@ -491,20 +491,23 @@ export default function GalleryPostModal({
         </div>
 
         {/* ===============================================
-            POST INFO & CAPTION SIDEBAR
+            POST INFO & CAPTION SIDEBAR (Swaggy Editorial Style)
             =============================================== */}
-        <div className="gallery-modal-sidebar">
+        <div className="gallery-modal-sidebar gallery-modal-sidebar-swag">
           {/* Header / Author */}
           <div className="gallery-sidebar-header">
             <div className="gallery-author-info">
-              <div className="gallery-author-avatar">s</div>
-              <div>
+              <div className="gallery-author-avatar-crest">
+                <span className="gallery-avatar-inner">SC</span>
+                <span className="gallery-avatar-glow" />
+              </div>
+              <div className="gallery-author-meta">
                 <div className="gallery-author-name">
-                  <span>silachomka</span>
+                  <span className="gallery-author-brand">silachomka</span>
                   <span
                     className="gallery-verified-badge"
-                    title="Official Archive"
-                    aria-label="Official Archive"
+                    title="Official chomkaMUSIC™ Artist"
+                    aria-label="Official chomkaMUSIC™ Artist"
                   >
                     <svg
                       width="10"
@@ -512,7 +515,7 @@ export default function GalleryPostModal({
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="3"
+                      strokeWidth="3.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       aria-hidden="true"
@@ -520,20 +523,37 @@ export default function GalleryPostModal({
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   </span>
+                  <span className="gallery-brand-badge-pill">chomkaMUSIC™</span>
                 </div>
-                <span className="gallery-author-sub">
-                  {post.category} · Source: {post.source || DEFAULT_SOURCE}
-                </span>
-                {post.location && (
-                  <span className="gallery-modal-location" style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--gold)", fontSize: "11px", marginTop: "2px" }}>
-                    <span aria-hidden="true">📍</span> {post.location}
+                <div className="gallery-author-sub-row">
+                  <span className="gallery-category-pill">
+                    {post.category || "VISUAL ARCHIVE"}
                   </span>
-                )}
+                  {post.location && (
+                    <span className="gallery-modal-location">
+                      <span aria-hidden="true">📍</span> {post.location}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <span className="gallery-modal-date">
               {formatGalleryDate(post.displayDate || post.date)}
             </span>
+          </div>
+
+          {/* Editorial Spec Strip */}
+          <div className="gallery-editorial-specs">
+            <div className="gallery-spec-chip">
+              <span className="gallery-spec-dot" />
+              <span>{isCarousel ? `CAROUSEL · ${effectiveSlides.length} CUTS` : currentIsVideo ? "4K MASTER SHORT" : "HI-RES ARCHIVE STILL"}</span>
+            </div>
+            <div className="gallery-spec-chip">
+              <span>{currentIsVideo ? "🔊 24-BIT MASTER" : "📸 CHOMKA VAULT"}</span>
+            </div>
+            <div className="gallery-spec-chip gallery-spec-chip-gold">
+              <span>OFFICIAL</span>
+            </div>
           </div>
 
           {/* Scrollable Caption Body */}
@@ -555,7 +575,7 @@ export default function GalleryPostModal({
                     background: "rgba(223, 194, 125, 0.12)",
                     border: "1px solid rgba(223, 194, 125, 0.4)",
                     color: "var(--gold)",
-                    padding: "7px 12px",
+                    padding: "7px 14px",
                     borderRadius: "999px",
                     fontSize: "11px",
                     fontWeight: 700,
@@ -571,11 +591,21 @@ export default function GalleryPostModal({
               </div>
             )}
 
-            {post.title && <h3 className="gallery-modal-title">{post.title}</h3>}
+            {post.title && <h3 className="gallery-modal-title gallery-title-swag">{post.title}</h3>}
 
-            <div className="gallery-modal-caption">
+            <div className="gallery-modal-caption gallery-caption-swag">
               {post.caption?.split("\n\n").map((para, idx) => (
-                <p key={idx}>{para}</p>
+                <p key={idx}>
+                  {para.split(/(\s+)/).map((word, wIdx) => {
+                    if (word.startsWith("#") && word.length > 1) {
+                      return <span key={wIdx} className="gallery-swag-hashtag">{word}</span>;
+                    }
+                    if (word.startsWith("@") && word.length > 1) {
+                      return <span key={wIdx} className="gallery-swag-mention">{word}</span>;
+                    }
+                    return word;
+                  })}
+                </p>
               )) || <p>{post.caption}</p>}
             </div>
 
@@ -595,8 +625,8 @@ export default function GalleryPostModal({
             {Array.isArray(post.tags) && post.tags.length > 0 && (
               <div className="gallery-modal-tags">
                 {post.tags.map((tag, idx) => (
-                  <span key={idx} className="gallery-modal-tag">
-                    {tag}
+                  <span key={idx} className="gallery-modal-tag gallery-tag-swag">
+                    #{String(tag).replace(/^#/, "")}
                   </span>
                 ))}
               </div>
@@ -604,50 +634,43 @@ export default function GalleryPostModal({
 
             {/* Tagged Live Event Badge */}
             {taggedEvent && (
-              <div style={{ marginTop: "12px", marginBottom: "8px" }}>
+              <div style={{ marginTop: "14px", marginBottom: "10px" }}>
                 <Link
                   to={`/events/${taggedEvent.slug}`}
                   onClick={onClose}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    background: "rgba(212, 175, 55, 0.12)",
-                    border: "1px solid rgba(212, 175, 55, 0.4)",
-                    color: "var(--gold)",
-                    borderRadius: "999px",
-                    padding: "5px 12px",
-                    fontSize: "12px",
-                    textDecoration: "none",
-                    fontWeight: "600"
-                  }}
+                  className="gallery-tagged-event-card"
                 >
-                  🎟️ Captured Live at: {taggedEvent.title} →
+                  <span className="gallery-ticket-icon">🎟️</span>
+                  <div className="gallery-tagged-event-info">
+                    <span className="gallery-tagged-event-eyebrow">CAPTURED LIVE AT</span>
+                    <span className="gallery-tagged-event-title">{taggedEvent.title}</span>
+                  </div>
+                  <span className="gallery-tagged-event-arrow">→</span>
                 </Link>
               </div>
             )}
           </div>
 
           {/* Footer / Connected Link */}
-          <div className="gallery-sidebar-footer">
+          <div className="gallery-sidebar-footer gallery-footer-swag">
             <ShareLinkBox url={shareUrl} />
             {post.link && post.link.startsWith("/") ? (
               <Link
                 to={post.link}
-                className="gallery-modal-cta-btn"
+                className="gallery-modal-cta-btn gallery-cta-swag"
                 onClick={onClose}
               >
-                Open Release Project <RightArrowIcon size={14} />
+                <span>OPEN PROJECT ARCHIVE</span>
+                <RightArrowIcon size={14} />
               </Link>
             ) : externalSocialUrl ? (
               <a
                 href={externalSocialUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="gallery-modal-cta-btn"
+                className="gallery-modal-cta-btn gallery-cta-swag"
               >
-                View Original on{" "}
-                {normalizePlatformName(externalSocialPlatform || "Social")}{" "}
+                <span>VIEW ON {normalizePlatformName(externalSocialPlatform || "Social").toUpperCase()}</span>
                 <UpRightArrowIcon size={14} />
               </a>
             ) : selectedSocial ? (
@@ -655,12 +678,13 @@ export default function GalleryPostModal({
                 href={selectedSocial.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="gallery-modal-cta-btn"
+                className="gallery-modal-cta-btn gallery-cta-swag"
                 aria-label={`Follow silachomka on ${normalizePlatformName(
                   selectedSocial.name || selectedSocial.platform
                 )}`}
               >
-                Follow on {normalizePlatformName(selectedSocial.name || selectedSocial.platform)} <UpRightArrowIcon size={14} />
+                <span>FOLLOW ON {normalizePlatformName(selectedSocial.name || selectedSocial.platform).toUpperCase()}</span>
+                <UpRightArrowIcon size={14} />
               </a>
             ) : null}
           </div>

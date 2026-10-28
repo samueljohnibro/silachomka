@@ -120,7 +120,7 @@ export default function CalendarPage() {
             image: b.cover || b.artwork_url || "",
             type: "beat",
             badge: "BEAT",
-            url: `/beats/${b.id || b.slug}`,
+            url: `/beats/${b.slug || b.id}`,
           });
         });
 
@@ -134,7 +134,7 @@ export default function CalendarPage() {
             image: g.asset || g.src || "",
             type: "gallery",
             badge: "GALLERY MOMENT",
-            url: `/gallery`,
+            url: `/gallery/${g.slug || g.id}`,
           });
         });
 

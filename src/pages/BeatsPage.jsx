@@ -1775,12 +1775,13 @@ export default function BeatsPage() {
             Listen, license on Selar, and craft your next release.
           </p>
 
-          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", justifyContent: "center", marginTop: "18px" }}>
             <a
               href="https://www.instagram.com/chomkamusicstudio/?__pwa=1"
               target="_blank"
               rel="noopener noreferrer"
               className="beats-studio-ig-badge"
+              style={{ marginTop: 0 }}
             >
               <CameraIcon size={14} /> @chomkamusicstudio on Instagram{" "}
               <UpRightArrowIcon size={14} />
@@ -1789,6 +1790,15 @@ export default function BeatsPage() {
             <SharePageButton
               title="chomkaMUSIC™ Studio Beats | silachomka"
               label="Share Beats"
+              style={{
+                minHeight: "38px",
+                height: "38px",
+                padding: "0 20px",
+                borderRadius: "30px",
+                fontSize: "11px",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+              }}
             />
           </div>
         </div>

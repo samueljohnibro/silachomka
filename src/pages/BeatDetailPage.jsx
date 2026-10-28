@@ -56,7 +56,7 @@ export default function BeatDetailPage() {
   /* Locate the authoritative beat from store or direct API fetch for newly created beats */
   const storeBeat = useMemo(() => {
     if (!Array.isArray(beats)) return null;
-    return beats.find((item) => item.id === id || item.slug === id) || null;
+    return beats.find((item) => item.id === id || item.slug === id || item.db_id === id) || null;
   }, [beats, id]);
 
   useEffect(() => {
