@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import { fetchCalendarActivities } from "../data/api";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
 import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
-import { canonicalUrl } from "../data/siteConfig";
 import { suppressScroll } from "../App";
 import {
   buildCalendarUrl,
@@ -140,8 +139,12 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState(initialViewMode);
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [currentDate, setCurrentDate] = useState(initialDateAndMonth.currentDate);
-  const [selectedDayActivities, setSelectedDayActivities] = useState(null);
   const [selectedDateStr, setSelectedDateStr] = useState(initialDateAndMonth.selectedDateStr);
+
+  const selectedDayActivities = useMemo(() => {
+    if (!selectedDateStr) return null;
+    return activitiesByDate[selectedDateStr] || [];
+  }, [selectedDateStr, activitiesByDate]);
 
   // Target scroll position and targeted activity ID for restoration
   const targetScrollYRef = useRef(
@@ -365,16 +368,6 @@ export default function CalendarPage() {
       }),
     });
   }, [viewMode, activeFilter, searchQuery, currentDate, selectedDateStr]);
-
-  // Automatically populate selectedDayActivities when activities load or selectedDateStr changes
-  useEffect(() => {
-    if (selectedDateStr) {
-      const acts = activitiesByDate[selectedDateStr] || [];
-      setSelectedDayActivities(acts);
-    } else {
-      setSelectedDayActivities(null);
-    }
-  }, [selectedDateStr, activitiesByDate]);
 
   // Restore scroll position or target element after activities have loaded
   useEffect(() => {

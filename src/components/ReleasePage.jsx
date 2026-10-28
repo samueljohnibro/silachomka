@@ -10,6 +10,7 @@ import { useChomkaStore } from "../data/store";
 import { useCookieConsent } from "../data/CookieConsentContext";
 import { normalizeGalleryPost } from "../data/api";
 import { formatGalleryDate } from "../utils/dateFormatter";
+import { getCalendarReturnUrl } from "../utils/calendarNavigation";
 import {
   SITE_ORIGIN,
   canonicalUrl,
@@ -183,6 +184,9 @@ export default function ReleasePage({ release: propRelease }) {
   const viewMode = searchParams.get("view") || location.state?.fromView || (() => {
     try { return sessionStorage.getItem("silachomka_music_view") || "grid"; } catch { return "grid"; }
   })();
+  const calendarReturnUrl = useMemo(() => {
+    return getCalendarReturnUrl(location, searchParams);
+  }, [location, searchParams]);
   const { preferences: cookiePrefs, saveCustomPreferences } = useCookieConsent();
   const {
     releases: storeReleases,
@@ -330,9 +334,16 @@ export default function ReleasePage({ release: propRelease }) {
           <p style={{ color: "var(--muted)", margin: "20px 0 35px" }}>
             The release you requested does not exist in the official discography.
           </p>
-          <Link className="primary-button" to="/#music">
-            ← Back to Music
-          </Link>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+            {calendarReturnUrl && (
+              <Link className="primary-button" to={calendarReturnUrl}>
+                ← Back to Calendar
+              </Link>
+            )}
+            <Link className="primary-button" to="/#music">
+              ← Back to Music
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -515,20 +526,47 @@ export default function ReleasePage({ release: propRelease }) {
         </div>
       )}
 
-      {/* Breadcrumb Navigation (Stage 35 — Preserves List/Grid View State) */}
-      <Link
-        className="release-breadcrumb"
-        to={{
-          pathname: "/",
-          search: `?${new URLSearchParams({
-            ...(activeFilter !== "all" ? { filter: activeFilter } : {}),
-            ...(viewMode === "list" ? { view: "list" } : {}),
-          }).toString()}`,
-          hash: "#music",
-        }}
-      >
-        ← All Music
-      </Link>
+      {/* Breadcrumb Navigation (Calendar return or All Music) */}
+      {calendarReturnUrl ? (
+        <div className="release-breadcrumb-group" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "35px", flexWrap: "wrap" }}>
+          <Link
+            className="release-breadcrumb calendar-return-link"
+            to={calendarReturnUrl}
+            style={{ marginBottom: 0 }}
+          >
+            ← Back to Calendar
+          </Link>
+          <span style={{ color: "var(--muted)", opacity: 0.4, fontSize: "11px" }}>|</span>
+          <Link
+            className="release-breadcrumb"
+            style={{ marginBottom: 0, opacity: 0.7 }}
+            to={{
+              pathname: "/",
+              search: `?${new URLSearchParams({
+                ...(activeFilter !== "all" ? { filter: activeFilter } : {}),
+                ...(viewMode === "list" ? { view: "list" } : {}),
+              }).toString()}`,
+              hash: "#music",
+            }}
+          >
+            All Music
+          </Link>
+        </div>
+      ) : (
+        <Link
+          className="release-breadcrumb"
+          to={{
+            pathname: "/",
+            search: `?${new URLSearchParams({
+              ...(activeFilter !== "all" ? { filter: activeFilter } : {}),
+              ...(viewMode === "list" ? { view: "list" } : {}),
+            }).toString()}`,
+            hash: "#music",
+          }}
+        >
+          ← All Music
+        </Link>
+      )}
 
       <div className="release-hero-grid">
         {/* =================================================
