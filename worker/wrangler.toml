@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 enabled = true
 
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["0 2 * * *"]
 
 # Future Neon DB configuration placeholder
 # [vars]

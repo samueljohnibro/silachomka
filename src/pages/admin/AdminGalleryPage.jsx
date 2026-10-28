@@ -62,8 +62,9 @@ const AdminGalleryPage = () => {
     setIsLoading(true);
     setError(null);
     try {
+      let loadErr = null;
       const [postsData, slidesData, mediaData, releasesData, tracksData, categoriesData, socialsData] = await Promise.all([
-        adminApi.getGallery().catch(() => []),
+        adminApi.getGallery().catch((e) => { loadErr = e; return []; }),
         adminApi.getGallerySlides().catch(() => []),
         adminApi.getMediaAssets().catch(() => []),
         adminApi.getReleases().catch(() => []),
@@ -77,6 +78,9 @@ const AdminGalleryPage = () => {
         ]),
         fetch("/api/social-links").then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
+      if (loadErr) {
+        setError(loadErr.message || "Failed to load gallery posts from server.");
+      }
       setPosts(postsData);
       setSlides(slidesData);
       setMediaAssets(mediaData);
@@ -1486,7 +1490,7 @@ const AdminGalleryPage = () => {
                       style={{ width: 18, height: 18, accentColor: "var(--gold)", cursor: "pointer" }}
                     />
                     <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
-                      Show this media in Homepage Hero
+                      Show in Homepage Hero
                     </span>
                   </label>
                   <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>

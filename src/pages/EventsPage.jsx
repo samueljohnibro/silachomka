@@ -4,6 +4,7 @@ import { useChomkaStore } from "../data/store";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
 import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
+import EventsAmbientBackground from "../components/EventsAmbientBackground";
 import { canonicalUrl } from "../data/siteConfig";
 
 function formatDateDisplay(dateStr) {
@@ -132,6 +133,8 @@ export default function EventsPage() {
     }
   };
 
+  const headlineCover = upcomingEvents[0]?.primary_artwork_url || upcomingEvents[0]?.cover || null;
+
   return (
     <div className="events-page-view">
       <SeoHead
@@ -140,6 +143,9 @@ export default function EventsPage() {
         path="/events"
         jsonLd={jsonLd}
       />
+
+      {/* Atmospheric Stage Sanctuary & Volumetric Concert Spotlights */}
+      <EventsAmbientBackground image={headlineCover} />
 
       <main className="events-page-container">
         <nav aria-label="Breadcrumb" className="events-breadcrumb">

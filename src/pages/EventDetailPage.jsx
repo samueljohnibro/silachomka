@@ -5,6 +5,7 @@ import { fetchEventBySlug } from "../data/api";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
 import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
+import EventsAmbientBackground from "../components/EventsAmbientBackground";
 import { canonicalUrl } from "../data/siteConfig";
 import { getCalendarReturnUrl } from "../utils/calendarNavigation";
 
@@ -232,8 +233,8 @@ export default function EventDetailPage() {
         jsonLd={jsonLd}
       />
 
-      {/* Ambient background glow */}
-      <div className="event-ambient-glow" aria-hidden="true" />
+      {/* Atmospheric Stage Sanctuary & Volumetric Concert Spotlights */}
+      <EventsAmbientBackground image={flyerUrl} />
 
       <main className="event-detail-container">
         {/* Breadcrumb navigation */}

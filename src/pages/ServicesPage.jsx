@@ -2,11 +2,19 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
 import StudioAmbientBackground from "../components/StudioAmbientBackground";
+import HeavenlySkyBackground from "../components/HeavenlySkyBackground";
 import SharePageButton from "../components/SharePageButton";
 import ImmersiveServicesView from "../components/ImmersiveServicesView";
 import { canonicalUrl } from "../data/siteConfig";
 import { uploadWithProgress, formatBytes } from "../utils/uploadWithProgress";
 import { formatLongDate } from "../utils/dateFormatter";
+import {
+  playEquipSound,
+  playUnequipSound,
+  playLevelUpSound,
+  isSoundEnabled,
+  toggleSoundEnabled,
+} from "../utils/heavenlySound";
 import {
   LoadingSpinner,
   RightArrowIcon,
@@ -19,91 +27,115 @@ import {
 const CONVERSATIONAL_SERVICES = [
   {
     slug: "beat-production",
-    prompt: "I need a bespoke beat",
+    prompt: "I need a custom beat",
     title: "Beat Production",
     category: "PRODUCTION",
+    rarity: "MYTHIC",
+    gameBadge: "👑 MYTHIC BEAT",
+    stats: "+100 VIBES • +90 BASS",
     basePriceNgn: 80000,
     isHourly: false,
     turnaroundDays: 5,
-    tagline: "Custom instrumental tailored to your sonic identity",
-    plainExplanation: "Need an original instrumental? We compose custom melodies, basslines, and drums tailored to your style.",
+    tagline: "Custom beat made just for you and your style",
+    plainExplanation: "Need a fresh beat? We build catchy melodies, hard-hitting bass, and drums made specifically for your song.",
   },
   {
     slug: "beat-mixing",
     prompt: "I already have a beat and need it mixed",
     title: "Beat Mixing",
     category: "MIXING",
+    rarity: "EPIC",
+    gameBadge: "⚡ EPIC MIX",
+    stats: "+95 PUNCH • +100 CLARITY",
     basePriceNgn: 25000,
     isHourly: false,
     turnaroundDays: 3,
-    tagline: "Clarity, punch, and low-end separation for your instrumental",
-    plainExplanation: "Already have a beat? We balance all instruments, tighten the drums, and give your bass punch on all speaker systems.",
+    tagline: "Make your beat sound loud, clean, and punchy on all speakers",
+    plainExplanation: "Already got a beat? We balance every instrument, tighten the drums, and make your bass hit hard anywhere.",
   },
   {
     slug: "voice-recording",
     prompt: "I need to record vocals in the studio",
     title: "Voice Recording",
     category: "RECORDING",
+    rarity: "RARE",
+    gameBadge: "🎙️ STUDIO PASS",
+    stats: "+100 VOCAL PRO • LIVE BOOTH",
     basePriceNgn: 25000,
     isHourly: true,
     hourlyRateNgn: 25000,
     turnaroundDays: 1,
-    tagline: "Professional vocal tracking in a treated studio environment",
-    plainExplanation: "Need studio time to record vocals? You get treated acoustics, high-end condenser mics, and an engineer to direct your takes.",
+    tagline: "Record your vocals in the studio with top microphones and live guidance",
+    plainExplanation: "Come record your vocals in person with pro studio mics, great room sound, and live guidance on every take.",
   },
   {
     slug: "vocal-mixing",
     prompt: "I need my recorded vocals mixed into a track",
     title: "Vocal Mixing",
     category: "MIXING",
+    rarity: "EPIC",
+    gameBadge: "✨ MAGIC VOCALS",
+    stats: "+99 AUTO-TUNE • SMOOTH BLEND",
     basePriceNgn: 35000,
     isHourly: false,
     turnaroundDays: 4,
-    tagline: "Tuning, compression, spatial depth, and seamless beat blend",
-    plainExplanation: "Already recorded your vocals? We tune pitches, remove background noise, add reverb/delay, and blend your voice into the music.",
+    tagline: "Pitch tuning, clean vocals, and a perfect blend with the music",
+    plainExplanation: "Got vocals recorded? We tune the pitch, clean up background noise, add rich reverb, and glue your voice smoothly into the beat.",
   },
   {
     slug: "full-song-mastering",
     prompt: "I need industry-standard mastering",
     title: "Full Song Mastering",
     category: "MASTERING",
+    rarity: "LEGENDARY",
+    gameBadge: "💎 DIAMOND MASTER",
+    stats: "+MAX STREAMING LOUDNESS",
     basePriceNgn: 35000,
     isHourly: false,
     turnaroundDays: 2,
-    tagline: "Loudness, dynamic polish, and translation across streaming platforms",
-    plainExplanation: "Is your song finished? Mastering brings your audio to commercial loudness and polish so it competes on Spotify, Apple Music, and radio.",
+    tagline: "Final polish so your song sounds loud and radio-ready on Spotify & Apple Music",
+    plainExplanation: "Is your mix done? Mastering brings it up to pro streaming volume so it sounds amazing on headphones, cars, and club speakers.",
   },
   {
     slug: "full-song-production",
     prompt: "I want a complete song produced from scratch",
     title: "Full Song Production",
     category: "PRODUCTION",
+    rarity: "GOD TIER",
+    gameBadge: "🌟 GOD TIER SONG",
+    stats: "+ALL-IN-ONE HIT • FULL RIGHTS",
     basePriceNgn: 110000,
     isHourly: false,
     turnaroundDays: 10,
-    tagline: "Full song arrangement, live instruments, and radio-ready production",
-    plainExplanation: "Have an idea, lyrics, or voice memo? We craft the complete musical arrangement, live instrumentation, tracking, and polish from start to finish.",
+    tagline: "Complete song built from scratch with instruments and final polish",
+    plainExplanation: "Have a rough idea or voice memo? We turn it into a complete, finished song with instruments, recording, and pro sound.",
   },
   {
     slug: "instrumentalist-collaboration",
     prompt: "I want to collaborate with an instrumentalist / producer",
     title: "Instrumentalist / Producer Collaboration",
     category: "COLLABORATION",
+    rarity: "RARE",
+    gameBadge: "🎸 HERO GUEST",
+    stats: "+LIVE GUITARS • KEYS & VIBES",
     basePriceNgn: 20000,
     isHourly: false,
     turnaroundDays: 5,
-    tagline: "Live guitars, keys, or joint production input on your tracks",
-    plainExplanation: "Want live guitar riffs, electric piano keys, or collaborative production on your track? We record bespoke instrumental layers for you.",
+    tagline: "Add live guitars, piano, or team up on production",
+    plainExplanation: "Want live guitars, smooth keys, or a producer collaboration? We record custom parts to take your track to the next level.",
   },
   {
     slug: "recording-mixing-client-beat",
     prompt: "I want to record vocals & mix on a beat I already own",
     title: "Recording + Mixing on Client's Beat",
     category: "PRODUCTION",
+    rarity: "EPIC",
+    gameBadge: "🔥 COMBO PACK",
+    stats: "+STUDIO BOOTH • FULL MIX",
     basePriceNgn: null, // Strictly Price Upon Request
     isHourly: false,
     turnaroundDays: 5,
-    tagline: "Integrated vocal tracking and full hybrid mix on your instrumental",
+    tagline: "Record vocals in the studio and get your full song mixed",
     plainExplanation: "Have your own beat file and want to record vocals in studio and get the whole song mixed? We handle tracking and the full mixdown.",
   },
   {
@@ -111,10 +143,13 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I want to feature silachomka as an artist",
     title: "Feature",
     category: "COLLABORATION",
+    rarity: "MYTHIC",
+    gameBadge: "👑 SUMMON ARTIST",
+    stats: "+OFFICIAL VERSE / HOOK",
     basePriceNgn: 50000,
     isHourly: false,
     turnaroundDays: 7,
-    tagline: "Official guest verse or hook collaboration with silachomka",
+    tagline: "Get silachomka on your song for a verse or hook",
     plainExplanation: "Want silachomka to guest verse, sing a hook, or collaborate on your release? Request artist feature availability and collaboration terms.",
   },
 ];
@@ -574,6 +609,54 @@ export default function ServicesPage() {
   const [isInitializingPayment, setIsInitializingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
   const [isImmersive, setIsImmersive] = useState(true);
+
+  // Game sound and XP particle states
+  const [soundOn, setSoundOn] = useState(isSoundEnabled());
+  const [equippedXpSlug, setEquippedXpSlug] = useState(null);
+
+  const handleToggleSound = () => {
+    const nextSound = toggleSoundEnabled();
+    setSoundOn(nextSound);
+  };
+
+  const handleCardEquipToggle = (slug) => {
+    if (selectedSlugs.includes(slug)) {
+      playUnequipSound();
+    } else {
+      playEquipSound();
+      setEquippedXpSlug(slug);
+      setTimeout(() => setEquippedXpSlug(null), 1200);
+    }
+    toggleService(slug);
+  };
+
+  const handleApplyPresetLoadout = (type) => {
+    playLevelUpSound();
+    if (type === "hitmaker") {
+      const combo = ["beat-production", "voice-recording", "vocal-mixing", "full-song-mastering"];
+      combo.forEach((s) => {
+        if (!selectedSlugs.includes(s)) toggleService(s);
+      });
+    } else if (type === "vocals") {
+      const combo = ["voice-recording", "vocal-mixing"];
+      combo.forEach((s) => {
+        if (!selectedSlugs.includes(s)) toggleService(s);
+      });
+    } else if (type === "beat") {
+      const combo = ["beat-production", "beat-mixing"];
+      combo.forEach((s) => {
+        if (!selectedSlugs.includes(s)) toggleService(s);
+      });
+    } else if (type === "clear") {
+      [...selectedSlugs].forEach((s) => toggleService(s));
+    }
+  };
+
+  const handleNextStep = (nextStep) => {
+    playLevelUpSound();
+    setStep(nextStep);
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  };
 
   // Keyboard Escape listener to exit immersive conversation (Stage 37 — Req #2)
   useEffect(() => {
@@ -1065,10 +1148,13 @@ export default function ServicesPage() {
         }}
       />
 
+      {/* Heavenly Celestial Sky with Drifting Clouds, God Rays & Floating Stardust */}
+      <HeavenlySkyBackground />
+
       {/* Atmospheric Starry Background (Reused smiley / beats-image.png via StudioAmbientBackground) */}
       <StudioAmbientBackground image="/beats-image.png" />
 
-      <div style={{ maxWidth: "840px", margin: "0 auto" }}>
+      <div style={{ maxWidth: "860px", margin: "0 auto", position: "relative", zIndex: 1 }}>
         {/* =========================================================
             HEADER / TRACKING / BREADCRUMB INDICATOR
             ========================================================= */}
@@ -1089,9 +1175,13 @@ export default function ServicesPage() {
                 letterSpacing: "0.22em",
                 color: "var(--gold)",
                 margin: 0,
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
               }}
             >
-              chomkaMUSIC™ • CREATIVE SANCTUARY
+              <span>☁️</span>
+              <span>HEAVEN SOUND REALM • SOUND QUEST</span>
             </p>
 
             <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1108,11 +1198,11 @@ export default function ServicesPage() {
                   cursor: "pointer",
                 }}
               >
-                {isImmersive ? "✕ Grid View (Esc)" : "✦ Guided Studio Experience"}
+                {isImmersive ? "✕ Grid View (Esc)" : "✦ Guided Quest Experience"}
               </button>
 
               <SharePageButton
-                title="chomkaMUSIC™ Studio Services | silachomka"
+                title="silachomka • Sound Quest Services"
                 label="Share"
               />
 
@@ -1132,7 +1222,49 @@ export default function ServicesPage() {
                   transition: "all 0.15s ease",
                 }}
               >
-                {showTrackingLookup ? "✕ Close Tracking" : "🔍 Track Existing Booking"}
+                {showTrackingLookup ? "✕ Close Tracking" : "🔍 Track Order"}
+              </button>
+            </div>
+          </div>
+
+          {/* Game HUD Bar (Heavenly RPG Heads-Up Display) */}
+          <div className="game-hud-bar">
+            <div className="game-hud-stat">
+              <span className="game-level-badge">⭐ LEVEL 99 HITMAKER</span>
+              <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 600 }}>
+                QUEST: CRAFT YOUR MASTERPIECE
+              </span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+              <div className="game-coins-counter">
+                <span>🪙</span>
+                <span>
+                  {selectedSlugs.length === 0
+                    ? "₦0"
+                    : totalNgn === null
+                    ? "Custom Quote"
+                    : hasPriceUponRequest
+                    ? `₦${totalNgn.toLocaleString()} + Quote`
+                    : `₦${totalNgn.toLocaleString()}`}
+                </span>
+              </div>
+
+              <div style={{ fontSize: "12px", color: "var(--muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>🎒</span>
+                <span style={{ fontWeight: 700, color: "var(--gold)" }}>{selectedSlugs.length}</span>
+                <span>Equipped</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleToggleSound}
+                className="game-sound-toggle-btn"
+                title={soundOn ? "Mute game sound effects" : "Turn on game sound effects"}
+                aria-label={soundOn ? "Mute sound" : "Unmute sound"}
+              >
+                <span>{soundOn ? "🔊" : "🔇"}</span>
+                <span>Sound: {soundOn ? "ON" : "OFF"}</span>
               </button>
             </div>
           </div>
@@ -1384,6 +1516,22 @@ export default function ServicesPage() {
             }}
           >
             <div style={{ marginBottom: "24px" }}>
+              <div
+                className="eyebrow"
+                style={{
+                  color: "var(--gold)",
+                  letterSpacing: "0.18em",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  marginBottom: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <span>☁️</span>
+                <span>Hey. What are we creating?</span>
+              </div>
               <h1
                 style={{
                   fontFamily: "var(--font-display)",
@@ -1395,18 +1543,216 @@ export default function ServicesPage() {
                   lineHeight: 1.2,
                 }}
               >
-                Which creation do you wish to manifest?
+                What are you looking to create?
               </h1>
               <p
                 style={{
-                  fontSize: "15px",
+                  fontSize: "14px",
                   lineHeight: 1.6,
                   color: "var(--muted)",
                   margin: 0,
                 }}
               >
-                Welcome to the sanctuary. Select the sonic forms you desire to bring forth into reality, and we will sculpt the path to manifestation.
+                Pick your sound skills below to build your track. Click any card to equip it!
               </p>
+            </div>
+
+            {/* Quick Combo Loadout Presets */}
+            <div className="game-loadouts-bar">
+              <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                ⚡ Quick Loadouts:
+              </span>
+              <button
+                type="button"
+                onClick={() => handleApplyPresetLoadout("hitmaker")}
+                className="game-loadout-btn"
+              >
+                🌟 Full Song Hitmaker
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPresetLoadout("vocals")}
+                className="game-loadout-btn"
+              >
+                🎙️ Vocalist Booth
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyPresetLoadout("beat")}
+                className="game-loadout-btn"
+              >
+                🎧 Beat & Mix
+              </button>
+              {selectedSlugs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleApplyPresetLoadout("clear")}
+                  className="game-loadout-btn"
+                  style={{ color: "#f87171", borderColor: "rgba(248, 113, 113, 0.3)" }}
+                >
+                  ✕ Clear All
+                </button>
+              )}
+            </div>
+
+            {/* Heavenly Game Skill Cards Grid */}
+            <div className="game-cards-grid">
+              {activeServiceList.map((svc) => {
+                const isSelected = selectedSlugs.includes(svc.slug);
+                const hours = configurations[svc.slug]?.hours || 2;
+                const calculatedPrice = svc.isHourly
+                  ? hours * (svc.hourlyRateNgn || 25000)
+                  : svc.basePriceNgn;
+                const isHourlyService = svc.isHourly || svc.slug === "voice-recording";
+
+                return (
+                  <div
+                    key={svc.slug}
+                    className={`game-skill-card ${isSelected ? "is-equipped" : ""}`}
+                    onClick={() => handleCardEquipToggle(svc.slug)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleCardEquipToggle(svc.slug);
+                      }
+                    }}
+                  >
+                    {equippedXpSlug === svc.slug && (
+                      <div className="game-xp-feedback">✨ +100 XP EQUIPPED!</div>
+                    )}
+
+                    <div>
+                      <div className="game-card-top-row">
+                        <span className="game-rarity-badge" style={{ color: "var(--gold)" }}>
+                          {svc.gameBadge || "✦ SOUND SKILL"}
+                        </span>
+                        <div
+                          style={{
+                            width: "22px",
+                            height: "22px",
+                            borderRadius: "50%",
+                            border: isSelected ? "2px solid var(--gold)" : "2px solid rgba(255, 255, 255, 0.2)",
+                            background: isSelected ? "var(--gold)" : "transparent",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#050507",
+                            fontSize: "12px",
+                            fontWeight: 800,
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          {isSelected && "✓"}
+                        </div>
+                      </div>
+
+                      <h3 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)", margin: "0 0 6px" }}>
+                        {svc.title}
+                      </h3>
+
+                      <p style={{ fontSize: "12px", color: isSelected ? "var(--text)" : "var(--muted)", margin: 0, lineHeight: 1.45 }}>
+                        {svc.plainExplanation || svc.tagline}
+                      </p>
+
+                      {svc.stats && (
+                        <span className="game-stat-tag">{svc.stats}</span>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: "16px" }}>
+                      {/* Live Duration Stepper right on card for hourly recording */}
+                      {isHourlyService && isSelected && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            background: "rgba(0, 0, 0, 0.6)",
+                            padding: "6px 10px",
+                            borderRadius: "8px",
+                            marginBottom: "12px",
+                            border: "1px solid var(--gold)",
+                          }}
+                        >
+                          <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>Duration:</span>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const cur = configurations[svc.slug]?.hours || 2;
+                                if (cur > 1) updateConfig(svc.slug, "hours", cur - 1);
+                              }}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "var(--gold)",
+                                fontSize: "16px",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                                padding: "0 4px",
+                                lineHeight: 1,
+                              }}
+                              aria-label="Decrease hours"
+                            >
+                              -
+                            </button>
+                            <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", minWidth: "52px", textAlign: "center" }}>
+                              {hours} {hours === 1 ? "hour" : "hours"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const cur = configurations[svc.slug]?.hours || 2;
+                                updateConfig(svc.slug, "hours", cur + 1);
+                              }}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "var(--gold)",
+                                fontSize: "16px",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                                padding: "0 4px",
+                                lineHeight: 1,
+                              }}
+                              aria-label="Increase hours"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                        <span style={{ fontSize: "14px", fontWeight: 800, color: isSelected ? "var(--gold)" : "var(--text)" }}>
+                          {svc.basePriceNgn === null
+                            ? "Price Upon Request"
+                            : `₦${calculatedPrice.toLocaleString()}`}
+                        </span>
+                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                          {svc.turnaroundDays ? `⚡ ~${svc.turnaroundDays}d` : "Live Studio"}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="game-equip-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCardEquipToggle(svc.slug);
+                        }}
+                      >
+                        {isSelected ? "✓ EQUIPPED" : "+ EQUIP POWER"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Expandable / Dropdown Studio Service Selector Trigger (Req #1) */}
@@ -3137,7 +3483,7 @@ export default function ServicesPage() {
                 YOUR SESSION
               </h1>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0 }}>
-                Review your session breakdown before confirming. The total below is authoritative.
+                Review your session breakdown before confirming. Everything is clear, simple, and locked in.
               </p>
             </div>
 
@@ -3619,7 +3965,7 @@ export default function ServicesPage() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "14px" }}>
-                  <span style={{ fontSize: "13px", color: "var(--muted)" }}>Authoritative Total</span>
+                  <span style={{ fontSize: "13px", color: "var(--muted)" }}>Total Session Cost</span>
                   <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--gold)" }}>
                     ₦{Number(confirmedOrder.total_amount_ngn).toLocaleString()}
                   </span>

@@ -1,22 +1,20 @@
 // src/components/ImmersiveServicesView.jsx
-// Stage 37 — Req #2: Immersive Conversational Studio Concierge Experience
+// Stage 37 — Req #2: Gamified Heavenly Studio Quest Experience
 
 import React, { useState } from "react";
 import { formatLongDate } from "../utils/dateFormatter";
 import { CheckIcon, LoadingSpinner, LeftArrowIcon, RightArrowIcon, TrashIcon } from "./Icons";
+import { playEquipSound, playUnequipSound, playLevelUpSound } from "../utils/heavenlySound";
 
 /**
- * Immersive Conversational Studio Concierge Experience (Stage 37 — Req #2)
+ * Gamified Heavenly Studio Concierge Experience
  *
- * Provides a large, glass-translucent, viewport-like conversation surface
- * that guides the user step-by-step:
- * 1. "What do you need?" -> Large interactive decision cards
- * 2. "How much?"        -> Duration stepper & scope
- * 3. "When?"            -> Themed calendar & time slot picker
- * 4. "Anything else?"   -> Neutral-placeholder brief & stems
- * 5. "Review & Pay"     -> Clear summary, deposit details & Paystack checkout
- *
- * Non-takeover: website chrome remains accessible; clear exit button & Escape key listener.
+ * Guides the user step-by-step through simple, plain-English decisions:
+ * 1. "What do you need?" -> Interactive heavenly game skill cards
+ * 2. "How much studio time do you need?" -> Duration stepper & scope
+ * 3. "When should we schedule your session?" -> Themed calendar & time slot picker
+ * 4. "Anything else we should know?" -> Project brief & audio stems
+ * 5. "Review your studio booking" -> Clear summary, deposit details & checkout
  */
 export default function ImmersiveServicesView({
   activeServiceList = [],
@@ -48,7 +46,7 @@ export default function ImmersiveServicesView({
   PublicStudioCalendar,
   onExit,
 }) {
-  // Internal conversation step: 'need' | 'scope' | 'when' | 'brief' | 'review'
+  // Internal quest step: 'need' | 'scope' | 'when' | 'brief' | 'review'
   const [convStep, setConvStep] = useState("need");
 
   const selectedServices = activeServiceList.filter((s) => selectedSlugs.includes(s.slug));
@@ -59,39 +57,52 @@ export default function ImmersiveServicesView({
   const voiceBookingTime =
     configurations[primarySlug]?.bookingTime || configurations["voice-recording"]?.bookingTime || "";
 
+  const handleCardToggle = (slug) => {
+    if (selectedSlugs.includes(slug)) {
+      playUnequipSound();
+    } else {
+      playEquipSound();
+    }
+    toggleService(slug);
+  };
+
+  const goToStep = (nextStep) => {
+    playLevelUpSound();
+    setConvStep(nextStep);
+  };
+
   return (
-    <section className="services-immersive-viewport" aria-label="Immersive Studio Concierge Conversation">
-      {/* Immersive Console Header */}
+    <section className="services-immersive-viewport" aria-label="Heavenly Studio Sound Quest">
+      {/* Immersive Game Console Header */}
       <div className="services-immersive-header">
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <span
-            className="eyebrow"
+            className="game-level-badge"
             style={{
-              letterSpacing: "0.22em",
-              color: "var(--gold)",
+              letterSpacing: "0.12em",
               margin: 0,
               fontSize: "11px",
               fontWeight: 800,
             }}
           >
-            chomkaMUSIC™ • CREATIVE SANCTUARY
+            ☁️ HEAVEN SOUND REALM • LEVEL 99 QUEST
           </span>
           <span style={{ fontSize: "11px", color: "var(--muted)", letterSpacing: "0.06em" }}>
-            {convStep === "need" && "• Step 1: Select Your Services"}
-            {convStep === "scope" && "• Step 2: Duration & Studio Time"}
-            {convStep === "when" && "• Step 3: Session Schedule"}
-            {convStep === "brief" && "• Step 4: Project Vision & Audio Stems"}
-            {convStep === "review" && "• Step 5: Review & Confirmation"}
+            {convStep === "need" && "• Step 1: What do you need?"}
+            {convStep === "scope" && "• Step 2: How much studio time do you need?"}
+            {convStep === "when" && "• Step 3: When should we schedule your session?"}
+            {convStep === "brief" && "• Step 4: Anything else we should know?"}
+            {convStep === "review" && "• Step 5: Review your studio booking"}
           </span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
           <div style={{ textAlign: "right" }}>
             <span style={{ fontSize: "9px", color: "var(--muted)", display: "block", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Total Estimate
+              Total Quest Cost
             </span>
             <span style={{ fontSize: "15px", fontWeight: 800, color: "var(--gold)" }}>
-              {hasPriceUponRequest && totalNgn === 0 ? "Price upon request" : `₦${totalNgn.toLocaleString()}`}
+              {hasPriceUponRequest && totalNgn === 0 ? "Custom Quote" : `₦${totalNgn.toLocaleString()}`}
             </span>
           </div>
 
@@ -107,9 +118,9 @@ export default function ImmersiveServicesView({
               border: "1px solid rgba(255, 255, 255, 0.15)",
               cursor: "pointer",
             }}
-            title="Return to Temple (Escape)"
+            title="Exit Quest View (Escape)"
           >
-            ✕ Return to Temple (Esc)
+            ✕ Close View (Esc)
           </button>
         </div>
       </div>
@@ -117,11 +128,17 @@ export default function ImmersiveServicesView({
       {/* Immersive Console Body */}
       <div className="services-immersive-body">
         {/* ========================================================
-            STEP 1: "WHICH CREATION DO YOU WISH TO MANIFEST?"
+            STEP 1: "WHAT DO YOU NEED?"
             ======================================================== */}
         {convStep === "need" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                <span style={{ fontSize: "18px" }}>☁️</span>
+                <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  STAGE 1 • CHOOSE YOUR SKILLS
+                </span>
+              </div>
               <h2
                 style={{
                   fontFamily: "var(--font-display)",
@@ -132,10 +149,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Which services do you need?
+                What do you need?
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Select the studio services for your project. Every record is crafted with precision, depth, and sonic excellence.
+                Click any power card below to equip it to your track. Mix and match as many as you want!
               </p>
             </div>
 
@@ -149,25 +166,26 @@ export default function ImmersiveServicesView({
             >
               {activeServiceList.map((svc) => {
                 const isSelected = selectedSlugs.includes(svc.slug);
+                const badgeText = svc.gameBadge || "✦ SOUND SKILL";
                 return (
                   <div
                     key={svc.slug}
                     role="button"
                     tabIndex={0}
-                    onClick={() => toggleService(svc.slug)}
-                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && toggleService(svc.slug)}
+                    onClick={() => handleCardToggle(svc.slug)}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleCardToggle(svc.slug)}
                     className={`services-immersive-card ${isSelected ? "is-selected" : ""}`}
                     style={{ minHeight: "150px" }}
                   >
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                        <span style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", color: "var(--gold)", textTransform: "uppercase" }}>
-                          {svc.category || "STUDIO"}
+                        <span className="game-rarity-badge" style={{ color: "var(--gold)" }}>
+                          {badgeText}
                         </span>
                         <div
                           style={{
-                            width: "20px",
-                            height: "20px",
+                            width: "22px",
+                            height: "22px",
                             borderRadius: "50%",
                             border: isSelected ? "2px solid var(--gold)" : "2px solid rgba(255, 255, 255, 0.2)",
                             background: isSelected ? "var(--gold)" : "transparent",
@@ -175,7 +193,7 @@ export default function ImmersiveServicesView({
                             alignItems: "center",
                             justifyContent: "center",
                             color: "#050507",
-                            fontSize: "11px",
+                            fontSize: "12px",
                             fontWeight: 800,
                             transition: "all 0.15s ease",
                           }}
@@ -189,6 +207,11 @@ export default function ImmersiveServicesView({
                       <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0, lineHeight: 1.4 }}>
                         {svc.plainExplanation || svc.description || svc.tagline}
                       </p>
+                      {svc.stats && (
+                        <span className="game-stat-tag" style={{ marginTop: "6px" }}>
+                          {svc.stats}
+                        </span>
+                      )}
                     </div>
 
                     {/* Live Duration Stepper right on card for hourly recording sessions */}
@@ -271,7 +294,7 @@ export default function ImmersiveServicesView({
                           : svc.basePriceNgn ? `₦${Number(svc.basePriceNgn).toLocaleString()}` : "Price upon request"}
                       </span>
                       <span style={{ fontSize: "10px", color: "var(--muted)" }}>
-                        {svc.turnaroundDays ? `~${svc.turnaroundDays}d turnaround` : "Live session"}
+                        {svc.turnaroundDays ? `⚡ ~${svc.turnaroundDays}d` : "Live session"}
                       </span>
                     </div>
                   </div>
@@ -282,12 +305,12 @@ export default function ImmersiveServicesView({
             {/* Navigation Row */}
             <div className="services-immersive-nav">
               <span style={{ fontSize: "13px", color: "var(--muted)" }}>
-                {selectedSlugs.length === 0 ? "Select at least 1 service to continue" : `${selectedSlugs.length} service(s) selected`}
+                {selectedSlugs.length === 0 ? "Select at least 1 skill to continue" : `🎮 ${selectedSlugs.length} skill(s) equipped`}
               </span>
               <button
                 type="button"
                 disabled={selectedSlugs.length === 0}
-                onClick={() => setConvStep("scope")}
+                onClick={() => goToStep("scope")}
                 className="primary-button"
                 style={{
                   height: "44px",
@@ -298,18 +321,24 @@ export default function ImmersiveServicesView({
                   cursor: selectedSlugs.length === 0 ? "not-allowed" : "pointer",
                 }}
               >
-                Next: Duration & Scope →
+                Next: Studio Time & Scope →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 2: "STUDIO DURATION & SCOPE"
+            STEP 2: "HOW MUCH STUDIO TIME DO YOU NEED?"
             ======================================================== */}
         {convStep === "scope" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                <span style={{ fontSize: "18px" }}>⏱️</span>
+                <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  STAGE 2 • SESSION SPECS
+                </span>
+              </div>
               <h2
                 style={{
                   fontFamily: "var(--font-display)",
@@ -320,10 +349,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Studio Duration & Scope
+                How much studio time do you need?
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Configure duration, deliverables, and specific session options for your project.
+                Choose your recording hours or check the details for each selected skill.
               </p>
             </div>
 
@@ -352,7 +381,7 @@ export default function ImmersiveServicesView({
                         {svc.title}
                       </h3>
                       <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
-                        {svc.isHourly ? "Live engineering in the booth. Minimum 1 hour session." : svc.plainExplanation || "Authoritative deliverables included with standard turnaround."}
+                        {svc.isHourly ? "Live engineering in the studio booth. Minimum 1 hour." : svc.plainExplanation || "High-quality master files and stems included."}
                       </p>
                     </div>
 
@@ -404,26 +433,32 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Select Creations
+                ← Back: Skills
               </button>
               <button
                 type="button"
-                onClick={() => setConvStep("when")}
+                onClick={() => goToStep("when")}
                 className="primary-button"
                 style={{ height: "44px", padding: "0 24px", fontSize: "13px", fontWeight: 700 }}
               >
-                Next: Harmonize Calendar & Time →
+                Next: Schedule & Date →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 3: "HARMONIZE TIME & DATE"
+            STEP 3: "WHEN SHOULD WE SCHEDULE YOUR SESSION?"
             ======================================================== */}
         {convStep === "when" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                <span style={{ fontSize: "18px" }}>📅</span>
+                <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  STAGE 3 • CALENDAR & TIME
+                </span>
+              </div>
               <h2
                 style={{
                   fontFamily: "var(--font-display)",
@@ -434,12 +469,12 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Harmonize Time & Date
+                When should we schedule your session?
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
                 {hasVoiceRecording
-                  ? "Choose the exact hour the sanctuary doors open for your studio tracking session."
-                  : "We craft and consecrate remote creations within 3 to 5 business days. You may also specify an auspicious kickoff date below."}
+                  ? "Choose an open date and time slot for your in-studio vocal session."
+                  : "We finish remote mixes and beats in 3 to 5 business days. You can also pick a kickoff date below."}
               </p>
             </div>
 
@@ -479,26 +514,32 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Dimensions & Scope
+                ← Back: Duration
               </button>
               <button
                 type="button"
-                onClick={() => setConvStep("brief")}
+                onClick={() => goToStep("brief")}
                 className="primary-button"
                 style={{ height: "44px", padding: "0 24px", fontSize: "13px", fontWeight: 700 }}
               >
-                Next: Inscribe Your Vision →
+                Next: Player Card & Notes →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 4: "PROJECT VISION & DETAILS"
+            STEP 4: "ANYTHING ELSE WE SHOULD KNOW?"
             ======================================================== */}
         {convStep === "brief" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                <span style={{ fontSize: "18px" }}>📜</span>
+                <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  STAGE 4 • PLAYER CARD & AUDIO
+                </span>
+              </div>
               <h2
                 style={{
                   fontFamily: "var(--font-display)",
@@ -509,22 +550,22 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Project Vision & Details
+                Anything else we should know?
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Provide your contact information, creative notes, reference links, and audio stems for the engineer.
+                Enter your contact info, ideas, reference songs, or audio files for the producer.
               </p>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", marginBottom: "16px", textAlign: "left" }}>
               <div>
                 <label style={{ display: "block", fontSize: "12px", color: "var(--gold)", fontWeight: 700, marginBottom: "6px", textTransform: "uppercase" }}>
-                  Your Name / Studio Name *
+                  Your Name / Artist Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Jane Doe / Studio Client"
+                  placeholder="Jane Doe / Artist Name"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="studio-input"
@@ -539,7 +580,7 @@ export default function ImmersiveServicesView({
                 <input
                   type="email"
                   required
-                  placeholder="client@example.com"
+                  placeholder="artist@example.com"
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
                   className="studio-input"
@@ -565,11 +606,11 @@ export default function ImmersiveServicesView({
 
             <div style={{ textAlign: "left", marginBottom: "20px" }}>
               <label style={{ display: "block", fontSize: "12px", color: "var(--gold)", fontWeight: 700, marginBottom: "6px", textTransform: "uppercase" }}>
-                Project Brief & Notes (Optional)
+                Project Notes (Optional)
               </label>
               <textarea
                 rows={3}
-                placeholder="Share any notes about your vision, release goals, reference tracks, or timeline constraints..."
+                placeholder="Describe your sound, song vision, reference links, or vibe..."
                 value={customerMessage}
                 onChange={(e) => setCustomerMessage(e.target.value)}
                 className="studio-input"
@@ -591,7 +632,7 @@ export default function ImmersiveServicesView({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                 <div>
                   <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text)", display: "block" }}>
-                    Attach Stems, Beats or Reference Audio (Optional)
+                    Attach Beats, Vocals or Reference Audio (Optional)
                   </span>
                   <span style={{ fontSize: "11px", color: "var(--muted)" }}>
                     Supported formats: WAV, MP3, AIFF, ZIP up to 50MB
@@ -657,12 +698,12 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Schedule Calendar
+                ← Back: Schedule
               </button>
               <button
                 type="button"
                 disabled={!customerName.trim() || !customerEmail.trim() || !customerPhone.trim()}
-                onClick={() => setConvStep("review")}
+                onClick={() => goToStep("review")}
                 className="primary-button"
                 style={{
                   height: "44px",
@@ -673,18 +714,24 @@ export default function ImmersiveServicesView({
                   cursor: !customerName.trim() || !customerEmail.trim() || !customerPhone.trim() ? "not-allowed" : "pointer",
                 }}
               >
-                Next: Review & Consecrate →
+                Next: Review & Confirm →
               </button>
             </div>
           </div>
         )}
 
         {/* ========================================================
-            STEP 5: "REVIEW & CONSECRATE"
+            STEP 5: "REVIEW YOUR STUDIO BOOKING"
             ======================================================== */}
         {convStep === "review" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                <span style={{ fontSize: "18px" }}>🏆</span>
+                <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  STAGE 5 • QUEST SUMMARY
+                </span>
+              </div>
               <h2
                 style={{
                   fontFamily: "var(--font-display)",
@@ -695,10 +742,10 @@ export default function ImmersiveServicesView({
                   letterSpacing: "0.02em",
                 }}
               >
-                Review & Consecrate Your Manifestation
+                Review your studio booking
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Every element has aligned. Review your session breakdown before sealing it into the sanctuary ledger.
+                Everything is set. Check your session breakdown below and confirm your order.
               </p>
             </div>
 
@@ -715,7 +762,7 @@ export default function ImmersiveServicesView({
             >
               <div style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.08)", paddingBottom: "14px", marginBottom: "14px" }}>
                 <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: "4px" }}>
-                  Client Contact
+                  Player Contact
                 </span>
                 <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>
                   {customerName} <span style={{ color: "var(--muted)", fontWeight: 400 }}>({customerEmail} · {customerPhone})</span>
@@ -745,7 +792,7 @@ export default function ImmersiveServicesView({
                       <span style={{ color: "var(--muted)" }}>
                         {Array.isArray(svc.deliverables) && svc.deliverables.length > 0
                           ? svc.deliverables.join(", ")
-                          : "High-resolution master files, industry-standard stems & mix passes"}
+                          : "High-resolution master audio files, track stems & clean mix passes"}
                       </span>
                     </div>
                   ))}
@@ -754,7 +801,7 @@ export default function ImmersiveServicesView({
 
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
                 <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                  Itemized Services
+                  Equipped Services
                 </span>
                 {selectedServices.map((svc) => {
                   const price = itemizedPrices[svc.slug];
@@ -784,7 +831,7 @@ export default function ImmersiveServicesView({
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <span style={{ fontSize: "12px", color: "var(--text-h)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    Total Studio Investment
+                    Total Session Cost
                   </span>
                   <span style={{ fontSize: "20px", fontWeight: 800, color: "var(--gold)" }}>
                     {hasPriceUponRequest && totalNgn === 0 ? "Price upon request" : `₦${totalNgn.toLocaleString()}`}
@@ -841,7 +888,7 @@ export default function ImmersiveServicesView({
                 className="studio-pill-btn"
                 style={{ padding: "8px 16px", fontSize: "12px" }}
               >
-                ← Back: Edit Inscription
+                ← Back: Edit Notes
               </button>
 
               <button
@@ -859,7 +906,7 @@ export default function ImmersiveServicesView({
                   color: "#050507",
                 }}
               >
-                {isSubmitting ? "Consecrating Session..." : "Seal & Consecrate Manifestation →"}
+                {isSubmitting ? "Locking in Session..." : "Confirm & Start Project →"}
               </button>
             </div>
           </div>

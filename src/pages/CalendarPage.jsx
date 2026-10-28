@@ -5,6 +5,7 @@ import { fetchCalendarActivities } from "../data/api";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
 import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
+import CalendarAmbientBackground from "../components/CalendarAmbientBackground";
 import { suppressScroll } from "../App";
 import {
   buildCalendarUrl,
@@ -550,6 +551,9 @@ export default function CalendarPage() {
         description="Comprehensive chronological timeline of silachomka music releases, beat drops, gallery moments, and live concert events."
         path="/calendar"
       />
+
+      {/* Atmospheric Abstract Chrono-Celestial Continuum */}
+      <CalendarAmbientBackground />
 
       <main className="calendar-page-container">
         {/* Breadcrumb */}

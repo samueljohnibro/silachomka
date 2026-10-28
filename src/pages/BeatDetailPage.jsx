@@ -26,6 +26,7 @@ import { useCurrency } from "../data/CurrencyContext";
 import BeatArtwork from "../components/BeatArtwork";
 import SeoHead from "../components/SeoHead";
 import ShareLinkBox from "../components/ShareLinkBox";
+import HeavenlySkyBackground from "../components/HeavenlySkyBackground";
 import { getCalendarReturnUrl } from "../utils/calendarNavigation";
 import {
   absoluteUrl,
@@ -475,79 +476,80 @@ export default function BeatDetailPage() {
 
   const LICENSES = {
     basic: {
-      name: "Standard Lease",
+      name: "Basic MP3 License",
       short: "Basic",
+      gameBadge: "✦ COMMON SCROLL ✦",
       price: basicPriceFormatted,
       priceStatus: (
         <>
-          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar
-          Checkout
+          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout
         </>
       ),
       perks: [
-        "✓ High-Quality MP3 Audio File",
-        "✓ Non-Exclusive Commercial Distribution Rights",
+        "✓ High-Quality MP3 file",
+        "✓ Release on Spotify, Apple Music & YouTube",
         "✓ Credit: (Prod. silachomka)",
-        "✓ Instant Delivery via Selar",
+        "✓ Instant download to your email",
       ],
-      btnText: `Purchase Standard Lease (${basicPriceFormatted}) on Selar`,
+      btnText: `Get Basic MP3 License (${basicPriceFormatted})`,
       url: selarBasic?.url || beat?.selar?.basic || beat?.selar_basic_url,
     },
     premium: {
-      name: "Premium WAV",
+      name: "Premium WAV License",
       short: "Premium",
+      gameBadge: "⚡ EPIC TIER ⚡",
       price: premiumPriceFormatted,
       priceStatus: (
         <>
-          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar
-          Checkout
+          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout
         </>
       ),
       perks: [
-        "✓ 24-bit Studio Master WAV + MP3",
-        "✓ Radio, Streaming & Performance Clearance",
-        "✓ High-Definition Mix Delivery",
-        "✓ Instant Delivery via Selar",
+        "✓ Studio Master WAV + MP3 file",
+        "✓ Radio, streaming & performance ready",
+        "✓ Crystal clear studio mix",
+        "✓ Instant download to your email",
       ],
-      btnText: `Purchase Premium WAV (${premiumPriceFormatted}) on Selar`,
+      btnText: `Get Premium WAV (${premiumPriceFormatted})`,
       url: selarPremium?.url || beat?.selar?.premium || beat?.selar_premium_url,
     },
     ultimate: {
-      name: "Trackout Stems",
+      name: "Trackout Stems License",
       short: "Ultimate",
+      gameBadge: "👑 LEGENDARY TIER 👑",
       price: ultimatePriceFormatted,
       priceStatus: (
         <>
-          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar
-          Checkout
+          <LightningIcon size={16} style={{ color: "#FFD700" }} /> Instant Selar Checkout
         </>
       ),
       perks: [
-        "✓ Full Multi-Track Audio Stems (WAV)",
-        "✓ Complete Mix & Arrangement Control",
-        "✓ Music Video & Sync Clearance",
-        "✓ Instant Delivery via Selar",
+        "✓ All multi-track stems (drums, bass, melodies)",
+        "✓ Full mix control for your audio engineer",
+        "✓ Music video & live sync clearance",
+        "✓ Instant download to your email",
       ],
-      btnText: `Purchase Trackout Stems (${ultimatePriceFormatted}) on Selar`,
+      btnText: `Get Trackout Stems (${ultimatePriceFormatted})`,
       url:
         selarUltimate?.url || beat?.selar?.ultimate || beat?.selar_ultimate_url,
     },
     exclusive: {
-      name: "Exclusive Buyout",
+      name: "Exclusive 100% Buyout",
       short: "Exclusive",
+      gameBadge: "🌟 MYTHIC / GOD TIER 🌟",
       price: "Private Studio Negotiation",
       priceStatus: (
         <>
-          <CrownIcon size={15} color="#FFD700" /> 100% Sole Ownership Buyout
+          <CrownIcon size={15} color="#FFD700" /> 100% Sole Ownership
         </>
       ),
       perks: [
-        "✓ 100% Sole Ownership Buyout",
-        "✓ Beat Permanently Removed from Market",
-        "✓ Full Master & Publishing Rights",
-        "✓ Direct Studio Consultation with silachomka",
+        "✓ 100% Sole Ownership — beat is completely yours",
+        "✓ Beat permanently removed from the store",
+        "✓ Full master & publishing ownership",
+        "✓ Direct consultation with silachomka",
       ],
-      btnText: "Submit Exclusive Acquisition Offer",
+      btnText: "Make Exclusive Offer",
       url: "#offer-form",
     },
   };
@@ -674,6 +676,9 @@ export default function BeatDetailPage() {
 
   return (
     <main className="beat-detail-view">
+      {/* Heavenly Celestial Environment with Drifting Clouds, God Rays & Floating Stardust */}
+      <HeavenlySkyBackground />
+
       <SeoHead
         title={`${beat.title} — Beat by ${getBeatProducer(beat)} | silachomka`}
         description={shareDescription}
@@ -945,9 +950,13 @@ export default function BeatDetailPage() {
               fontSize: "15px",
               fontWeight: 700,
               margin: "10px 0 20px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
             }}
           >
-            Studio Production × Custom Licensing
+            <span>🎮</span>
+            <span>Choose Your License Level</span>
           </p>
 
           <ShareLinkBox url={absoluteUrl(`/beats/${beat.id}`)} />
@@ -960,10 +969,7 @@ export default function BeatDetailPage() {
               marginBottom: "30px",
             }}
           >
-            Original studio production composed and engineered by{" "}
-            <strong>silachomka</strong> under chomkaMUSIC™. Suitable for
-            commercial release, sync licensing, broadcast, and artist
-            collaborations.
+            Original instrumental produced by <strong>silachomka</strong>. Choose your license level below to download and drop your song today.
           </p>
 
           {/* ===============================================
@@ -1052,7 +1058,14 @@ export default function BeatDetailPage() {
               key={selectedLicense}
               role="tabpanel"
             >
-              <h3 className="license-type-name">{activeLicenseData.name}</h3>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+                <h3 className="license-type-name" style={{ margin: 0 }}>{activeLicenseData.name}</h3>
+                {activeLicenseData.gameBadge && (
+                  <span className="game-rarity-badge" style={{ color: "var(--gold)" }}>
+                    {activeLicenseData.gameBadge}
+                  </span>
+                )}
+              </div>
 
               <div className="license-price-row">
                 <span className="license-price-value">

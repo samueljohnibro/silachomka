@@ -36,9 +36,9 @@ export function AdminAuthProvider({ children }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data.error || data.message || "Login failed");
+        throw new Error(data?.error || data?.message || "Login failed");
       }
       setUser(data.user);
       return data;

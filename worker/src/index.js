@@ -39,6 +39,21 @@ app.use('*', cors({
   credentials: true,
 }))
 
+// Global Error Handler
+app.onError((err, c) => {
+  console.error('API Error:', err.message || err);
+  const msg = String(err?.message || err || '');
+  if (msg.includes('exceeded the quota') || msg.includes('402')) {
+    return c.json({
+      error: 'Database quota exceeded on Neon. Please log in to https://console.neon.tech to upgrade plan or restore limits.',
+      code: 'DATABASE_QUOTA_EXCEEDED'
+    }, 503);
+  }
+  return c.json({
+    error: err.message || 'Internal Server Error'
+  }, err.status || 500);
+})
+
 // Middleware to inject DB connection
 app.use('*', async (c, next) => {
   if (!c.env.DATABASE_URL) {
