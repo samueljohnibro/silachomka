@@ -2,6 +2,7 @@
 // Stage 37 — Req #8: Universal Share Page Component
 
 import React, { useState } from "react";
+import { SITE_ORIGIN } from "../data/siteConfig";
 
 /**
  * Universal Share Page Button
@@ -26,7 +27,7 @@ export default function SharePageButton({
       e.stopPropagation();
     }
 
-    const shareUrl = url || (typeof window !== "undefined" ? window.location.href : "https://silachomka.vercel.app");
+    const shareUrl = url || (typeof window !== "undefined" ? window.location.href : SITE_ORIGIN);
     const shareTitle = title || (typeof document !== "undefined" ? document.title : "silachomka");
     const shareText = text || "Explore silachomka — music, beats, visual archive and studio services.";
 

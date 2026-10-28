@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import ShareLinkBox from "./ShareLinkBox";
 import SocialPostEmbed from "./SocialPostEmbed";
 import GalleryVideoPlayer from "./GalleryVideoPlayer";
-import { absoluteUrl, DEFAULT_SOURCE } from "../data/credits";
+import { absoluteUrl, canonicalUrl, DEFAULT_SOURCE } from "../data/credits";
 import { formatGalleryDate } from "../utils/dateFormatter";
 
 function isVideoSrc(src, slideObj, post, slideCount = 1) {
@@ -630,14 +630,14 @@ export default function GalleryPostModal({
             "@graph": [
               {
                 "@type": "ImageObject",
-                "@id": `https://silachomka.vercel.app/gallery/${post.id || post.slug}#image`,
+                "@id": `${canonicalUrl(`/gallery/${post.id || post.slug}`)}#image`,
                 name: post.title || post.caption || "silachomka visual archive",
                 description: post.caption || post.title || "Visual archive post by silachomka",
                 contentUrl: absoluteUrl(currentSlideSrc || post.asset || post.src || "/og-image.png"),
                 author: {
                   "@type": "Person",
                   name: "silachomka",
-                  url: "https://silachomka.vercel.app",
+                  url: canonicalUrl("/"),
                 },
                 ...(post.location ? {
                   contentLocation: {
@@ -653,19 +653,19 @@ export default function GalleryPostModal({
                     "@type": "ListItem",
                     position: 1,
                     name: "Home",
-                    item: "https://silachomka.vercel.app",
+                    item: canonicalUrl("/"),
                   },
                   {
                     "@type": "ListItem",
                     position: 2,
                     name: "Gallery",
-                    item: "https://silachomka.vercel.app/#gallery",
+                    item: canonicalUrl("/#gallery"),
                   },
                   {
                     "@type": "ListItem",
                     position: 3,
                     name: post.title || "Archive Post",
-                    item: `https://silachomka.vercel.app/gallery/${post.id || post.slug}`,
+                    item: canonicalUrl(`/gallery/${post.id || post.slug}`),
                   },
                 ],
               },
@@ -743,14 +743,14 @@ export default function GalleryPostModal({
             "@graph": [
               {
                 "@type": "ImageObject",
-                "@id": `https://silachomka.vercel.app/gallery/${post.id || post.slug}#image`,
+                "@id": `${canonicalUrl(`/gallery/${post.id || post.slug}`)}#image`,
                 name: post.title || post.caption || "silachomka visual archive",
                 description: post.caption || post.title || "Visual archive post by silachomka",
                 contentUrl: absoluteUrl(currentSlideSrc || post.asset || post.src || "/og-image.png"),
                 author: {
                   "@type": "Person",
                   name: "silachomka",
-                  url: "https://silachomka.vercel.app",
+                  url: canonicalUrl("/"),
                 },
                 ...(post.location ? {
                   contentLocation: {
@@ -766,19 +766,19 @@ export default function GalleryPostModal({
                     "@type": "ListItem",
                     position: 1,
                     name: "Home",
-                    item: "https://silachomka.vercel.app",
+                    item: canonicalUrl("/"),
                   },
                   {
                     "@type": "ListItem",
                     position: 2,
                     name: "Gallery",
-                    item: "https://silachomka.vercel.app/#gallery",
+                    item: canonicalUrl("/#gallery"),
                   },
                   {
                     "@type": "ListItem",
                     position: 3,
                     name: post.title || "Archive Post",
-                    item: `https://silachomka.vercel.app/gallery/${post.id || post.slug}`,
+                    item: canonicalUrl(`/gallery/${post.id || post.slug}`),
                   },
                 ],
               },

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
 import { useCookieConsent } from "../data/CookieConsentContext";
+import { SITE_ORIGIN } from "../data/siteConfig";
 
 export function PrivacyPolicyPage() {
   const { openCookieSettings } = useCookieConsent();
@@ -19,7 +20,7 @@ export function PrivacyPolicyPage() {
 
         <h2>1. Overview</h2>
         <p>
-          This Privacy Policy explains how <strong>silachomka</strong>, <strong>chomkaMUSIC™</strong>, and <strong>Chomka Nation</strong> (&ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) collect, use, and safeguard information when you visit <code>silachomka.vercel.app</code>, stream music or beat previews, view gallery media, or subscribe to artist updates.
+          This Privacy Policy explains how <strong>silachomka</strong>, <strong>chomkaMUSIC™</strong>, and <strong>Chomka Nation</strong> (&ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) collect, use, and safeguard information when you visit <code>{SITE_ORIGIN.replace(/^https?:\/\//, "")}</code>, stream music or beat previews, view gallery media, or subscribe to artist updates.
         </p>
 
         <h2>2. Information We Collect</h2>

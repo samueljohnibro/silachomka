@@ -14,12 +14,18 @@ const outputDirectory = path.join(rootDirectory, "dist");
 
 const SOCIAL_METADATA_PATTERN =
   /<!-- SOCIAL_METADATA:START -->[\s\S]*?<!-- SOCIAL_METADATA:END -->/;
+const GOOGLE_VERIFICATION_PATTERN =
+  /<!-- GOOGLE_SITE_VERIFICATION:START -->[\s\S]*?<!-- GOOGLE_SITE_VERIFICATION:END -->/;
 const DEFAULT_SITE_URL = "https://silachomka.vercel.app";
 const WORKER_API_ORIGIN = "https://silachomka-api.samueljohnibrotech.workers.dev";
 const DEFAULT_SOCIAL_IMAGE = "/og-image.png";
 const MAX_DESCRIPTION_LENGTH = 280;
 
 function getSiteUrl() {
+  const envUrl = process.env.VITE_SITE_ORIGIN || process.env.SITE_ORIGIN;
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
   return DEFAULT_SITE_URL;
 }
 
@@ -548,7 +554,21 @@ async function generateSocialPages() {
   const canonicalReleases = validEntries(mergedReleases, "slug", true);
 
   const baseHtmlPath = path.join(outputDirectory, "index.html");
-  const baseHtml = await readFile(baseHtmlPath, "utf8");
+  let baseHtml = await readFile(baseHtmlPath, "utf8");
+
+  const verificationToken = (
+    process.env.VITE_GOOGLE_SITE_VERIFICATION ||
+    process.env.GOOGLE_SITE_VERIFICATION ||
+    ""
+  ).trim();
+
+  if (verificationToken && GOOGLE_VERIFICATION_PATTERN.test(baseHtml)) {
+    baseHtml = baseHtml.replace(
+      GOOGLE_VERIFICATION_PATTERN,
+      `<!-- GOOGLE_SITE_VERIFICATION:START -->\n    <meta name="google-site-verification" content="${escapeHtml(verificationToken)}" />\n    <!-- GOOGLE_SITE_VERIFICATION:END -->`
+    );
+  }
+
   const homeHtml = withSocialMetadata(
     baseHtml,
     createHomeMetadata(),
@@ -788,8 +808,23 @@ async function generateSocialPages() {
   await writeFile(sitemapDistPath, sitemapXml, "utf8");
   await writeFile(sitemapPublicPath, sitemapXml, "utf8");
 
+  const robotsTxt = `User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/admin/
+Disallow: /api/services/upload
+Disallow: /api/services/files/
+
+Sitemap: ${siteUrl}/sitemap.xml
+`;
+  const robotsDistPath = path.join(outputDirectory, "robots.txt");
+  const robotsPublicPath = path.join(rootDirectory, "public", "robots.txt");
+  await writeFile(robotsDistPath, robotsTxt, "utf8");
+  await writeFile(robotsPublicPath, robotsTxt, "utf8");
+
   console.log(
-    `Generated crawler-visible metadata and XML Sitemap for 1 beat hub, ${canonicalBeats.length} beats, ${canonicalGallery.length} gallery posts, and ${canonicalReleases.length} releases.`
+    `Generated crawler-visible metadata, XML Sitemap, and robots.txt for 1 beat hub, ${canonicalBeats.length} beats, ${canonicalGallery.length} gallery posts, and ${canonicalReleases.length} releases.`
   );
 
   if (fallbackImageRoutes.length > 0) {

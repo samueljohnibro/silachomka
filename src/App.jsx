@@ -60,6 +60,7 @@ import GalleryPostPage from "./pages/GalleryPostPage";
 import SeoHead from "./components/SeoHead";
 import SharePageButton from "./components/SharePageButton";
 import { formatGalleryDate } from "./utils/dateFormatter";
+import { SITE_ORIGIN, canonicalUrl } from "./data/siteConfig";
 
 import "./App.css";
 
@@ -2136,7 +2137,7 @@ function HomePage() {
     "@graph": [
       {
         "@type": "Person",
-        "@id": "https://silachomka.vercel.app/#person",
+        "@id": canonicalUrl("/#person"),
         name: "silachomka",
         alternateName: [
           "Samuel John-Ibro",
@@ -2144,8 +2145,8 @@ function HomePage() {
           "Silachomka",
           "Sila"
         ],
-        url: "https://silachomka.vercel.app",
-        image: "https://silachomka.vercel.app/og-image.png",
+        url: canonicalUrl("/"),
+        image: canonicalUrl("/og-image.png"),
         sameAs: [
           "https://www.instagram.com/silachomka/?__pwa=1",
           "https://x.com/silachomka",
@@ -2158,15 +2159,15 @@ function HomePage() {
       },
       {
         "@type": "MusicGroup",
-        "@id": "https://silachomka.vercel.app/#musicgroup",
+        "@id": canonicalUrl("/#musicgroup"),
         name: "chomkaMUSIC™",
-        url: "https://silachomka.vercel.app",
-        logo: "https://silachomka.vercel.app/silachomka.com-logo.png",
+        url: canonicalUrl("/"),
+        logo: canonicalUrl("/silachomka.com-logo.png"),
       },
       {
         "@type": "WebSite",
-        "@id": "https://silachomka.vercel.app/#website",
-        url: "https://silachomka.vercel.app",
+        "@id": canonicalUrl("/#website"),
+        url: canonicalUrl("/"),
         name: "silachomka",
         description:
           "Official artist website of silachomka (Samuel Silachomka John-Ibro). Music releases, original studio beats, visual archive, and chomkaMUSIC™ Studio audio engineering services.",
@@ -2178,7 +2179,7 @@ function HomePage() {
             "@type": "ListItem",
             position: 1,
             name: "Home",
-            item: "https://silachomka.vercel.app",
+            item: canonicalUrl("/"),
           },
         ],
       },

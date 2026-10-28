@@ -11,6 +11,8 @@ import { useCookieConsent } from "../data/CookieConsentContext";
 import { normalizeGalleryPost } from "../data/api";
 import { formatGalleryDate } from "../utils/dateFormatter";
 import {
+  SITE_ORIGIN,
+  canonicalUrl,
   absoluteUrl,
   getReleaseSourceString,
   getTrackProducerString,
@@ -431,20 +433,20 @@ export default function ReleasePage({ release: propRelease }) {
     "@type": "MusicAlbum",
     name: release.title,
     description: socialShareDescription,
-    url: currentUrl,
+    url: canonicalUrl(`/release/${release.slug}`),
     image: release.cover?.startsWith("http")
       ? release.cover
-      : `https://silachomka.vercel.app${release.cover || "/og-image.png"}`,
+      : canonicalUrl(release.cover || "/og-image.png"),
     datePublished: release.date,
     byArtist: {
       "@type": "Person",
       name: "silachomka",
-      url: "https://silachomka.vercel.app",
+      url: canonicalUrl("/"),
     },
     publisher: {
       "@type": "Organization",
       name: "chomkaMUSIC™",
-      url: "https://silachomka.vercel.app",
+      url: canonicalUrl("/"),
     },
     numTracks: tracks.length,
     track: tracks.map((t, idx) => ({

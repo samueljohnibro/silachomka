@@ -1,6 +1,8 @@
+import { DEFAULT_SITE_ORIGIN, SITE_ORIGIN, canonicalUrl, absoluteUrl } from "./siteConfig.js";
+
 export const DEFAULT_PRODUCER = "silachomka";
 export const DEFAULT_SOURCE = "chomkaMUSIC™";
-export const SITE_ORIGIN = "https://silachomka.vercel.app";
+export { DEFAULT_SITE_ORIGIN, SITE_ORIGIN, canonicalUrl, absoluteUrl };
 
 export function formatCreditsList(items, defaultValue) {
   if (!items || items.length === 0) return defaultValue;
@@ -115,12 +117,4 @@ export function getBeatSource(beat) {
   if (Array.isArray(beat?.sources) && beat.sources.length > 0) return formatCreditsList(beat.sources, DEFAULT_SOURCE);
   const value = typeof beat?.source === "string" ? beat.source.trim() : "";
   return value || DEFAULT_SOURCE;
-}
-
-export function absoluteUrl(pathname = "/") {
-  const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return `${window.location.origin}${path}`;
-  }
-  return `${SITE_ORIGIN}${path}`;
 }

@@ -6,6 +6,7 @@ import { LoadingSpinner } from "../components/Icons";
 import { useChomkaStore } from "../data/store";
 import { normalizeGalleryPost } from "../data/api";
 import { DEFAULT_SOURCE } from "../data/credits";
+import { canonicalUrl } from "../data/siteConfig";
 
 function rasterImage(post) {
   const primary = post?.src || post?.asset;
@@ -112,18 +113,18 @@ export default function GalleryPostPage() {
     "@type": "ImageObject",
     name: post.title || post.caption || "Visual Archive Post",
     description: (post.caption || `${post.title} — a visual archive post by silachomka.`).trim(),
-    contentUrl: postImage.startsWith("http") ? postImage : `https://silachomka.vercel.app${postImage}`,
-    thumbnailUrl: postImage.startsWith("http") ? postImage : `https://silachomka.vercel.app${postImage}`,
+    contentUrl: postImage.startsWith("http") ? postImage : canonicalUrl(postImage),
+    thumbnailUrl: postImage.startsWith("http") ? postImage : canonicalUrl(postImage),
     datePublished: post.date || post.post_date,
     author: {
       "@type": "Person",
       name: "silachomka",
-      url: "https://silachomka.vercel.app",
+      url: canonicalUrl("/"),
     },
     publisher: {
       "@type": "Organization",
       name: "chomkaMUSIC™",
-      url: "https://silachomka.vercel.app",
+      url: canonicalUrl("/"),
     },
   };
 

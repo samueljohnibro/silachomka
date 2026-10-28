@@ -40,6 +40,7 @@ import BeatHeroSlideshow from "../components/BeatHeroSlideshow";
 import ExclusiveBeatModal from "../components/ExclusiveBeatModal";
 import SeoHead from "../components/SeoHead";
 import { getBeatProducer, getBeatSource } from "../data/credits";
+import { SITE_ORIGIN, canonicalUrl } from "../data/siteConfig";
 
 const PREVIEW_LENGTH = 45;
 
@@ -108,7 +109,7 @@ const BeatCard = memo(function BeatCard({
     async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const shareUrl = `https://silachomka.vercel.app/beats/${beat.id}`;
+      const shareUrl = canonicalUrl(`/beats/${beat.id}`);
       try {
         const isMobile = /Android|iPhone|iPad|iPod/i.test(
           navigator.userAgent || ""
@@ -1718,9 +1719,9 @@ export default function BeatsPage() {
     "@graph": [
       {
         "@type": "MusicGroup",
-        "@id": "https://silachomka.vercel.app/#musicgroup",
+        "@id": canonicalUrl("/#musicgroup"),
         name: "chomkaMUSIC™",
-        url: "https://silachomka.vercel.app",
+        url: canonicalUrl("/"),
       },
       {
         "@type": "BreadcrumbList",
@@ -1729,13 +1730,13 @@ export default function BeatsPage() {
             "@type": "ListItem",
             position: 1,
             name: "Home",
-            item: "https://silachomka.vercel.app",
+            item: canonicalUrl("/"),
           },
           {
             "@type": "ListItem",
             position: 2,
             name: "Beats",
-            item: "https://silachomka.vercel.app/beats",
+            item: canonicalUrl("/beats"),
           },
         ],
       },

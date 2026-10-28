@@ -28,6 +28,7 @@ import SeoHead from "../components/SeoHead";
 import ShareLinkBox from "../components/ShareLinkBox";
 import {
   absoluteUrl,
+  canonicalUrl,
   getBeatProducer,
   getBeatSource,
 } from "../data/credits";
@@ -618,19 +619,19 @@ export default function BeatDetailPage() {
     "@graph": [
       {
         "@type": "MusicRecording",
-        "@id": `https://silachomka.vercel.app/beats/${beat.id}#recording`,
+        "@id": `${canonicalUrl(`/beats/${beat.id}`)}#recording`,
         name: beat.title,
-        url: `https://silachomka.vercel.app/beats/${beat.id}`,
-        image: shareImage ? absoluteUrl(shareImage) : "https://silachomka.vercel.app/beats-image.png",
+        url: canonicalUrl(`/beats/${beat.id}`),
+        image: shareImage ? absoluteUrl(shareImage) : canonicalUrl("/beats-image.png"),
         byArtist: {
           "@type": "Person",
           name: "silachomka",
-          url: "https://silachomka.vercel.app",
+          url: canonicalUrl("/"),
         },
         producer: {
           "@type": "MusicGroup",
           name: "chomkaMUSIC™",
-          url: "https://silachomka.vercel.app",
+          url: canonicalUrl("/"),
         },
       },
       {
@@ -640,19 +641,19 @@ export default function BeatDetailPage() {
             "@type": "ListItem",
             position: 1,
             name: "Home",
-            item: "https://silachomka.vercel.app",
+            item: canonicalUrl("/"),
           },
           {
             "@type": "ListItem",
             position: 2,
             name: "Beats",
-            item: "https://silachomka.vercel.app/beats",
+            item: canonicalUrl("/beats"),
           },
           {
             "@type": "ListItem",
             position: 3,
             name: beat.title,
-            item: `https://silachomka.vercel.app/beats/${beat.id}`,
+            item: canonicalUrl(`/beats/${beat.id}`),
           },
         ],
       },

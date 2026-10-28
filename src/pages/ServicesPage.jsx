@@ -4,6 +4,7 @@ import SeoHead from "../components/SeoHead";
 import StudioAmbientBackground from "../components/StudioAmbientBackground";
 import SharePageButton from "../components/SharePageButton";
 import ImmersiveServicesView from "../components/ImmersiveServicesView";
+import { canonicalUrl } from "../data/siteConfig";
 import { uploadWithProgress, formatBytes } from "../utils/uploadWithProgress";
 import { formatLongDate } from "../utils/dateFormatter";
 import {
@@ -1042,9 +1043,9 @@ export default function ServicesPage() {
           provider: {
             "@type": "Person",
             name: "silachomka",
-            url: "https://silachomka.vercel.app",
+            url: canonicalUrl("/"),
           },
-          url: "https://silachomka.vercel.app/services",
+          url: canonicalUrl("/services"),
           description:
             "Professional music production, vocal recording, mixing, mastering, and custom beat licensing by silachomka at Chomka Studio.",
           hasOfferCatalog: {

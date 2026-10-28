@@ -277,6 +277,7 @@ app.post('/api/subscribe', async (c) => {
 app.get('/api/unsubscribe', async (c) => {
   const sql = c.get('sql')
   const token = c.req.query('token')
+  const siteOrigin = c.env?.PUBLIC_ORIGIN || 'https://silachomka.vercel.app'
 
   if (!token) {
     return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;max-width:400px;padding:24px;border:1px solid #333;border-radius:8px;"><h2>Invalid Unsubscribe Link</h2><p style="color:#aaa;">Missing unsubscribe token.</p></div></body></html>', 400)
@@ -294,7 +295,7 @@ app.get('/api/unsubscribe', async (c) => {
       return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;max-width:400px;padding:24px;border:1px solid #333;border-radius:8px;"><h2>Subscription Not Found</h2><p style="color:#aaa;">The requested subscription link was not found or has already expired.</p></div></body></html>', 404)
     }
 
-    return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;max-width:400px;padding:24px;border:1px solid #dfc27d;border-radius:8px;"><h2 style="color:#dfc27d;">Unsubscribed Successfully</h2><p style="color:#ddd;">You have been unsubscribed from Silachomka updates.</p><p style="color:#777;font-size:12px;">Email: ' + result[0].email + '</p><a href="https://silachomka.vercel.app" style="color:#dfc27d;text-decoration:none;font-weight:bold;">← Return to Silachomka</a></div></body></html>')
+    return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;max-width:400px;padding:24px;border:1px solid #dfc27d;border-radius:8px;"><h2 style="color:#dfc27d;">Unsubscribed Successfully</h2><p style="color:#ddd;">You have been unsubscribed from Silachomka updates.</p><p style="color:#777;font-size:12px;">Email: ' + result[0].email + '</p><a href="' + siteOrigin + '" style="color:#dfc27d;text-decoration:none;font-weight:bold;">← Return to Silachomka</a></div></body></html>')
   } catch (err) {
     return c.html('<html><body style="font-family:sans-serif;background:#0d0d11;color:#fff;padding:40px;"><h2>Internal Server Error</h2></body></html>', 500)
   }
