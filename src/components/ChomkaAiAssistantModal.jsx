@@ -250,10 +250,10 @@ export default function ChomkaAiAssistantModal() {
   }, []);
 
   const store = useChomkaStore();
-  const releases = Array.isArray(store?.releases) ? store.releases : [];
-  const beats = Array.isArray(store?.beats) ? store.beats : [];
-  const gallery = Array.isArray(store?.gallery) ? store.gallery : [];
-  const events = Array.isArray(store?.events) ? store.events : [];
+  const releases = useMemo(() => (Array.isArray(store?.releases) ? store.releases : []), [store]);
+  const beats = useMemo(() => (Array.isArray(store?.beats) ? store.beats : []), [store]);
+  const gallery = useMemo(() => (Array.isArray(store?.gallery) ? store.gallery : []), [store]);
+  const events = useMemo(() => (Array.isArray(store?.events) ? store.events : []), [store]);
 
   const currencyCtx = useCurrency();
   const currency = currencyCtx?.currency || "NGN";

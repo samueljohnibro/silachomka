@@ -1,11 +1,19 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import { fetchCalendarActivities } from "../data/api";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
 import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
 import { canonicalUrl } from "../data/siteConfig";
+import { suppressScroll } from "../App";
+import {
+  buildCalendarUrl,
+  saveCalendarState,
+  getSavedCalendarState,
+  formatMonthYearParam,
+  parseMonthYearParam,
+} from "../utils/calendarNavigation";
 
 const TYPE_CONFIG = {
   event: {
@@ -67,14 +75,83 @@ export default function CalendarPage() {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeFilter, setActiveFilter] = useState("ALL"); // ALL | event | release | beat | gallery
-  const [viewMode, setViewMode] = useState("GRID"); // GRID | TIMELINE
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
-  // Month navigation for GRID view
-  const [currentDate, setCurrentDate] = useState(() => new Date());
+  // Load any previously saved session calendar state as fallback
+  const savedState = useMemo(() => {
+    return getSavedCalendarState() || {};
+  }, []);
+
+  // Determine initial view mode: query param > location.state > savedState > "GRID"
+  const initialViewMode = useMemo(() => {
+    const fromParam = searchParams.get("view");
+    if (fromParam) {
+      return fromParam.toUpperCase() === "TIMELINE" ? "TIMELINE" : "GRID";
+    }
+    if (location.state?.viewMode) return location.state.viewMode;
+    if (savedState.viewMode) return savedState.viewMode;
+    return "GRID";
+  }, [searchParams, location.state, savedState]);
+
+  // Determine initial filter: query param > location.state > savedState > "ALL"
+  const initialFilter = useMemo(() => {
+    const fromParam = searchParams.get("filter");
+    const valid = ["ALL", "event", "release", "beat", "gallery"];
+    if (fromParam && valid.includes(fromParam)) return fromParam;
+    if (location.state?.activeFilter && valid.includes(location.state.activeFilter)) return location.state.activeFilter;
+    if (savedState.activeFilter && valid.includes(savedState.activeFilter)) return savedState.activeFilter;
+    return "ALL";
+  }, [searchParams, location.state, savedState]);
+
+  // Determine initial search: query param > location.state > savedState > ""
+  const initialSearch = useMemo(() => {
+    return searchParams.get("q") ?? location.state?.searchQuery ?? savedState.searchQuery ?? "";
+  }, [searchParams, location.state, savedState]);
+
+  // Determine initial date & month
+  const initialDateAndMonth = useMemo(() => {
+    const dateParam = searchParams.get("date") || location.state?.selectedDateStr || savedState.selectedDateStr || null;
+    const monthParam = searchParams.get("month");
+
+    let targetDate = new Date();
+    if (monthParam) {
+      const parsed = parseMonthYearParam(monthParam);
+      if (parsed) targetDate = parsed;
+    } else if (dateParam) {
+      const parsed = new Date(dateParam);
+      if (!isNaN(parsed.getTime())) {
+        targetDate = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+      }
+    } else if (savedState.currentDate) {
+      const parsed = new Date(savedState.currentDate);
+      if (!isNaN(parsed.getTime())) {
+        targetDate = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+      }
+    }
+
+    return {
+      currentDate: targetDate,
+      selectedDateStr: dateParam,
+    };
+  }, [searchParams, location.state, savedState]);
+
+  const [activeFilter, setActiveFilter] = useState(initialFilter);
+  const [viewMode, setViewMode] = useState(initialViewMode);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [currentDate, setCurrentDate] = useState(initialDateAndMonth.currentDate);
   const [selectedDayActivities, setSelectedDayActivities] = useState(null);
-  const [selectedDateStr, setSelectedDateStr] = useState(null);
+  const [selectedDateStr, setSelectedDateStr] = useState(initialDateAndMonth.selectedDateStr);
+
+  // Target scroll position and targeted activity ID for restoration
+  const targetScrollYRef = useRef(
+    searchParams.get("scrollY") ? parseInt(searchParams.get("scrollY"), 10) :
+    location.state?.scrollY !== undefined ? location.state.scrollY :
+    savedState.scrollY !== undefined ? savedState.scrollY : null
+  );
+  const targetActIdRef = useRef(
+    searchParams.get("actId") || location.state?.actId || savedState.actId || null
+  );
 
   // Fetch activities from API, falling back to local store
   useEffect(() => {
@@ -245,37 +322,200 @@ export default function CalendarPage() {
     return days;
   }, [currentDate, activitiesByDate]);
 
+  // Synchronize state with URL search parameters
+  const syncParams = useCallback((newOverrides = {}) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const effective = {
+        view: viewMode === "TIMELINE" ? "timeline" : null,
+        filter: activeFilter !== "ALL" ? activeFilter : null,
+        q: searchQuery.trim() ? searchQuery.trim() : null,
+        month: formatMonthYearParam(currentDate),
+        date: selectedDateStr || null,
+        ...newOverrides,
+      };
+
+      Object.entries(effective).forEach(([k, v]) => {
+        if (v === null || v === undefined || v === "" || (k === "view" && v === "grid") || (k === "filter" && v === "ALL")) {
+          next.delete(k);
+        } else {
+          next.set(k, v);
+        }
+      });
+      return next;
+    }, { replace: true });
+  }, [viewMode, activeFilter, searchQuery, currentDate, selectedDateStr, setSearchParams]);
+
+  // Save current state in sessionStorage for session persistence
+  useEffect(() => {
+    saveCalendarState({
+      viewMode,
+      activeFilter,
+      searchQuery,
+      currentDate: currentDate.toISOString(),
+      selectedDateStr,
+      scrollY: typeof window !== "undefined" ? window.scrollY : 0,
+      returnUrl: buildCalendarUrl({
+        viewMode,
+        activeFilter,
+        searchQuery,
+        currentDate,
+        selectedDateStr,
+        scrollY: typeof window !== "undefined" ? window.scrollY : 0,
+      }),
+    });
+  }, [viewMode, activeFilter, searchQuery, currentDate, selectedDateStr]);
+
+  // Automatically populate selectedDayActivities when activities load or selectedDateStr changes
+  useEffect(() => {
+    if (selectedDateStr) {
+      const acts = activitiesByDate[selectedDateStr] || [];
+      setSelectedDayActivities(acts);
+    } else {
+      setSelectedDayActivities(null);
+    }
+  }, [selectedDateStr, activitiesByDate]);
+
+  // Restore scroll position or target element after activities have loaded
+  useEffect(() => {
+    if (!loading) {
+      const targetScrollY = targetScrollYRef.current;
+      const targetActId = targetActIdRef.current;
+
+      if (typeof targetScrollY === "number" && targetScrollY > 0) {
+        suppressScroll();
+        window.scrollTo({ top: targetScrollY, behavior: "instant" });
+        const timer1 = setTimeout(() => {
+          window.scrollTo({ top: targetScrollY, behavior: "instant" });
+        }, 60);
+        const timer2 = setTimeout(() => {
+          window.scrollTo({ top: targetScrollY, behavior: "instant" });
+          targetScrollYRef.current = null;
+        }, 200);
+        return () => {
+          clearTimeout(timer1);
+          clearTimeout(timer2);
+        };
+      } else if (targetActId) {
+        suppressScroll();
+        const el = document.getElementById(`cal-act-${targetActId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        targetActIdRef.current = null;
+      }
+    }
+  }, [loading]);
+
   // Month navigation handlers
   const handlePrevMonth = () => {
-    setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+    setCurrentDate(nextDate);
     setSelectedDayActivities(null);
     setSelectedDateStr(null);
+    syncParams({
+      month: formatMonthYearParam(nextDate),
+      date: null,
+    });
   };
 
   const handleNextMonth = () => {
-    setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    setCurrentDate(nextDate);
     setSelectedDayActivities(null);
     setSelectedDateStr(null);
+    syncParams({
+      month: formatMonthYearParam(nextDate),
+      date: null,
+    });
   };
 
   const handleToday = () => {
     const now = new Date();
     setCurrentDate(now);
     const nowStr = now.toISOString().slice(0, 10);
-    if (activitiesByDate[nowStr]) {
-      setSelectedDayActivities(activitiesByDate[nowStr]);
-      setSelectedDateStr(nowStr);
-    } else {
-      setSelectedDayActivities(null);
-      setSelectedDateStr(null);
-    }
+    const acts = activitiesByDate[nowStr] || null;
+    setSelectedDayActivities(acts);
+    setSelectedDateStr(acts ? nowStr : null);
+    syncParams({
+      month: formatMonthYearParam(now),
+      date: acts ? nowStr : null,
+    });
   };
 
   const handleDayClick = (day) => {
     if (day.empty) return;
     setSelectedDateStr(day.dateKey);
     setSelectedDayActivities(day.activities);
+    syncParams({
+      date: day.dateKey,
+    });
   };
+
+  const handleFilterChange = (newFilter) => {
+    setActiveFilter(newFilter);
+    syncParams({ filter: newFilter });
+  };
+
+  const handleViewModeChange = (newMode) => {
+    setViewMode(newMode);
+    syncParams({ view: newMode === "TIMELINE" ? "timeline" : null });
+  };
+
+  const handleSearchChange = (q) => {
+    setSearchQuery(q);
+    syncParams({ q: q.trim() || null });
+  };
+
+  const handleActivityClick = useCallback((act) => {
+    const currentScroll = typeof window !== "undefined" ? window.scrollY : 0;
+    const returnUrl = buildCalendarUrl({
+      viewMode,
+      activeFilter,
+      searchQuery,
+      currentDate,
+      selectedDateStr,
+      scrollY: currentScroll,
+      actId: act?.id,
+    });
+    saveCalendarState({
+      viewMode,
+      activeFilter,
+      searchQuery,
+      currentDate: currentDate.toISOString(),
+      selectedDateStr,
+      scrollY: currentScroll,
+      actId: act?.id,
+      returnUrl,
+    });
+  }, [viewMode, activeFilter, searchQuery, currentDate, selectedDateStr]);
+
+  const getActivityLinkProps = useCallback((act) => {
+    const currentScroll = typeof window !== "undefined" ? window.scrollY : 0;
+    const returnUrl = buildCalendarUrl({
+      viewMode,
+      activeFilter,
+      searchQuery,
+      currentDate,
+      selectedDateStr,
+      scrollY: currentScroll,
+      actId: act?.id,
+    });
+
+    return {
+      to: {
+        pathname: act.url,
+        search: "?from=calendar",
+      },
+      state: {
+        from: "calendar",
+        returnUrl,
+        scrollY: currentScroll,
+        actId: act?.id,
+      },
+      onClick: () => handleActivityClick(act),
+    };
+  }, [viewMode, activeFilter, searchQuery, currentDate, selectedDateStr, handleActivityClick]);
 
   // Group by Month & Year for Timeline view
   const groupedTimeline = useMemo(() => {
@@ -332,35 +572,35 @@ export default function CalendarPage() {
             <button
               type="button"
               className={`calendar-pill ${activeFilter === "ALL" ? "is-active" : ""}`}
-              onClick={() => setActiveFilter("ALL")}
+              onClick={() => handleFilterChange("ALL")}
             >
               All Activities ({counts.ALL})
             </button>
             <button
               type="button"
               className={`calendar-pill event-pill ${activeFilter === "event" ? "is-active" : ""}`}
-              onClick={() => setActiveFilter("event")}
+              onClick={() => handleFilterChange("event")}
             >
               🎟️ Live Events ({counts.event})
             </button>
             <button
               type="button"
               className={`calendar-pill release-pill ${activeFilter === "release" ? "is-active" : ""}`}
-              onClick={() => setActiveFilter("release")}
+              onClick={() => handleFilterChange("release")}
             >
               🎵 Music Releases ({counts.release})
             </button>
             <button
               type="button"
               className={`calendar-pill beat-pill ${activeFilter === "beat" ? "is-active" : ""}`}
-              onClick={() => setActiveFilter("beat")}
+              onClick={() => handleFilterChange("beat")}
             >
               🎹 Studio Beats ({counts.beat})
             </button>
             <button
               type="button"
               className={`calendar-pill gallery-pill ${activeFilter === "gallery" ? "is-active" : ""}`}
-              onClick={() => setActiveFilter("gallery")}
+              onClick={() => handleFilterChange("gallery")}
             >
               📸 Gallery Moments ({counts.gallery})
             </button>
@@ -372,14 +612,14 @@ export default function CalendarPage() {
                 type="text"
                 placeholder="Search activities..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="calendar-search-input"
               />
               {searchQuery && (
                 <button
                   type="button"
                   className="calendar-search-clear"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => handleSearchChange("")}
                 >
                   ✕
                 </button>
@@ -390,7 +630,7 @@ export default function CalendarPage() {
               <button
                 type="button"
                 className={`calendar-mode-btn ${viewMode === "GRID" ? "is-active" : ""}`}
-                onClick={() => setViewMode("GRID")}
+                onClick={() => handleViewModeChange("GRID")}
                 title="Month Grid View"
               >
                 📅 Grid
@@ -398,7 +638,7 @@ export default function CalendarPage() {
               <button
                 type="button"
                 className={`calendar-mode-btn ${viewMode === "TIMELINE" ? "is-active" : ""}`}
-                onClick={() => setViewMode("TIMELINE")}
+                onClick={() => handleViewModeChange("TIMELINE")}
                 title="Agenda Timeline View"
               >
                 📜 Agenda
