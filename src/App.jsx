@@ -1,7 +1,7 @@
 import { DownCaretIcon , UpRightArrowIcon, RightArrowIcon } from './components/Icons';
 // src/App.jsx
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   Link,
   Navigate,
@@ -2409,7 +2409,7 @@ function SocialsSection() {
    ========================================================= */
 
 function HomePage() {
-  const { releases } = useChomkaStore();
+  const { releases, events = [] } = useChomkaStore();
 
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -2826,8 +2826,76 @@ function NotFoundPage() {
 }
 
 /* =========================================================
-   APP MAIN ROOT
+   APP MAIN ROOT & ERROR BOUNDARY
    ========================================================= */
+
+class RootErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("[Chomka RootErrorBoundary] Caught unexpected UI exception:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: "100vh",
+          backgroundColor: "#050505",
+          color: "#fff",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
+          textAlign: "center"
+        }}>
+          <div style={{
+            maxWidth: "480px",
+            background: "rgba(255, 255, 255, 0.03)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            borderRadius: "16px",
+            padding: "36px 28px",
+            backdropFilter: "blur(20px)"
+          }}>
+            <div style={{ fontSize: "11px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--color-gold, #c5a059)", marginBottom: "12px", fontWeight: 700 }}>
+              chomkaMUSIC™ Studio
+            </div>
+            <h1 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 12px 0", letterSpacing: "-0.01em" }}>
+              Studio Session Interrupted
+            </h1>
+            <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.65)", lineHeight: 1.6, margin: "0 0 24px 0" }}>
+              An unexpected interface error occurred during playback or render. Refreshing will restore the studio workspace.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                background: "linear-gradient(135deg, #c5a059 0%, #dfba73 100%)",
+                color: "#050505",
+                border: "none",
+                borderRadius: "8px",
+                padding: "10px 22px",
+                fontWeight: 700,
+                fontSize: "13px",
+                cursor: "pointer",
+                letterSpacing: "0.05em",
+                textTransform: "uppercase"
+              }}
+            >
+              Reload Studio
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const navigate = useNavigate();
@@ -2878,20 +2946,21 @@ function App() {
 
 
   return (
-    <AdminAuthProvider>
-      <CookieConsentProvider>
-      <CurrencyProvider>
-      <>
-        {/* Dynamic Starry Space Atmosphere */}
-        <StarrySpaceBackground />
-  
-        {/* Ambient Celestial Glow Layer */}
-        <div className="ambient-glow-layer" aria-hidden="true" />
-  
-        {/* Cross-Page Hash Scroll Engine */}
-        <ScrollToHash />
-  
-        <Routes>
+    <RootErrorBoundary>
+      <AdminAuthProvider>
+        <CookieConsentProvider>
+        <CurrencyProvider>
+        <>
+          {/* Dynamic Starry Space Atmosphere */}
+          <StarrySpaceBackground />
+    
+          {/* Ambient Celestial Glow Layer */}
+          <div className="ambient-glow-layer" aria-hidden="true" />
+    
+          {/* Cross-Page Hash Scroll Engine */}
+          <ScrollToHash />
+    
+          <Routes>
           <Route
             path="/"
             element={
@@ -3051,6 +3120,7 @@ function App() {
       </CurrencyProvider>
       </CookieConsentProvider>
     </AdminAuthProvider>
+    </RootErrorBoundary>
   );
 }
 
