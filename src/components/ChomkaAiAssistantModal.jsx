@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback, Component } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, Component } from "react";
 import { useNavigate } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import { useCurrency } from "../data/CurrencyContext";
@@ -216,7 +216,18 @@ function parseConversationalBooking(text) {
 export default function ChomkaAiAssistantModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [recentSearches, setRecentSearches] = useState([]);
+  const [recentSearches, setRecentSearches] = useState(() => {
+    try {
+      const saved = localStorage.getItem("chomka_ai_recent_queries");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed.slice(0, 5);
+      }
+    } catch {
+      // Ignore localStorage access failures
+    }
+    return [];
+  });
   const [isAutoExpanded, setIsAutoExpanded] = useState(false);
   const inputRef = useRef(null);
   const modalRef = useRef(null);
@@ -253,19 +264,6 @@ export default function ChomkaAiAssistantModal() {
     return `₦${Number(num).toLocaleString()}`;
   }, [currency]);
 
-  // Load recent searches from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("chomka_ai_recent_queries");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setRecentSearches(parsed.slice(0, 5));
-        }
-      }
-    } catch {}
-  }, []);
-
   const saveQuery = useCallback((text) => {
     if (!text || typeof text !== "string" || text.trim().length < 2) return;
     try {
@@ -273,7 +271,9 @@ export default function ChomkaAiAssistantModal() {
       const updated = [trimmed, ...recentSearches.filter((q) => q.toLowerCase() !== trimmed.toLowerCase())].slice(0, 5);
       setRecentSearches(updated);
       localStorage.setItem("chomka_ai_recent_queries", JSON.stringify(updated));
-    } catch {}
+    } catch {
+      // Ignore localStorage write failures
+    }
   }, [recentSearches]);
 
   // Global Keyboard Shortcut: Cmd+K / Ctrl+K or / to open
@@ -471,7 +471,9 @@ export default function ChomkaAiAssistantModal() {
         lastUpdated: Date.now(),
       };
       localStorage.setItem("chomka_services_booking_draft_v1", JSON.stringify(draft));
-    } catch {}
+    } catch {
+      // Ignore storage error
+    }
     navigate("/services");
   };
 
