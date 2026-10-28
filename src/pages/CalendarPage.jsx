@@ -759,7 +759,11 @@ export default function CalendarPage() {
                   <button
                     type="button"
                     className="calendar-drawer-close"
-                    onClick={() => { setSelectedDayActivities(null); setSelectedDateStr(null); }}
+                    onClick={() => {
+                      setSelectedDayActivities(null);
+                      setSelectedDateStr(null);
+                      syncParams({ date: null });
+                    }}
                   >
                     ✕ Close
                   </button>
@@ -772,8 +776,8 @@ export default function CalendarPage() {
                     {selectedDayActivities.map((act) => {
                       const conf = TYPE_CONFIG[act.type] || TYPE_CONFIG.event;
                       return (
-                        <article key={act.id} className="calendar-drawer-card">
-                          <Link to={act.url} className="calendar-drawer-art">
+                        <article key={act.id} id={`cal-act-${act.id}`} className="calendar-drawer-card">
+                          <Link {...getActivityLinkProps(act)} className="calendar-drawer-art">
                             <img
                               src={act.image || "/og-image.png"}
                               alt={act.title}
@@ -788,10 +792,10 @@ export default function CalendarPage() {
                           </Link>
                           <div className="calendar-drawer-info">
                             <h4 className="calendar-drawer-title">
-                              <Link to={act.url}>{act.title}</Link>
+                              <Link {...getActivityLinkProps(act)}>{act.title}</Link>
                             </h4>
                             {act.subtype && <p className="calendar-drawer-subtype">{act.subtype}</p>}
-                            <Link to={act.url} className="calendar-drawer-action-btn">
+                            <Link {...getActivityLinkProps(act)} className="calendar-drawer-action-btn">
                               {conf.action} →
                             </Link>
                           </div>
@@ -826,7 +830,7 @@ export default function CalendarPage() {
                     {groupActs.map((act) => {
                       const conf = TYPE_CONFIG[act.type] || TYPE_CONFIG.event;
                       return (
-                        <article key={act.id} className={`timeline-entry type-${act.type}`}>
+                        <article key={act.id} id={`cal-act-${act.id}`} className={`timeline-entry type-${act.type}`}>
                           <div className="timeline-date-column">
                             <span className="timeline-date-day">
                               {new Date(act.date).getDate() || ""}
@@ -841,7 +845,7 @@ export default function CalendarPage() {
                           </div>
 
                           <div className="timeline-card">
-                            <Link to={act.url} className="timeline-art-wrap">
+                            <Link {...getActivityLinkProps(act)} className="timeline-art-wrap">
                               <img
                                 src={act.image || "/og-image.png"}
                                 alt={act.title}
@@ -864,7 +868,7 @@ export default function CalendarPage() {
                               </div>
 
                               <h3 className="timeline-title">
-                                <Link to={act.url}>{act.title}</Link>
+                                <Link {...getActivityLinkProps(act)}>{act.title}</Link>
                               </h3>
 
                               {act.subtype && (
@@ -872,7 +876,7 @@ export default function CalendarPage() {
                               )}
 
                               <div className="timeline-actions">
-                                <Link to={act.url} className="timeline-cta-btn">
+                                <Link {...getActivityLinkProps(act)} className="timeline-cta-btn">
                                   {conf.action} →
                                 </Link>
                               </div>
