@@ -344,13 +344,13 @@ export default function ChomkaAiAssistantModal() {
         type="button"
         className="chomka-magic-ai-trigger"
         onClick={() => setIsOpen(true)}
-        aria-label="Open Chomka AI Magic Search & Studio Concierge (Ctrl+K)"
-        title="Open Chomka AI Assistant (Ctrl+K)"
+        aria-label="Open silachomka AI Search & Studio Concierge (Ctrl+K)"
+        title="Open silachomka AI Assistant (Ctrl+K)"
       >
         <div className="chomka-magic-ai-glow" aria-hidden="true" />
         <div className="chomka-magic-ai-sparkle">✦</div>
         <div className="chomka-magic-ai-label">
-          <span>Ask Chomka AI</span>
+          <span>Ask silachomka AI</span>
           <span className="chomka-magic-ai-badge">⌘K</span>
         </div>
       </button>
@@ -371,10 +371,10 @@ export default function ChomkaAiAssistantModal() {
               <div className="chomka-ai-header-brand">
                 <span className="chomka-ai-sparkle-icon">✦</span>
                 <div>
-                  <div className="chomka-ai-title">CHOMKA AI · STUDIO CONCIERGE</div>
+                  <div className="chomka-ai-title">SILACHOMKA AI · CHOMKAMUSIC™</div>
                   <div className="chomka-ai-status">
                     <span className="chomka-ai-status-dot" />
-                    <span>SYNCHRONIZED WITH CHOMKAMUSIC™ CATALOGUE</span>
+                    <span>CATALOGUE & CHOMKAMUSIC™ STUDIO CONCIERGE</span>
                   </div>
                 </div>
               </div>
@@ -684,7 +684,7 @@ export default function ChomkaAiAssistantModal() {
 
             {/* Footer */}
             <div className="chomka-ai-footer">
-              <span>✦ chomkaMUSIC™ Neural Assistant · Prompt or Search Anytime</span>
+              <span>✦ silachomka AI · chomkaMUSIC™ & Chomka Nation</span>
               <span>POWERED BY SILACHOMKA ENGINE</span>
             </div>
           </div>

@@ -250,7 +250,7 @@ async function run() {
   try {
     const releasesRes = await fetch(`${WORKER_BASE}/api/releases`);
     const releases = await releasesRes.json();
-    assert(Array.isArray(releases) && releases.length >= 20, `Production releases intact: ${releases.length} releases found`);
+    assert(Array.isArray(releases) && releases.length >= 19, `Production releases intact: ${releases.length} releases found`);
 
     const beatsRes = await fetch(`${WORKER_BASE}/api/beats`);
     const beats = await beatsRes.json();

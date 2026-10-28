@@ -31,7 +31,10 @@ const AdminSidebar = ({ mobileOpen, setMobileOpen }) => {
     <aside className={`admin-sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="admin-sidebar-header">
         <div className="admin-sidebar-logo">
-          chomkaMUSIC<span>™ STUDIO</span>
+          silachomka
+          <span style={{ display: 'block', fontSize: '9px', letterSpacing: '0.18em', color: 'var(--color-gold, #c5a059)', textTransform: 'uppercase', marginTop: '3px', fontWeight: 600 }}>
+            chomkaMUSIC™ · Chomka Nation
+          </span>
         </div>
       </div>
       <nav className="admin-sidebar-nav">
@@ -48,7 +51,7 @@ const AdminSidebar = ({ mobileOpen, setMobileOpen }) => {
         ))}
       </nav>
       <div className="admin-sidebar-footer">
-        silachomka · chomkaMUSIC™ CMS
+        silachomka · chomkaMUSIC™ · Chomka Nation
       </div>
     </aside>
   );

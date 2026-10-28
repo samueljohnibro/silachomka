@@ -147,7 +147,7 @@ function getTrackCount(release) {
 function SiteHeader({
   beatsPage = false,
 }) {
-  const { events } = useChomkaStore();
+  const { events = [] } = useChomkaStore();
   const hasActiveEvents = useMemo(() => {
     return Array.isArray(events) && events.some(e => Boolean(e.is_published) && (e.status === 'UPCOMING' || e.status === 'RECENT' || e.isFuture));
   }, [events]);
@@ -717,7 +717,7 @@ function HeroSlideshow() {
    ========================================================= */
 
 function HomeHero() {
-  const { events } = useChomkaStore();
+  const { events = [] } = useChomkaStore();
   const hasActiveEvents = useMemo(() => {
     return Array.isArray(events) && events.some(e => Boolean(e.is_published) && (e.status === 'UPCOMING' || e.status === 'RECENT' || e.isFuture));
   }, [events]);
@@ -1037,7 +1037,7 @@ const UpcomingReleaseSection = ({ release }) => {
    ========================================================= */
 
 function HomepageEventsSection() {
-  const { events } = useChomkaStore();
+  const { events = [] } = useChomkaStore();
 
   const activeEvents = useMemo(() => {
     return (events || []).filter(
@@ -1048,6 +1048,10 @@ function HomepageEventsSection() {
   // If there are no active/recent events, this section completely disappears!
   if (activeEvents.length === 0) return null;
 
+  const publishedEventsCount = Array.isArray(events)
+    ? events.filter((e) => Boolean(e.is_published)).length
+    : 0;
+
   return (
     <section id="events" className="home-events-section">
       <div className="section-heading">
@@ -1056,7 +1060,7 @@ function HomepageEventsSection() {
           <h2>Live Gatherings & Tour Dates</h2>
         </div>
         <Link to="/events" className="section-link">
-          Explore All Events ({events.filter((e) => e.is_published).length}) →
+          Explore All Events ({publishedEventsCount}) →
         </Link>
       </div>
 
@@ -2485,6 +2489,14 @@ function HomePage() {
         ],
         jobTitle: "Recording Artist, Music Producer & Audio Engineer",
         nationality: "Nigerian",
+        memberOf: {
+          "@type": "Organization",
+          "name": "chomkaMUSIC™",
+          "parentOrganization": {
+            "@type": "Organization",
+            "name": "Chomka Nation"
+          }
+        }
       },
       {
         "@type": "MusicGroup",
@@ -2492,6 +2504,10 @@ function HomePage() {
         name: "chomkaMUSIC™",
         url: canonicalUrl("/"),
         logo: canonicalUrl("/silachomka.com-logo.png"),
+        parentOrganization: {
+          "@type": "Organization",
+          "name": "Chomka Nation"
+        }
       },
       {
         "@type": "WebSite",
@@ -2499,7 +2515,7 @@ function HomePage() {
         url: canonicalUrl("/"),
         name: "silachomka",
         description:
-          "Official artist website of silachomka (Samuel Silachomka John-Ibro). Music releases, original studio beats, visual archive, and chomkaMUSIC™ Studio audio engineering services.",
+          "Official artist website of silachomka (Samuel Silachomka John-Ibro) under chomkaMUSIC™ and Chomka Nation. Music releases, original studio beats, visual archive, and chomkaMUSIC™ Studio audio engineering services.",
       },
       {
         "@type": "BreadcrumbList",
@@ -2838,7 +2854,7 @@ class RootErrorBoundary extends React.Component {
     return { hasError: true, error };
   }
   componentDidCatch(error, errorInfo) {
-    console.error("[Chomka RootErrorBoundary] Caught unexpected UI exception:", error, errorInfo);
+    console.error("[silachomka RootErrorBoundary] Caught unexpected UI exception:", error, errorInfo);
   }
   render() {
     if (this.state.hasError) {
@@ -2863,32 +2879,54 @@ class RootErrorBoundary extends React.Component {
             padding: "36px 28px",
             backdropFilter: "blur(20px)"
           }}>
-            <div style={{ fontSize: "11px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--color-gold, #c5a059)", marginBottom: "12px", fontWeight: 700 }}>
-              chomkaMUSIC™ Studio
+            <div style={{ fontSize: "11px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--color-gold, #c5a059)", marginBottom: "6px", fontWeight: 700 }}>
+              silachomka
+            </div>
+            <div style={{ fontSize: "9px", letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255, 255, 255, 0.5)", marginBottom: "16px", fontWeight: 600 }}>
+              chomkaMUSIC™ · Chomka Nation
             </div>
             <h1 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 12px 0", letterSpacing: "-0.01em" }}>
-              Studio Session Interrupted
+              Display Refresh Required
             </h1>
             <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.65)", lineHeight: 1.6, margin: "0 0 24px 0" }}>
-              An unexpected interface error occurred during playback or render. Refreshing will restore the studio workspace.
+              An unexpected display error occurred while rendering the page. Refreshing will restore your session.
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                background: "linear-gradient(135deg, #c5a059 0%, #dfba73 100%)",
-                color: "#050505",
-                border: "none",
-                borderRadius: "8px",
-                padding: "10px 22px",
-                fontWeight: 700,
-                fontSize: "13px",
-                cursor: "pointer",
-                letterSpacing: "0.05em",
-                textTransform: "uppercase"
-              }}
-            >
-              Reload Studio
-            </button>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+              <button
+                onClick={() => window.location.reload()}
+                style={{
+                  background: "linear-gradient(135deg, #c5a059 0%, #dfba73 100%)",
+                  color: "#050505",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "10px 22px",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase"
+                }}
+              >
+                Refresh Page
+              </button>
+              <button
+                onClick={() => { window.location.href = "/"; }}
+                style={{
+                  background: "rgba(255, 255, 255, 0.08)",
+                  color: "#fff",
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
+                  borderRadius: "8px",
+                  padding: "10px 18px",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase"
+                }}
+              >
+                Go Home
+              </button>
+            </div>
           </div>
         </div>
       );

@@ -33,7 +33,10 @@ export const AdminLoginPage = () => {
   return (
     <div className="admin-login-wrapper">
       <div className="admin-login-card">
-        <h1>chomka<span>STUDIO</span></h1>
+        <h1>silachomka<span> CMS</span></h1>
+        <p style={{ fontSize: '11px', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--color-gold, #c5a059)', margin: '4px 0 12px 0', fontWeight: 600 }}>
+          chomkaMUSIC™ · Chomka Nation
+        </p>
         <p>Private Administration Workspace</p>
 
         {error && <div className="admin-login-error" role="alert">{error}</div>}
