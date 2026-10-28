@@ -33,6 +33,7 @@ import {
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useChomkaStore } from "../data/store";
+import SharePageButton from "../components/SharePageButton";
 import { useCurrency } from "../data/CurrencyContext";
 import BeatArtwork from "../components/BeatArtwork";
 import BeatHeroSlideshow from "../components/BeatHeroSlideshow";
@@ -1773,15 +1774,22 @@ export default function BeatsPage() {
             Listen, license on Selar, and craft your next release.
           </p>
 
-          <a
-            href="https://www.instagram.com/chomkamusicstudio/?__pwa=1"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="beats-studio-ig-badge"
-          >
-            <CameraIcon size={14} /> @chomkamusicstudio on Instagram{" "}
-            <UpRightArrowIcon size={14} />
-          </a>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+            <a
+              href="https://www.instagram.com/chomkamusicstudio/?__pwa=1"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="beats-studio-ig-badge"
+            >
+              <CameraIcon size={14} /> @chomkamusicstudio on Instagram{" "}
+              <UpRightArrowIcon size={14} />
+            </a>
+
+            <SharePageButton
+              title="chomkaMUSIC™ Studio Beats | silachomka"
+              label="Share Beats"
+            />
+          </div>
         </div>
       </section>
 

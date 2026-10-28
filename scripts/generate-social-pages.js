@@ -416,6 +416,40 @@ async function generateSocialPages() {
       imageAlt: "Terms & Conditions | silachomka",
     })
   );
+  await writePage(
+    ["music"],
+    withSocialMetadata(homeHtml, {
+      title: "Music Catalogue & Discography | silachomka",
+      description:
+        "Explore the complete music discography, singles, and albums by silachomka (Samuel Silachomka John-Ibro) under chomkaMUSIC™.",
+      canonicalPath: "/music",
+      type: "music.album",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "silachomka music catalogue",
+    })
+  );
+  await writePage(
+    ["gallery"],
+    withSocialMetadata(homeHtml, {
+      title: "Visual Archive & Gallery | silachomka",
+      description:
+        "Explore behind-the-scenes photography, portraits, style, and visual stories from silachomka.",
+      canonicalPath: "/gallery",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "silachomka visual archive",
+    })
+  );
+  await writePage(
+    ["about"],
+    withSocialMetadata(homeHtml, {
+      title: "About silachomka — Samuel Silachomka John-Ibro | Artist & Producer",
+      description:
+        "Official biography and story of silachomka (Samuel Silachomka John-Ibro) — Nigerian recording artist, producer, and audio engineer under chomkaMUSIC™.",
+      canonicalPath: "/about",
+      image: DEFAULT_SOCIAL_IMAGE,
+      imageAlt: "About silachomka",
+    })
+  );
 
   const [liveBeats, liveGallery, liveReleases] = await Promise.all([
     fetchLiveEndpoint("/api/beats"),
@@ -479,8 +513,11 @@ async function generateSocialPages() {
   // Generate XML Sitemap with Google Image extensions (Req #15 & #16)
   const staticRoutes = [
     { loc: `${siteUrl}/`, changefreq: "daily", priority: "1.0" },
+    { loc: `${siteUrl}/music`, changefreq: "weekly", priority: "0.9" },
     { loc: `${siteUrl}/beats`, changefreq: "weekly", priority: "0.9" },
     { loc: `${siteUrl}/services`, changefreq: "weekly", priority: "0.9" },
+    { loc: `${siteUrl}/gallery`, changefreq: "weekly", priority: "0.8" },
+    { loc: `${siteUrl}/about`, changefreq: "monthly", priority: "0.7" },
     { loc: `${siteUrl}/studio`, changefreq: "monthly", priority: "0.7" },
     { loc: `${siteUrl}/privacy`, changefreq: "yearly", priority: "0.3" },
     { loc: `${siteUrl}/cookies`, changefreq: "yearly", priority: "0.3" },

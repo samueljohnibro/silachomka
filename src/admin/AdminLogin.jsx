@@ -65,7 +65,7 @@ export default function AdminLogin() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="admin-input"
-              placeholder="admin@silachomka.com"
+              placeholder="admin@domain.com"
               autoComplete="email"
               autoFocus
               disabled={isSubmitting}

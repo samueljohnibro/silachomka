@@ -23,6 +23,8 @@ const STATUS_LABELS = {
   REFUNDED: "Refunded",
 };
 
+import StudioAmbientBackground from "../components/StudioAmbientBackground";
+
 export default function ServiceOrderDetailPage() {
   const { orderNumber } = useParams();
   const [order, setOrder] = useState(null);
@@ -121,7 +123,7 @@ export default function ServiceOrderDetailPage() {
     : null;
 
   return (
-    <main style={{ minHeight: "100vh", position: "relative", padding: "80px 7vw 120px" }}>
+    <main className="service-order-detail-view" style={{ minHeight: "100vh", position: "relative", padding: "80px 7vw 120px" }}>
       <SeoHead
         title={`Order ${orderNumber} | chomkaMUSIC™ Studio`}
         description={`Track order status and deliverables for ${orderNumber}.`}
@@ -130,11 +132,8 @@ export default function ServiceOrderDetailPage() {
         type="website"
       />
 
-      {/* Atmospheric Starry Background */}
-      <div className="product-ambient-backdrop" aria-hidden="true">
-        <div className="ambient-image-layer" style={{ backgroundImage: "url('/beats-image.png')" }} />
-        <div className="ambient-gradient-overlay" />
-      </div>
+      {/* Atmospheric Starry Background (Reused via StudioAmbientBackground) */}
+      <StudioAmbientBackground image="/beats-image.png" />
 
       <div style={{ position: "relative", zIndex: 1, maxWidth: "880px", margin: "0 auto" }}>
         {/* Navigation */}

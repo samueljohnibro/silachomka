@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
+import StudioAmbientBackground from "../components/StudioAmbientBackground";
+import SharePageButton from "../components/SharePageButton";
+import ImmersiveServicesView from "../components/ImmersiveServicesView";
 import { uploadWithProgress, formatBytes } from "../utils/uploadWithProgress";
 import { formatLongDate } from "../utils/dateFormatter";
 import {
@@ -569,6 +572,18 @@ export default function ServicesPage() {
   const [hasCopiedRef, setHasCopiedRef] = useState(false);
   const [isInitializingPayment, setIsInitializingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
+  const [isImmersive, setIsImmersive] = useState(true);
+
+  // Keyboard Escape listener to exit immersive conversation (Stage 37 — Req #2)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && isImmersive) {
+        setIsImmersive(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isImmersive]);
 
   // Auto-scroll to top on step transitions (Req #3)
   useEffect(() => {
@@ -1006,17 +1021,19 @@ export default function ServicesPage() {
 
   return (
     <main
+      className="services-page-view"
       style={{
         minHeight: "100vh",
         position: "relative",
         padding: "60px 6vw 140px",
-        background: "radial-gradient(ellipse at 50% 0%, rgba(223, 194, 125, 0.04) 0%, transparent 60%)",
+        background: "transparent",
       }}
     >
       <SeoHead
         title="Chomka Studio Services | silachomka"
         description="Book professional music production, vocal recording, mixing, mastering, and artist collaborations directly with Chomka Music Studio."
         path="/services"
+        image="/beats-image.png"
         jsonLd={{
           "@context": "https://schema.org",
           "@type": "Service",
@@ -1047,6 +1064,9 @@ export default function ServicesPage() {
         }}
       />
 
+      {/* Atmospheric Starry Background (Reused smiley / beats-image.png via StudioAmbientBackground) */}
+      <StudioAmbientBackground image="/beats-image.png" />
+
       <div style={{ maxWidth: "840px", margin: "0 auto" }}>
         {/* =========================================================
             HEADER / TRACKING / BREADCRUMB INDICATOR
@@ -1073,24 +1093,47 @@ export default function ServicesPage() {
               chomkaMUSIC™ STUDIO CONCIERGE
             </p>
 
-            <button
-              type="button"
-              onClick={() => setShowTrackingLookup((prev) => !prev)}
-              style={{
-                background: "none",
-                border: "1px solid rgba(223, 194, 125, 0.35)",
-                borderRadius: "4px",
-                padding: "6px 14px",
-                color: "var(--gold)",
-                fontSize: "11px",
-                fontWeight: 700,
-                letterSpacing: "0.08em",
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-            >
-              {showTrackingLookup ? "✕ Close Tracking" : "🔍 Track Existing Booking"}
-            </button>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setIsImmersive((prev) => !prev)}
+                className="studio-pill-btn"
+                style={{
+                  background: isImmersive ? "rgba(223, 194, 125, 0.15)" : "none",
+                  border: "1px solid rgba(223, 194, 125, 0.35)",
+                  color: "var(--gold)",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {isImmersive ? "✕ Classic View (Esc)" : "⚡ Immersive View"}
+              </button>
+
+              <SharePageButton
+                title="Chomka Studio Services | silachomka"
+                label="Share"
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowTrackingLookup((prev) => !prev)}
+                style={{
+                  background: "none",
+                  border: "1px solid rgba(223, 194, 125, 0.35)",
+                  borderRadius: "4px",
+                  padding: "6px 14px",
+                  color: "var(--gold)",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {showTrackingLookup ? "✕ Close Tracking" : "🔍 Track Existing Booking"}
+              </button>
+            </div>
           </div>
 
           {/* Dedicated Order Tracking Lookup Box (Req #6) */}
@@ -1287,6 +1330,42 @@ export default function ServicesPage() {
           )}
         </div>
 
+        {/* =========================================================
+            STAGE 37 — IMMERSIVE VS CLASSIC CONVERSATION VIEW
+            ========================================================= */}
+        {isImmersive && step !== "success" ? (
+          <ImmersiveServicesView
+            activeServiceList={activeServiceList}
+            selectedSlugs={selectedSlugs}
+            toggleService={toggleService}
+            configurations={configurations}
+            updateConfig={updateConfig}
+            studioAvailability={studioAvailability}
+            itemizedPrices={itemizedPrices}
+            totalNgn={totalNgn}
+            hasPriceUponRequest={hasPriceUponRequest}
+            customerName={customerName}
+            setCustomerName={setCustomerName}
+            customerEmail={customerEmail}
+            setCustomerEmail={setCustomerEmail}
+            customerPhone={customerPhone}
+            setCustomerPhone={setCustomerPhone}
+            customerMessage={customerMessage}
+            setCustomerMessage={setCustomerMessage}
+            clientFiles={clientFiles}
+            handleFileUpload={handleFileUpload}
+            removeFile={removeFile}
+            isUploadingFile={isUploadingFile}
+            uploadProgress={uploadProgress}
+            uploadError={uploadError}
+            handleFinalSubmit={handleFinalSubmit}
+            isSubmitting={isSubmitting}
+            submitError={submitError}
+            PublicStudioCalendar={PublicStudioCalendar}
+            onExit={() => setIsImmersive(false)}
+          />
+        ) : (
+          <>
         {/* =========================================================
             STAGE 1: INTENT — CONVERSATIONAL SELECTION (Req #1 & #2)
             "What are we creating?" + Expandable / Dropdown Selector
@@ -2865,7 +2944,7 @@ export default function ServicesPage() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Samuel John / Sila"
+                  placeholder="e.g. Jane Doe / Studio Client"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   style={{
@@ -2959,7 +3038,7 @@ export default function ServicesPage() {
                 </label>
                 <textarea
                   rows={4}
-                  placeholder="Tell silachomka anything else about the vision, release goals, reference tracks, or specific timeline constraints..."
+                  placeholder="Share any notes about your vision, release goals, reference tracks, or timeline constraints..."
                   value={customerMessage}
                   onChange={(e) => setCustomerMessage(e.target.value)}
                   style={{
@@ -3366,6 +3445,8 @@ export default function ServicesPage() {
               </button>
             </div>
           </section>
+        )}
+          </>
         )}
 
         {/* =========================================================

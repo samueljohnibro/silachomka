@@ -124,6 +124,7 @@ const AdminGalleryPage = () => {
     setCurrentPost({
       title: "",
       caption: "",
+      location: "",
       category: categories[0]?.label || "Portraits & Style",
       post_type: "image",
       primary_asset_id: "",
@@ -187,6 +188,7 @@ const AdminGalleryPage = () => {
       ...post,
       title: post.title || "",
       caption: post.caption || "",
+      location: post.location || post.tags?.location || "",
       category: post.category || "Portraits & Style",
       post_type: inferFormatFromItems(initialSlides, post.primary_asset_id),
       external_social_url: post.external_social_url || post.legacy_link || "",
@@ -398,10 +400,12 @@ const AdminGalleryPage = () => {
         legacy_link: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_url: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_platform: currentPost.external_social_platform || null,
+        location: currentPost.location && currentPost.location.trim() ? currentPost.location.trim() : null,
         is_hero: Boolean(currentPost.is_hero),
         tags: {
           ...(currentPost.tags || {}),
           assignedSocials: currentPost.assignedSocials || [],
+          location: currentPost.location && currentPost.location.trim() ? currentPost.location.trim() : null,
           is_hero: Boolean(currentPost.is_hero),
         },
         slides: activeSlides,
@@ -964,7 +968,7 @@ const AdminGalleryPage = () => {
               2. Post Details
             </h3>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px" }}>
               <div className="studio-field" style={{ textAlign: "left" }}>
                 <label>Title (Optional)</label>
                 <input
@@ -978,24 +982,41 @@ const AdminGalleryPage = () => {
                 />
               </div>
 
-              {/* Hybrid Combobox for Category */}
               <div className="studio-field" style={{ textAlign: "left" }}>
-                <label>Category (Select existing or type new)</label>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <input
-                    type="text"
-                    name="category"
-                    list="gallery-categories-datalist"
-                    className="studio-input"
-                    value={currentPost.category || ""}
-                    onChange={handleChange}
-                    disabled={isSaving}
-                    placeholder="e.g. Portraits & Style, Studio & BTS"
-                  />
+                <label>Location (Optional)</label>
+                <input
+                  type="text"
+                  name="location"
+                  className="studio-input"
+                  value={currentPost.location || ""}
+                  onChange={handleChange}
+                  disabled={isSaving}
+                  placeholder="e.g. Lagos, Nigeria or Studio A"
+                />
+              </div>
+            </div>
+
+            {/* Category Selection / Custom Input (Stage 37 — Req #4) */}
+            <div className="studio-field" style={{ textAlign: "left", marginTop: "16px" }}>
+              <label style={{ display: "block", marginBottom: "8px" }}>
+                Category
+              </label>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  gap: "12px",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: "11px", color: "var(--muted)", display: "block", marginBottom: "4px" }}>
+                    Choose Existing Category
+                  </span>
                   <select
                     className="studio-input"
-                    style={{ width: "130px", height: "44px", flexShrink: 0 }}
-                    value={currentPost.category || ""}
+                    style={{ width: "100%", height: "44px" }}
+                    value={categories.some((c) => c.label === currentPost.category || c.slug === currentPost.category) ? currentPost.category : ""}
                     onChange={(e) => {
                       if (e.target.value) {
                         setCurrentPost((prev) => ({ ...prev, category: e.target.value }));
@@ -1003,7 +1024,7 @@ const AdminGalleryPage = () => {
                     }}
                     disabled={isSaving}
                   >
-                    <option value="">-- Presets --</option>
+                    <option value="">-- Select from existing categories --</option>
                     {categories.map((c) => (
                       <option key={c.slug} value={c.label}>
                         {c.label}
@@ -1011,15 +1032,32 @@ const AdminGalleryPage = () => {
                     ))}
                   </select>
                 </div>
-                <datalist id="gallery-categories-datalist">
-                  {categories.map((c) => (
-                    <option key={c.slug} value={c.label} />
-                  ))}
-                </datalist>
-                <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
-                  New categories typed here are automatically saved permanently.
-                </span>
+
+                <div>
+                  <span style={{ fontSize: "11px", color: "var(--muted)", display: "block", marginBottom: "4px" }}>
+                    Or Type Custom / New Category
+                  </span>
+                  <input
+                    type="text"
+                    name="category"
+                    list="gallery-categories-datalist"
+                    className="studio-input"
+                    style={{ width: "100%", height: "44px" }}
+                    value={currentPost.category || ""}
+                    onChange={handleChange}
+                    disabled={isSaving}
+                    placeholder="e.g. Portraits & Style, Studio & BTS"
+                  />
+                </div>
               </div>
+              <datalist id="gallery-categories-datalist">
+                {categories.map((c) => (
+                  <option key={c.slug} value={c.label} />
+                ))}
+              </datalist>
+              <span style={{ fontSize: "11px", color: "var(--muted)", marginTop: "6px", display: "block" }}>
+                Select an existing category or enter a custom name to automatically create and assign it.
+              </span>
             </div>
 
             <div className="studio-field" style={{ textAlign: "left", marginTop: "16px" }}>

@@ -1075,6 +1075,15 @@ a:focus-visible {
   transition: transform 500ms var(--ease-out);
 }
 
+.gallery-card video,
+.gallery-card-frame video,
+video.gallery-card-image {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block;
+}
+
 .gallery-card:hover .gallery-card-image {
   transform: scale(1.06);
 }
@@ -4720,7 +4729,9 @@ h1, h2, h3, .section-heading h2, .section-heading .eyebrow,
 .release-page-view > *:not(.product-ambient-backdrop):not(.release-entry-splash),
 .beat-detail-view > *:not(.product-ambient-backdrop),
 .beats-page-view > *:not(.product-ambient-backdrop),
-.beat-reel-wrapper > *:not(.product-ambient-backdrop) {
+.beat-reel-wrapper > *:not(.product-ambient-backdrop),
+.services-page-view > *:not(.product-ambient-backdrop),
+.service-order-detail-view > *:not(.product-ambient-backdrop) {
   position: relative;
   z-index: 1;
 }
@@ -6107,6 +6118,76 @@ select.studio-input,
 
 .footer-legal-link:hover {
   color: var(--gold);
+}
+
+/* =========================================================
+   STAGE 37 — IMMERSIVE CONVERSATIONAL SERVICES EXPERIENCE
+   ========================================================= */
+.services-immersive-viewport {
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  background: rgba(12, 12, 18, 0.88);
+  border: 1px solid rgba(223, 194, 125, 0.3);
+  border-radius: 16px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7), 0 0 40px rgba(223, 194, 125, 0.08);
+  overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeInModal 0.3s ease-out;
+}
+
+.services-immersive-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  background: rgba(8, 8, 12, 0.7);
+  border-bottom: 1px solid rgba(223, 194, 125, 0.18);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.services-immersive-body {
+  padding: clamp(24px, 4.5vw, 48px);
+}
+
+.services-immersive-card {
+  background: rgba(16, 16, 24, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 22px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.services-immersive-card:hover {
+  border-color: rgba(223, 194, 125, 0.5);
+  background: rgba(223, 194, 125, 0.06);
+  transform: translateY(-2px);
+}
+
+.services-immersive-card.is-selected {
+  border-color: var(--gold);
+  background: rgba(223, 194, 125, 0.12);
+  box-shadow: 0 8px 24px rgba(223, 194, 125, 0.15);
+}
+
+.services-immersive-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+  gap: 14px;
 }
 
 

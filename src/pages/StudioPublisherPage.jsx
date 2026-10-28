@@ -1116,7 +1116,7 @@ export default function StudioPublisherPage() {
                     <label>Tags</label>
                     <input
                       type="text"
-                      placeholder="#silachomka #chomkaMUSIC"
+                      placeholder="#music #studio #beats"
                       value={galleryTags}
                       onChange={(e) => setGalleryTags(e.target.value)}
                       className="studio-input"

@@ -891,6 +891,7 @@ app.get('/api/gallery', async (c) => {
       g.external_social_platform as "externalSocialPlatform",
       g.tags as tags,
       (g.tags->'assignedSocials') as "assignedSocials",
+      COALESCE(g.tags->>'location', null) as location,
       COALESCE((g.tags->>'is_hero')::boolean, (g.tags->>'isHero')::boolean, false) as "is_hero",
       COALESCE((g.tags->>'is_hero')::boolean, (g.tags->>'isHero')::boolean, false) as "isHero",
       COALESCE(
@@ -942,6 +943,7 @@ app.get('/api/gallery/:slug', async (c) => {
       g.external_social_platform as "externalSocialPlatform",
       g.tags as tags,
       (g.tags->'assignedSocials') as "assignedSocials",
+      COALESCE(g.tags->>'location', null) as location,
       COALESCE((g.tags->>'is_hero')::boolean, (g.tags->>'isHero')::boolean, false) as "is_hero",
       COALESCE((g.tags->>'is_hero')::boolean, (g.tags->>'isHero')::boolean, false) as "isHero",
       COALESCE(

@@ -48,20 +48,30 @@ export function useDraftAutosave({
     return copy;
   }, []);
 
+  const serializeSnapshot = useCallback((obj) => {
+    if (!obj || typeof obj !== 'object') return JSON.stringify(obj || '');
+    const norm = normalizeData(obj);
+    const sorted = {};
+    for (const k of Object.keys(norm).sort()) {
+      sorted[k] = norm[k] === undefined ? null : norm[k];
+    }
+    return JSON.stringify(sorted);
+  }, [normalizeData]);
+
   const isDataDifferent = useCallback((a, b) => {
     if (!a || !b) return Boolean(a !== b);
     try {
-      return JSON.stringify(normalizeData(a)) !== JSON.stringify(normalizeData(b));
+      return serializeSnapshot(a) !== serializeSnapshot(b);
     } catch {
       return true;
     }
-  }, [normalizeData]);
+  }, [serializeSnapshot]);
 
   // Synchronous flush handler
   const flushDraft = useCallback(() => {
     if (!active || !isDirtyRef.current || !currentDataRef.current) return;
     try {
-      const serialized = JSON.stringify(currentDataRef.current);
+      const serialized = serializeSnapshot(currentDataRef.current);
       if (serialized === initialJsonRef.current) return; // Do not flush if identical to saved state!
       const nowIso = new Date().toISOString();
       const payload = {
@@ -74,13 +84,21 @@ export function useDraftAutosave({
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch {}
-  }, [active, entityKey, storageKey]);
+  }, [active, entityKey, storageKey, serializeSnapshot]);
 
-  // Flush dirty draft on beforeunload and unmount
+  // Flush dirty draft on beforeunload and unmount + Warn on beforeunload if DIRTY (Stage 37 — Req #5)
   useEffect(() => {
     if (!active) return;
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = (e) => {
       flushDraft();
+      // Required state machine:
+      // If CLEAN: NO WARNING
+      // If DIRTY: WARNING
+      if (isDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        return e.returnValue;
+      }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
@@ -120,10 +138,11 @@ export function useDraftAutosave({
   useEffect(() => {
     if (active && currentData && initialJsonRef.current === null) {
       try {
-        initialJsonRef.current = JSON.stringify(currentData);
+        initialJsonRef.current = serializeSnapshot(currentData);
+        isDirtyRef.current = false;
       } catch {}
     }
-  }, [active, currentData]);
+  }, [active, currentData, serializeSnapshot]);
 
   // Debounced autosave when formState changes
   useEffect(() => {
@@ -131,13 +150,21 @@ export function useDraftAutosave({
 
     let serialized = '';
     try {
-      serialized = JSON.stringify(currentData);
+      serialized = serializeSnapshot(currentData);
     } catch {
       return;
     }
 
-    // Do not overwrite an existing recoverable draft before user has edited anything
-    if (serialized === initialJsonRef.current) return;
+    // Required State Machine (Stage 37 — Req #5):
+    // If fields are identical to the saved snapshot (even after editing and reverting back): CLEAN
+    // If fields differ from the saved snapshot: DIRTY
+    const isClean = initialJsonRef.current !== null && serialized === initialJsonRef.current;
+    if (isClean) {
+      isDirtyRef.current = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setAutosaveStatus('IDLE');
+      return;
+    }
 
     isDirtyRef.current = true;
     setAutosaveStatus('SAVING');
@@ -166,7 +193,7 @@ export function useDraftAutosave({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [active, currentData, entityKey, storageKey, debounceMs]);
+  }, [active, currentData, entityKey, storageKey, debounceMs, serializeSnapshot]);
 
   const restoreDraft = useCallback(() => {
     if (!recoverableDraft?.data) return;
@@ -192,14 +219,14 @@ export function useDraftAutosave({
     setLastSavedAt(null);
     if (savedData) {
       try {
-        initialJsonRef.current = JSON.stringify(savedData);
+        initialJsonRef.current = serializeSnapshot(savedData);
       } catch {}
     } else if (currentDataRef.current) {
       try {
-        initialJsonRef.current = JSON.stringify(currentDataRef.current);
+        initialJsonRef.current = serializeSnapshot(currentDataRef.current);
       } catch {}
     }
-  }, [storageKey]);
+  }, [storageKey, serializeSnapshot]);
 
   return {
     autosaveStatus,

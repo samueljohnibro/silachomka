@@ -707,6 +707,7 @@ adminApp.get('/gallery-posts', async (c) => {
   const rows = await sql`SELECT * FROM gallery_posts WHERE deleted_at IS NULL ORDER BY post_date DESC, created_at DESC`
   return c.json(rows.map(r => ({
     ...r,
+    location: r.tags?.location || r.location || null,
     is_hero: Boolean(r.tags?.is_hero || r.tags?.isHero || r.is_hero)
   })))
 })
@@ -766,7 +767,8 @@ adminApp.post('/gallery-posts', async (c) => {
 
   const mergedTags = {
     ...(typeof body.tags === 'object' && body.tags !== null ? body.tags : {}),
-    ...(body.is_hero !== undefined ? { is_hero: Boolean(body.is_hero) } : {})
+    ...(body.is_hero !== undefined ? { is_hero: Boolean(body.is_hero) } : {}),
+    ...(body.location !== undefined ? { location: body.location ? String(body.location).trim() : null } : {})
   }
 
   try {
@@ -848,7 +850,8 @@ adminApp.put('/gallery-posts/:id', async (c) => {
   const incomingTags = body.tags !== undefined ? body.tags : e.tags
   const mergedTags = {
     ...(typeof incomingTags === 'object' && incomingTags !== null ? incomingTags : {}),
-    ...(body.is_hero !== undefined ? { is_hero: Boolean(body.is_hero) } : {})
+    ...(body.is_hero !== undefined ? { is_hero: Boolean(body.is_hero) } : {}),
+    ...(body.location !== undefined ? { location: body.location ? String(body.location).trim() : null } : {})
   }
 
   try {

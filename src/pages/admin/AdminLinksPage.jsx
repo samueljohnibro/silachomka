@@ -207,7 +207,7 @@ const AdminLinksPage = () => {
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Handle</label>
-              <input type="text" name="handle" className="studio-input" value={currentLink.handle || ""} onChange={handleChange} disabled={isSaving} placeholder="e.g. @silachomka" />
+              <input type="text" name="handle" className="studio-input" value={currentLink.handle || ""} onChange={handleChange} disabled={isSaving} placeholder="e.g. @yourhandle" />
             </div>
             <div className="studio-field" style={{ textAlign: "left" }}>
               <label>Platform (Icon Key)</label>

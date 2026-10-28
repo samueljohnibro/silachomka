@@ -4,6 +4,7 @@ import { DownCaretIcon , UpRightArrowIcon, RightArrowIcon } from './components/I
 import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Link,
+  Navigate,
   Route,
   Routes,
   useLocation,
@@ -57,6 +58,7 @@ import ServicesPage from "./pages/ServicesPage";
 import ServiceOrderDetailPage from "./pages/ServiceOrderDetailPage";
 import GalleryPostPage from "./pages/GalleryPostPage";
 import SeoHead from "./components/SeoHead";
+import SharePageButton from "./components/SharePageButton";
 import { formatGalleryDate } from "./utils/dateFormatter";
 
 import "./App.css";
@@ -716,6 +718,12 @@ function HomeHero() {
           >
             Explore services
           </Link>
+
+          <SharePageButton
+            title="silachomka — Official Home"
+            label="Share Page"
+            style={{ height: "42px", padding: "0 18px" }}
+          />
         </div>
       </div>
 
@@ -1826,7 +1834,14 @@ function GallerySection() {
 
                 {/* Hover Caption Overlay */}
                 <div className="gallery-card-overlay">
-                  <span className="gallery-overlay-cat">{post.category}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "6px" }}>
+                    <span className="gallery-overlay-cat">{post.category}</span>
+                    {post.location && (
+                      <span style={{ fontSize: "10px", color: "var(--gold)", opacity: 0.9 }}>
+                        📍 {post.location}
+                      </span>
+                    )}
+                  </div>
                   <p className="gallery-overlay-title">{post.title || post.caption || "Archive Visual"}</p>
                 </div>
               </div>
@@ -2086,7 +2101,12 @@ function HomePage() {
         "@type": "Person",
         "@id": "https://silachomka.vercel.app/#person",
         name: "silachomka",
-        alternateName: "Samuel John-Ibro",
+        alternateName: [
+          "Samuel John-Ibro",
+          "Samuel Silachomka John-Ibro",
+          "Silachomka",
+          "Sila"
+        ],
         url: "https://silachomka.vercel.app",
         image: "https://silachomka.vercel.app/og-image.png",
         sameAs: [
@@ -2097,6 +2117,7 @@ function HomePage() {
           "https://www.youtube.com/@silachomka",
         ],
         jobTitle: "Recording Artist, Music Producer & Audio Engineer",
+        nationality: "Nigerian",
       },
       {
         "@type": "MusicGroup",
@@ -2111,7 +2132,7 @@ function HomePage() {
         url: "https://silachomka.vercel.app",
         name: "silachomka",
         description:
-          "Official artist website of silachomka. Music, visuals, beat store, and studio services — part of chomkaMUSIC™ and Chomka Nation.",
+          "Official artist website of silachomka (Samuel Silachomka John-Ibro). Music releases, original studio beats, visual archive, and chomkaMUSIC™ Studio audio engineering services.",
       },
       {
         "@type": "BreadcrumbList",
@@ -2473,6 +2494,11 @@ function App() {
               <ReleaseRoute />
             }
           />
+
+          {/* Core Content Route Aliases (Stage 37 SEO Reconciliation) */}
+          <Route path="/music" element={<Navigate to="/#music" replace />} />
+          <Route path="/gallery" element={<Navigate to="/#gallery" replace />} />
+          <Route path="/about" element={<Navigate to="/#about" replace />} />
 
           <Route
             path="/privacy"

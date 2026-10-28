@@ -512,6 +512,11 @@ export default function GalleryPostModal({
                 <span className="gallery-author-sub">
                   {post.category} · Source: {post.source || DEFAULT_SOURCE}
                 </span>
+                {post.location && (
+                  <span className="gallery-modal-location" style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--gold)", fontSize: "11px", marginTop: "2px" }}>
+                    <span aria-hidden="true">📍</span> {post.location}
+                  </span>
+                )}
               </div>
             </div>
             <span className="gallery-modal-date">
@@ -634,6 +639,12 @@ export default function GalleryPostModal({
                   name: "silachomka",
                   url: "https://silachomka.vercel.app",
                 },
+                ...(post.location ? {
+                  contentLocation: {
+                    "@type": "Place",
+                    name: post.location,
+                  },
+                } : {}),
               },
               {
                 "@type": "BreadcrumbList",
@@ -741,6 +752,12 @@ export default function GalleryPostModal({
                   name: "silachomka",
                   url: "https://silachomka.vercel.app",
                 },
+                ...(post.location ? {
+                  contentLocation: {
+                    "@type": "Place",
+                    name: post.location,
+                  },
+                } : {}),
               },
               {
                 "@type": "BreadcrumbList",
