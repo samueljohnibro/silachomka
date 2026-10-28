@@ -613,6 +613,52 @@ export default function BeatDetailPage() {
     (beat.video && /\.gif(\?.*)?$/i.test(beat.video) ? beat.video : null) ||
     shareImage;
 
+  const beatJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "MusicRecording",
+        "@id": `https://silachomka.vercel.app/beats/${beat.id}#recording`,
+        name: beat.title,
+        url: `https://silachomka.vercel.app/beats/${beat.id}`,
+        image: shareImage ? absoluteUrl(shareImage) : "https://silachomka.vercel.app/beats-image.png",
+        byArtist: {
+          "@type": "Person",
+          name: "silachomka",
+          url: "https://silachomka.vercel.app",
+        },
+        producer: {
+          "@type": "MusicGroup",
+          name: "chomkaMUSIC™",
+          url: "https://silachomka.vercel.app",
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: "https://silachomka.vercel.app",
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Beats",
+            item: "https://silachomka.vercel.app/beats",
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: beat.title,
+            item: `https://silachomka.vercel.app/beats/${beat.id}`,
+          },
+        ],
+      },
+    ],
+  };
+
   return (
     <main className="beat-detail-view">
       <SeoHead
@@ -624,6 +670,7 @@ export default function BeatDetailPage() {
         type="music.song"
         icon="/beats-image.png"
         imageAlt={`${beat.title} beat by silachomka`}
+        jsonLd={beatJsonLd}
       />
 
       {/* Req #7: Atmospheric Blurred Product Artwork Background */}

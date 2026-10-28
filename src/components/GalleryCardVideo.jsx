@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 
 /**
  * GalleryCardVideo (Stage 34 — Req #5)
@@ -16,11 +16,15 @@ export default function GalleryCardVideo({
   poster,
   className = "gallery-card-image",
   title = "Gallery Video",
+  isActive = true,
+  onReady,
+  onError,
 }) {
   const videoRef = useRef(null);
   const snippetStartRef = useRef(0);
   const snippetEndRef = useRef(SNIPPET_DURATION);
   const isSettingTimeRef = useRef(false);
+  const [hasLoadedData, setHasLoadedData] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -42,13 +46,25 @@ export default function GalleryCardVideo({
         snippetEndRef.current = dur;
         try {
           isSettingTimeRef.current = true;
-          video.currentTime = 0.1;
+          video.currentTime = 0.05;
         } catch {}
       }
     };
 
     const handleLoadedMetadata = () => {
       setupRandomSnippet();
+    };
+
+    const handleCanPlay = () => {
+      setHasLoadedData(true);
+      if (onReady) onReady(src);
+      if (isActive) {
+        video.play().catch(() => {});
+      }
+    };
+
+    const handleError = (e) => {
+      if (onError) onError(src, e);
     };
 
     const handleTimeUpdate = () => {
@@ -80,6 +96,9 @@ export default function GalleryCardVideo({
     };
 
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    video.addEventListener("canplay", handleCanPlay);
+    video.addEventListener("loadeddata", handleCanPlay);
+    video.addEventListener("error", handleError);
     video.addEventListener("timeupdate", handleTimeUpdate);
 
     const observer = new IntersectionObserver(
@@ -88,7 +107,7 @@ export default function GalleryCardVideo({
           if (!videoRef.current) return;
           const v = videoRef.current;
 
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.25 && isActive) {
             v.play().catch(() => {});
           } else {
             v.pause();
@@ -96,7 +115,7 @@ export default function GalleryCardVideo({
         });
       },
       {
-        threshold: [0, 0.35, 0.8],
+        threshold: [0, 0.25, 0.8],
       }
     );
 
@@ -105,9 +124,24 @@ export default function GalleryCardVideo({
     return () => {
       observer.disconnect();
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.removeEventListener("canplay", handleCanPlay);
+      video.removeEventListener("error", handleError);
       video.removeEventListener("timeupdate", handleTimeUpdate);
+      try {
+        video.pause();
+      } catch {}
     };
-  }, [src]);
+  }, [src, isActive, onReady, onError]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (isActive && hasLoadedData) {
+      video.play().catch(() => {});
+    } else if (!isActive) {
+      video.pause();
+    }
+  }, [isActive, hasLoadedData]);
 
   return (
     <video
@@ -116,7 +150,7 @@ export default function GalleryCardVideo({
       poster={poster || undefined}
       muted
       playsInline
-      preload="metadata"
+      preload="auto"
       className={className}
       aria-label={title}
       style={{

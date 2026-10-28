@@ -20,6 +20,7 @@ function formatClock(seconds) {
 export default function GalleryVideoPlayer({
   src,
   poster,
+  isActive = true,
   className = "",
   style = {},
 }) {
@@ -34,6 +35,32 @@ export default function GalleryVideoPlayer({
   const [duration, setDuration] = useState(0);
   const [isDraggingSeek, setIsDraggingSeek] = useState(false);
   const [hasError, setHasError] = useState(false);
+
+  // Pause video immediately when inactive
+  useEffect(() => {
+    if (!isActive) {
+      const v = videoRef.current;
+      if (v) {
+        try {
+          v.pause();
+          setIsPlaying(false);
+        } catch {}
+      }
+    }
+  }, [isActive]);
+
+  // Clean pause on unmount
+  useEffect(() => {
+    return () => {
+      const v = videoRef.current;
+      if (v) {
+        try {
+          v.pause();
+          v.currentTime = 0;
+        } catch {}
+      }
+    };
+  }, []);
 
   // Reset player state when video source changes
   useEffect(() => {

@@ -1093,16 +1093,20 @@ export default function BeatsPage() {
       audio.pause();
     } catch {}
 
-    previewStartRef.current = 0;
-    const dur =
-      playbackMode === "full"
-        ? audio.duration
-        : Math.min(PREVIEW_LENGTH, audio.duration);
+    let start = 0;
+    let dur = audio.duration;
+    if (playbackMode === "45sec") {
+      const maxStart = Math.max(0, audio.duration - PREVIEW_LENGTH);
+      start = maxStart > 0 ? Math.random() * maxStart : 0;
+      dur = Math.min(PREVIEW_LENGTH, audio.duration - start);
+    }
+
+    previewStartRef.current = start;
     previewDurationRef.current = dur;
     setActivePreviewDuration(dur);
 
     try {
-      audio.currentTime = 0;
+      audio.currentTime = start;
     } catch {}
     setProgress(0);
 
@@ -1708,6 +1712,35 @@ export default function BeatsPage() {
     }
   };
 
+  const beatsStoreJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "MusicGroup",
+        "@id": "https://silachomka.vercel.app/#musicgroup",
+        name: "chomkaMUSIC™",
+        url: "https://silachomka.vercel.app",
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: "https://silachomka.vercel.app",
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Beats",
+            item: "https://silachomka.vercel.app/beats",
+          },
+        ],
+      },
+    ],
+  };
+
   return (
     <main className="beats-page">
       <SeoHead
@@ -1717,6 +1750,7 @@ export default function BeatsPage() {
         image="/beats-image.png"
         icon="/beats-image.png"
         imageAlt="chomkaMUSIC™ Studio Beats by silachomka"
+        jsonLd={beatsStoreJsonLd}
       />
 
       {/* =================================================

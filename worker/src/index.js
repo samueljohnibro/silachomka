@@ -891,6 +891,8 @@ app.get('/api/gallery', async (c) => {
       g.external_social_platform as "externalSocialPlatform",
       g.tags as tags,
       (g.tags->'assignedSocials') as "assignedSocials",
+      COALESCE((g.tags->>'is_hero')::boolean, (g.tags->>'isHero')::boolean, false) as "is_hero",
+      COALESCE((g.tags->>'is_hero')::boolean, (g.tags->>'isHero')::boolean, false) as "isHero",
       COALESCE(
         (
           SELECT json_agg(json_build_object(
@@ -900,7 +902,9 @@ app.get('/api/gallery', async (c) => {
             'asset', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END,
             'src', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END,
             'mimeType', sm.mime_type,
-            'assetType', sm.asset_type
+            'assetType', sm.asset_type,
+            'isHero', COALESCE((sm.alt_text LIKE '%[HERO]%'), false),
+            'is_hero', COALESCE((sm.alt_text LIKE '%[HERO]%'), false)
           ) ORDER BY gs.sort_order ASC)
           FROM gallery_slides gs
           LEFT JOIN media_assets sm ON gs.asset_id = sm.id
@@ -938,6 +942,8 @@ app.get('/api/gallery/:slug', async (c) => {
       g.external_social_platform as "externalSocialPlatform",
       g.tags as tags,
       (g.tags->'assignedSocials') as "assignedSocials",
+      COALESCE((g.tags->>'is_hero')::boolean, (g.tags->>'isHero')::boolean, false) as "is_hero",
+      COALESCE((g.tags->>'is_hero')::boolean, (g.tags->>'isHero')::boolean, false) as "isHero",
       COALESCE(
         (
           SELECT json_agg(json_build_object(
@@ -947,7 +953,9 @@ app.get('/api/gallery/:slug', async (c) => {
             'asset', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END,
             'src', CASE WHEN sm.file_data IS NOT NULL THEN '/api/media/asset/' || sm.id ELSE '/' || sm.r2_key END,
             'mimeType', sm.mime_type,
-            'assetType', sm.asset_type
+            'assetType', sm.asset_type,
+            'isHero', COALESCE((sm.alt_text LIKE '%[HERO]%'), false),
+            'is_hero', COALESCE((sm.alt_text LIKE '%[HERO]%'), false)
           ) ORDER BY gs.sort_order ASC)
           FROM gallery_slides gs
           LEFT JOIN media_assets sm ON gs.asset_id = sm.id
@@ -1350,62 +1358,53 @@ app.post('/api/services/verify-payment', async (c) => {
     })
   }
 
-  if (c.env?.PAYSTACK_SECRET_KEY && c.env.PAYSTACK_SECRET_KEY.startsWith('sk_')) {
-    try {
-      const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-        headers: {
-          'Authorization': `Bearer ${c.env.PAYSTACK_SECRET_KEY}`
-        }
-      })
-      const verifyData = await verifyRes.json()
-      if (!verifyData.status || verifyData.data?.status !== 'success') {
-        return c.json({
-          error: 'Payment verification failed',
-          details: verifyData.data?.gateway_response || 'Transaction not confirmed'
-        }, 400)
-      }
-
-      // Authoritative server amount check (Req #27)
-      const expectedKobo = Math.round(Number(order.total_amount_ngn || 0) * 100)
-      const actualKobo = Number(verifyData.data?.amount || 0)
-      if (expectedKobo > 0 && actualKobo < expectedKobo) {
-        return c.json({ error: 'Amount paid does not match authoritative order total' }, 400)
-      }
-
-      await sql`
-        UPDATE service_orders
-        SET payment_status = 'PAID', order_status = 'PAID', paid_at = NOW(),
-            payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
-        WHERE id = ${order.id}
-      `
-
-      return c.json({
-        success: true,
-        orderNumber: order.order_number,
-        paymentStatus: 'PAID',
-        orderStatus: 'PAID',
-        reference
-      })
-    } catch (e) {
-      return c.json({ error: 'Error connecting to payment authority: ' + e.message }, 502)
-    }
+  if (!c.env?.PAYSTACK_SECRET_KEY || !c.env.PAYSTACK_SECRET_KEY.startsWith('sk_')) {
+    return c.json({
+      error: 'Paystack payment gateway is not configured on this environment (missing PAYSTACK_SECRET_KEY in worker secrets). Payment cannot be verified.',
+      orderNumber: order.order_number,
+      paymentStatus: order.payment_status || 'AWAITING_PAYMENT',
+      orderStatus: order.order_status || 'AWAITING_PAYMENT'
+    }, 503)
   }
 
-  // Development/mock fallback verification
-  await sql`
-    UPDATE service_orders
-    SET payment_status = 'PAID', order_status = 'PAID', paid_at = NOW(),
-        payment_reference = COALESCE(payment_reference, ${reference}), updated_at = NOW()
-    WHERE id = ${order.id}
-  `
+  try {
+    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: {
+        'Authorization': `Bearer ${c.env.PAYSTACK_SECRET_KEY}`
+      }
+    })
+    const verifyData = await verifyRes.json()
+    if (!verifyData.status || verifyData.data?.status !== 'success') {
+      return c.json({
+        error: 'Payment verification failed',
+        details: verifyData.data?.gateway_response || 'Transaction not confirmed'
+      }, 400)
+    }
 
-  return c.json({
-    success: true,
-    orderNumber: order.order_number,
-    paymentStatus: 'PAID',
-    orderStatus: 'PAID',
-    reference
-  })
+    // Authoritative server amount check (Req #27)
+    const expectedKobo = Math.round(Number(order.total_amount_ngn || 0) * 100)
+    const actualKobo = Number(verifyData.data?.amount || 0)
+    if (expectedKobo > 0 && actualKobo < expectedKobo) {
+      return c.json({ error: 'Amount paid does not match authoritative order total' }, 400)
+    }
+
+    await sql`
+      UPDATE service_orders
+      SET payment_status = 'PAID', order_status = 'PAID', paid_at = NOW(),
+          payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
+      WHERE id = ${order.id}
+    `
+
+    return c.json({
+      success: true,
+      orderNumber: order.order_number,
+      paymentStatus: 'PAID',
+      orderStatus: 'PAID',
+      reference
+    })
+  } catch (e) {
+    return c.json({ error: 'Error connecting to payment authority: ' + e.message }, 502)
+  }
 })
 
 // Paystack Webhook Handler (Req #26 & #27)
@@ -1476,59 +1475,60 @@ app.post('/api/services/orders/:orderNumber/payment', async (c) => {
   const amountKobo = Math.round(Number(order.total_amount_ngn) * 100)
   const reference = `PAY-${order.order_number}-${Date.now()}`
 
-  if (c.env?.PAYSTACK_SECRET_KEY && c.env.PAYSTACK_SECRET_KEY.startsWith('sk_')) {
-    try {
-      const siteOrigin = c.env?.PUBLIC_ORIGIN || 'https://silachomka.vercel.app'
-      const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${c.env.PAYSTACK_SECRET_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: order.customer_email,
-          amount: amountKobo,
-          reference,
-          callback_url: `${siteOrigin}/services/order/${order.order_number}?paid=true`,
-          metadata: {
-            order_number: order.order_number,
-            service_title: order.service_title,
-            customer_name: order.customer_name
-          }
-        })
-      })
-      const paystackData = await paystackRes.json()
-      if (paystackData.status && paystackData.data?.authorization_url) {
-        await sql`
-          UPDATE service_orders
-          SET payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
-          WHERE id = ${order.id}
-        `
-        return c.json({
-          success: true,
-          provider: 'PAYSTACK',
-          authorizationUrl: paystackData.data.authorization_url,
-          accessCode: paystackData.data.access_code,
-          reference
-        })
-      }
-    } catch (e) {
-      console.warn('Paystack initialization fallback:', e.message)
-    }
+  if (!c.env?.PAYSTACK_SECRET_KEY || !c.env.PAYSTACK_SECRET_KEY.startsWith('sk_')) {
+    return c.json({
+      error: 'Paystack payment gateway is not configured (missing PAYSTACK_SECRET_KEY in worker secrets). Appointment remains PENDING_PAYMENT.',
+      orderNumber: order.order_number,
+      paymentStatus: order.payment_status || 'AWAITING_PAYMENT',
+      orderStatus: order.order_status || 'AWAITING_PAYMENT'
+    }, 503)
   }
 
-  await sql`
-    UPDATE service_orders
-    SET payment_reference = ${reference}, updated_at = NOW()
-    WHERE id = ${order.id}
-  `
-  return c.json({
-    success: true,
-    provider: 'DIRECT',
-    reference,
-    message: 'Payment reference created. Awaiting transfer or card confirmation.',
-    amountNgn: Number(order.total_amount_ngn)
-  })
+  try {
+    const siteOrigin = c.env?.PUBLIC_ORIGIN || 'https://silachomka.vercel.app'
+    const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${c.env.PAYSTACK_SECRET_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: order.customer_email,
+        amount: amountKobo,
+        reference,
+        callback_url: `${siteOrigin}/services/order/${order.order_number}?paid=true`,
+        metadata: {
+          order_number: order.order_number,
+          service_title: order.service_title,
+          customer_name: order.customer_name
+        }
+      })
+    })
+    const paystackData = await paystackRes.json()
+    if (paystackData.status && paystackData.data?.authorization_url) {
+      await sql`
+        UPDATE service_orders
+        SET payment_reference = ${reference}, payment_provider = 'PAYSTACK', updated_at = NOW()
+        WHERE id = ${order.id}
+      `
+      return c.json({
+        success: true,
+        provider: 'PAYSTACK',
+        authorizationUrl: paystackData.data.authorization_url,
+        accessCode: paystackData.data.access_code,
+        reference
+      })
+    }
+    return c.json({
+      error: paystackData.message || 'Paystack initialization failed',
+      orderNumber: order.order_number
+    }, 400)
+  } catch (e) {
+    return c.json({
+      error: 'Payment gateway connection error: ' + e.message,
+      orderNumber: order.order_number
+    }, 502)
+  }
 })
 
 // ------------------------------------------

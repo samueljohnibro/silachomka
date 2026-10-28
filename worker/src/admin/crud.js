@@ -705,7 +705,10 @@ adminApp.post('/gallery-categories', async (c) => {
 adminApp.get('/gallery-posts', async (c) => {
   const sql = c.get('sql')
   const rows = await sql`SELECT * FROM gallery_posts WHERE deleted_at IS NULL ORDER BY post_date DESC, created_at DESC`
-  return c.json(rows)
+  return c.json(rows.map(r => ({
+    ...r,
+    is_hero: Boolean(r.tags?.is_hero || r.tags?.isHero || r.is_hero)
+  })))
 })
 
 adminApp.post('/gallery-posts', async (c) => {
@@ -761,10 +764,15 @@ adminApp.post('/gallery-posts', async (c) => {
   const extSocialUrl = body.external_social_url ? String(body.external_social_url).trim() : null
   const extSocialPlatform = detectSocialPlatform(extSocialUrl, body.external_social_platform)
 
+  const mergedTags = {
+    ...(typeof body.tags === 'object' && body.tags !== null ? body.tags : {}),
+    ...(body.is_hero !== undefined ? { is_hero: Boolean(body.is_hero) } : {})
+  }
+
   try {
     const rows = await sql`
       INSERT INTO gallery_posts (slug, title, caption, category, post_type, primary_asset_id, related_release_id, related_track_id, related_beat_id, legacy_link, external_social_url, external_social_platform, tags, post_date, display_date, status, scheduled_at)
-      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${normCat.slug}, ${inferredPostType}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${extSocialUrl}, ${extSocialPlatform}, ${body.tags ? JSON.stringify(body.tags) : null}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
+      VALUES (${slug}, ${body.title || null}, ${body.caption || null}, ${normCat.slug}, ${inferredPostType}, ${primaryAssetId}, ${body.related_release_id || null}, ${body.related_track_id || null}, ${body.related_beat_id || null}, ${body.legacy_link || null}, ${extSocialUrl}, ${extSocialPlatform}, ${JSON.stringify(mergedTags)}, ${body.post_date}, ${canonicalDisplayDate}, ${status}, ${scheduledAt})
       RETURNING *
     `
 
@@ -837,6 +845,12 @@ adminApp.put('/gallery-posts/:id', async (c) => {
   const extSocialUrl = up.external_social_url ? String(up.external_social_url).trim() : null
   const extSocialPlatform = extSocialUrl ? detectSocialPlatform(extSocialUrl, up.external_social_platform) : null
 
+  const incomingTags = body.tags !== undefined ? body.tags : e.tags
+  const mergedTags = {
+    ...(typeof incomingTags === 'object' && incomingTags !== null ? incomingTags : {}),
+    ...(body.is_hero !== undefined ? { is_hero: Boolean(body.is_hero) } : {})
+  }
+
   try {
     const rows = await sql`
       UPDATE gallery_posts SET
@@ -852,7 +866,7 @@ adminApp.put('/gallery-posts/:id', async (c) => {
         legacy_link = ${up.legacy_link || null},
         external_social_url = ${extSocialUrl},
         external_social_platform = ${extSocialPlatform},
-        tags = ${up.tags ? JSON.stringify(body.tags !== undefined ? body.tags : e.tags) : null},
+        tags = ${JSON.stringify(mergedTags)},
         post_date = ${up.post_date},
         display_date = ${canonicalDisplayDate},
         status = ${status},
@@ -949,7 +963,10 @@ adminApp.get('/media-assets', async (c) => {
       CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
     FROM media_assets WHERE deleted_at IS NULL ORDER BY created_at DESC
   `
-  return c.json(rows)
+  return c.json(rows.map(r => ({
+    ...r,
+    is_hero: Boolean((r.alt_text && r.alt_text.includes('[HERO]')) || r.is_hero)
+  })))
 })
 
 adminApp.post('/media-assets', async (c) => {
@@ -957,14 +974,19 @@ adminApp.post('/media-assets', async (c) => {
   const body = await c.req.json()
   if (!body.r2_key || !body.asset_type) return c.json({ error: 'Missing required fields' }, 400)
 
+  let cleanAlt = (body.alt_text || '').replace(/\s*\[HERO\]\s*/g, '').trim()
+  if (body.is_hero) {
+    cleanAlt = cleanAlt ? `${cleanAlt} [HERO]` : '[HERO]'
+  }
+
   try {
     const rows = await sql`
       INSERT INTO media_assets (r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by)
-      VALUES (${body.r2_key}, ${body.original_filename || null}, ${body.asset_type}, ${body.mime_type || null}, ${body.size_bytes || null}, ${body.width || null}, ${body.height || null}, ${body.duration_seconds || null}, ${body.alt_text || null}, ${body.blurhash || null}, ${body.asset_role || 'OPTIMIZED_WEB'}, ${body.source_asset_id || null}, ${body.original_size_bytes || null}, ${body.original_mime_type || null}, ${body.optimization_status || 'OPTIMIZED'}, ${c.get('user').sub})
+      VALUES (${body.r2_key}, ${body.original_filename || null}, ${body.asset_type}, ${body.mime_type || null}, ${body.size_bytes || null}, ${body.width || null}, ${body.height || null}, ${body.duration_seconds || null}, ${cleanAlt || null}, ${body.blurhash || null}, ${body.asset_role || 'OPTIMIZED_WEB'}, ${body.source_asset_id || null}, ${body.original_size_bytes || null}, ${body.original_mime_type || null}, ${body.optimization_status || 'OPTIMIZED'}, ${c.get('user').sub})
       RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'media_assets', rows[0].id, null, rows[0])
-    return c.json(rows[0], 201)
+    return c.json({ ...rows[0], is_hero: Boolean(body.is_hero) }, 201)
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 
@@ -978,6 +1000,15 @@ adminApp.put('/media-assets/:id', async (c) => {
   const e = existing[0]
   const up = { ...e, ...body }
 
+  const isHero = body.is_hero !== undefined
+    ? Boolean(body.is_hero)
+    : Boolean(e.alt_text && e.alt_text.includes('[HERO]'))
+
+  let cleanAlt = (up.alt_text || '').replace(/\s*\[HERO\]\s*/g, '').trim()
+  if (isHero) {
+    cleanAlt = cleanAlt ? `${cleanAlt} [HERO]` : '[HERO]'
+  }
+
   try {
     const rows = await sql`
       UPDATE media_assets SET
@@ -989,7 +1020,7 @@ adminApp.put('/media-assets/:id', async (c) => {
         width = ${up.width},
         height = ${up.height},
         duration_seconds = ${up.duration_seconds},
-        alt_text = ${up.alt_text},
+        alt_text = ${cleanAlt || null},
         blurhash = ${up.blurhash},
         asset_role = ${up.asset_role || 'OPTIMIZED_WEB'},
         source_asset_id = ${up.source_asset_id || null},
@@ -1001,7 +1032,7 @@ adminApp.put('/media-assets/:id', async (c) => {
       RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at
     `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'media_assets', id, existing[0], rows[0])
-    return c.json(rows[0])
+    return c.json({ ...rows[0], is_hero: isHero })
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
 

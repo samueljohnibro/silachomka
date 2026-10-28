@@ -101,6 +101,24 @@ export default function AdminMediaPage() {
     return `/api/media/asset/${asset.id}`;
   };
 
+  const toggleHero = async (asset, e) => {
+    if (e) e.stopPropagation();
+    const nextHero = !asset.is_hero;
+    try {
+      await adminApi.updateMediaAsset(asset.id, {
+        is_hero: nextHero,
+      });
+      setMedia((prev) =>
+        prev.map((m) => (m.id === asset.id ? { ...m, is_hero: nextHero } : m))
+      );
+      if (selectedAsset?.id === asset.id) {
+        setSelectedAsset((prev) => ({ ...prev, is_hero: nextHero }));
+      }
+    } catch (err) {
+      console.warn("Failed to update hero state:", err);
+    }
+  };
+
   const filteredMedia = useMemo(() => {
     return media.filter((asset) => {
       if (filterType !== "ALL" && asset.asset_type !== filterType) return false;
@@ -371,6 +389,27 @@ export default function AdminMediaPage() {
                       {asset.width && asset.height ? ` • ${asset.width}×${asset.height}` : ""}
                     </p>
                   </div>
+
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <button
+                      type="button"
+                      onClick={(e) => toggleHero(asset, e)}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        border: asset.is_hero ? "1px solid var(--gold)" : "1px solid rgba(255, 255, 255, 0.15)",
+                        background: asset.is_hero ? "rgba(223, 194, 125, 0.2)" : "transparent",
+                        color: asset.is_hero ? "var(--gold)" : "var(--muted)",
+                        transition: "all 0.15s ease",
+                      }}
+                      title="Toggle Homepage Hero Visibility"
+                    >
+                      {asset.is_hero ? "✓ Hero" : "Not in Hero"}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -385,6 +424,7 @@ export default function AdminMediaPage() {
                 <th style={{ padding: "14px 16px", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>Preview</th>
                 <th style={{ padding: "14px 16px", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>Filename / Key</th>
                 <th style={{ padding: "14px 16px", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>Type</th>
+                <th style={{ padding: "14px 16px", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>Hero</th>
                 <th style={{ padding: "14px 16px", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>Size</th>
                 <th style={{ padding: "14px 16px", textAlign: "right", color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>Actions</th>
               </tr>
@@ -437,6 +477,26 @@ export default function AdminMediaPage() {
                       >
                         {asset.asset_type}
                       </span>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <button
+                        type="button"
+                        onClick={(e) => toggleHero(asset, e)}
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          border: asset.is_hero ? "1px solid var(--gold)" : "1px solid rgba(255, 255, 255, 0.15)",
+                          background: asset.is_hero ? "rgba(223, 194, 125, 0.2)" : "transparent",
+                          color: asset.is_hero ? "var(--gold)" : "var(--muted)",
+                          transition: "all 0.15s ease",
+                        }}
+                        title="Toggle Homepage Hero Visibility"
+                      >
+                        {asset.is_hero ? "✓ Hero" : "Not in Hero"}
+                      </button>
                     </td>
                     <td style={{ padding: "12px 16px", fontSize: 12, color: "var(--muted)" }}>
                       {asset.size_bytes ? `${(asset.size_bytes / 1024).toFixed(1)} KB` : "—"}
@@ -558,6 +618,26 @@ export default function AdminMediaPage() {
               <div><strong>File Size:</strong> {selectedAsset.size_bytes ? `${(selectedAsset.size_bytes / 1024).toFixed(1)} KB` : "—"}</div>
               <div><strong>Dimensions:</strong> {selectedAsset.width && selectedAsset.height ? `${selectedAsset.width} × ${selectedAsset.height} px` : "—"}</div>
               <div><strong>Uploaded At:</strong> {selectedAsset.created_at ? new Date(selectedAsset.created_at).toLocaleString() : "—"}</div>
+              <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 10, paddingTop: 6, borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                <strong>Homepage Hero:</strong>
+                <button
+                  type="button"
+                  onClick={(e) => toggleHero(selectedAsset, e)}
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: selectedAsset.is_hero ? "1px solid var(--gold)" : "1px solid rgba(255, 255, 255, 0.15)",
+                    background: selectedAsset.is_hero ? "rgba(223, 194, 125, 0.2)" : "transparent",
+                    color: selectedAsset.is_hero ? "var(--gold)" : "var(--muted)",
+                  }}
+                  title="Toggle Homepage Hero Visibility"
+                >
+                  {selectedAsset.is_hero ? "✓ Show in Homepage Hero" : "Not in Hero (Click to Enable)"}
+                </button>
+              </div>
             </div>
 
             {/* Quick Action Buttons */}

@@ -136,6 +136,7 @@ const AdminGalleryPage = () => {
       status: "DRAFT",
       carouselSlides: [],
       assignedSocials: [],
+      is_hero: false,
     });
     setView("CREATE");
     setError(null);
@@ -193,6 +194,7 @@ const AdminGalleryPage = () => {
       post_date: post.post_date ? post.post_date.split("T")[0] : "",
       carouselSlides: initialSlides,
       assignedSocials: post.tags?.assignedSocials || post.assignedSocials || [],
+      is_hero: Boolean(post.is_hero || post.isHero || post.tags?.is_hero || post.tags?.isHero),
     });
     setView("EDIT");
     setError(null);
@@ -396,7 +398,12 @@ const AdminGalleryPage = () => {
         legacy_link: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_url: currentPost.external_social_url || currentPost.legacy_link || null,
         external_social_platform: currentPost.external_social_platform || null,
-        tags: { ...(currentPost.tags || {}), assignedSocials: currentPost.assignedSocials || [] },
+        is_hero: Boolean(currentPost.is_hero),
+        tags: {
+          ...(currentPost.tags || {}),
+          assignedSocials: currentPost.assignedSocials || [],
+          is_hero: Boolean(currentPost.is_hero),
+        },
         slides: activeSlides,
       };
 
@@ -1252,6 +1259,26 @@ const AdminGalleryPage = () => {
                     Scheduled for {new Date(currentPost.scheduled_at).toLocaleString()}
                   </span>
                 )}
+              </div>
+
+              {/* Req #6: Homepage Hero Eligibility Checkbox */}
+              <div className="studio-field" style={{ textAlign: "left", marginTop: 12 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    name="is_hero"
+                    checked={Boolean(currentPost.is_hero)}
+                    onChange={handleChange}
+                    disabled={isSaving}
+                    style={{ width: 18, height: 18, accentColor: "var(--gold)", cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+                    Show in Homepage Hero
+                  </span>
+                </label>
+                <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
+                  When enabled, this gallery post's approved media can appear in the homepage hero slideshow.
+                </span>
               </div>
             </div>
           </div>

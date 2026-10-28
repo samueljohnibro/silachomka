@@ -575,13 +575,16 @@ function HeroSlideshow() {
         type: "image",
       }));
 
-    // 2. Gallery photos and videos (including carousel slides & video clips) (Req #19)
+    // 2. Gallery photos and videos (ONLY explicitly approved for hero via is_hero toggle) (Req #6)
     const galleryMedia = (gallery || []).flatMap((g) => {
       const items = [];
+      const postIsHero = Boolean(g.is_hero || g.isHero || g.tags?.is_hero || g.tags?.isHero);
 
       // Check carousel slides
       if (Array.isArray(g.slides) && g.slides.length > 0) {
         g.slides.forEach((slide, sIdx) => {
+          const slideIsHero = Boolean(postIsHero || slide?.isHero || slide?.is_hero);
+          if (!slideIsHero) return; // Only explicitly approved media appears in hero
           const slideSrc =
             typeof slide === "string" ? slide : slide?.src || slide?.asset || "";
           if (!slideSrc) return;
@@ -604,24 +607,26 @@ function HeroSlideshow() {
       }
 
       // Check primary media (single image or standalone video clip)
-      const primary =
-        g.src || g.asset || g.videoSrc || g.media_url || g.video_url || null;
-      if (primary && typeof primary === "string") {
-        const isVideo =
-          g.type === "video" ||
-          g.post_type === "video" ||
-          g.assetType === "VIDEO" ||
-          Boolean(g.mimeType && String(g.mimeType).startsWith("video/")) ||
-          primary.startsWith("data:video") ||
-          /\.(mp4|webm|mov)(\?.*)?$/i.test(primary);
+      if (postIsHero) {
+        const primary =
+          g.src || g.asset || g.videoSrc || g.media_url || g.video_url || null;
+        if (primary && typeof primary === "string") {
+          const isVideo =
+            g.type === "video" ||
+            g.post_type === "video" ||
+            g.assetType === "VIDEO" ||
+            Boolean(g.mimeType && String(g.mimeType).startsWith("video/")) ||
+            primary.startsWith("data:video") ||
+            /\.(mp4|webm|mov)(\?.*)?$/i.test(primary);
 
-        items.push({
-          id: `gallery-${g.id}-primary`,
-          src: primary,
-          title: g.title || "silachomka Archive",
-          type: isVideo ? "video" : "image",
-          poster: !isVideo ? primary : null,
-        });
+          items.push({
+            id: `gallery-${g.id}-primary`,
+            src: primary,
+            title: g.title || "silachomka Archive",
+            type: isVideo ? "video" : "image",
+            poster: !isVideo ? primary : null,
+          });
+        }
       }
 
       return items;
@@ -703,6 +708,13 @@ function HomeHero() {
             className="secondary-button"
           >
             Explore beats
+          </Link>
+
+          <Link
+            to="/services"
+            className="secondary-button"
+          >
+            Explore services
           </Link>
         </div>
       </div>
@@ -1400,7 +1412,21 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
   const slides = useMemo(() => {
     if (!Array.isArray(post.slides) || post.slides.length <= 1) return [];
     return post.slides
-      .map((s) => (typeof s === "string" ? s : s?.src || s?.asset))
+      .map((s, idx) => {
+        const url = typeof s === "string" ? s : s?.src || s?.asset || "";
+        if (!url) return null;
+        const isVid =
+          Boolean(s?.isVideo || s?.slideType === "video" || s?.assetType === "VIDEO") ||
+          Boolean(s?.mimeType && String(s?.mimeType).startsWith("video/")) ||
+          (typeof url === "string" &&
+            (url.startsWith("data:video") || /\.(mp4|webm|mov)(\?.*)?$/i.test(url)));
+        return {
+          id: s?.id || `slide-${idx}`,
+          src: url,
+          isVideo: isVid,
+          poster: s?.poster || null,
+        };
+      })
       .filter(Boolean);
   }, [post.slides]);
 
@@ -1414,6 +1440,20 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
   const cardRef = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isInView, setIsInView] = useState(true);
+  const [readyMap, setReadyMap] = useState({});
+
+  // Pre-load images in background so we never transition to unloaded images
+  useEffect(() => {
+    slides.forEach((slide) => {
+      if (!slide.isVideo && slide.src) {
+        const img = new Image();
+        img.src = slide.src;
+        img.onload = () => {
+          setReadyMap((prev) => ({ ...prev, [slide.src]: true }));
+        };
+      }
+    });
+  }, [slides]);
 
   // Independent non-synchronized schedule per card (Req #2):
   // 6500ms + random offset between 0 and 3000ms
@@ -1443,18 +1483,28 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
     if (!isCarousel || slides.length <= 1 || isPaused || !isInView) return;
 
     let intervalId;
+    const advanceSlide = () => {
+      setCurrentIndex((prev) => {
+        const next = (prev + 1) % slides.length;
+        const nextSlide = slides[next];
+        // If next slide is video and not ready yet, keep current slide until ready
+        if (nextSlide?.isVideo && !readyMap[nextSlide.src]) {
+          return prev;
+        }
+        return next;
+      });
+    };
+
     const timeoutId = setTimeout(() => {
-      setCurrentIndex((prev) => (prev + 1) % slides.length);
-      intervalId = setInterval(() => {
-        setCurrentIndex((prev) => (prev + 1) % slides.length);
-      }, rotationDuration);
+      advanceSlide();
+      intervalId = setInterval(advanceSlide, rotationDuration);
     }, initialDelay);
 
     return () => {
       clearTimeout(timeoutId);
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isCarousel, slides.length, isPaused, isInView, rotationDuration, initialDelay]);
+  }, [isCarousel, slides, isPaused, isInView, rotationDuration, initialDelay, readyMap]);
 
   if (isCarousel && slides.length > 1) {
     return (
@@ -1473,17 +1523,11 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
           overflow: "hidden",
         }}
       >
-        {slides.map((src, idx) => {
-          const isSlideVideo =
-            typeof src === "string" &&
-            (src.startsWith("data:video") ||
-              src.endsWith(".mp4") ||
-              src.endsWith(".webm") ||
-              src.endsWith(".mov"));
+        {slides.map((slide, idx) => {
           const isCurrent = idx === currentIndex;
-          return isSlideVideo ? (
+          return slide.isVideo ? (
             <div
-              key={idx}
+              key={slide.id || slide.src}
               style={{
                 position: "absolute",
                 inset: 0,
@@ -1496,15 +1540,18 @@ function GalleryCardMedia({ post, primarySrc, isVideo, isCarousel }) {
               }}
             >
               <GalleryCardVideo
-                src={src}
+                src={slide.src}
+                poster={slide.poster}
                 title={post.title || "Archive video"}
                 className="gallery-card-image"
+                isActive={isCurrent && isInView}
+                onReady={() => setReadyMap((prev) => ({ ...prev, [slide.src]: true }))}
               />
             </div>
           ) : (
             <img
-              key={idx}
-              src={src}
+              key={slide.id || slide.src}
+              src={slide.src}
               alt={`${post.title || "Archive item"} slide ${idx + 1}`}
               className="gallery-card-image"
               style={{
@@ -2065,6 +2112,17 @@ function HomePage() {
         name: "silachomka",
         description:
           "Official artist website of silachomka. Music, visuals, beat store, and studio services — part of chomkaMUSIC™ and Chomka Nation.",
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: "https://silachomka.vercel.app",
+          },
+        ],
       },
     ],
   };

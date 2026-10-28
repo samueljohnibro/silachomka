@@ -142,9 +142,48 @@ export default function GalleryPostModal({
     }, 460);
   }, []);
 
+  const stopAllVideos = useCallback(() => {
+    if (typeof document !== "undefined") {
+      const videos = document.querySelectorAll(
+        ".gallery-modal-video video, .gallery-modal-media video, .gallery-modal-backdrop video, .gallery-carousel-viewport video"
+      );
+      videos.forEach((v) => {
+        try {
+          v.pause();
+          v.currentTime = 0;
+        } catch {}
+      });
+    }
+  }, []);
+
+  // Stop all playback immediately on unmount (Req #8)
+  useEffect(() => {
+    return () => {
+      stopAllVideos();
+    };
+  }, [stopAllVideos]);
+
+  const handlePrevPost = useCallback((e) => {
+    if (e) e.stopPropagation();
+    stopAllVideos();
+    if (onPrev) onPrev();
+  }, [stopAllVideos, onPrev]);
+
+  const handleNextPost = useCallback((e) => {
+    if (e) e.stopPropagation();
+    stopAllVideos();
+    if (onNext) onNext();
+  }, [stopAllVideos, onNext]);
+
+  const handleClose = useCallback(() => {
+    stopAllVideos();
+    if (onClose) onClose();
+  }, [stopAllVideos, onClose]);
+
   const handlePrevSlide = useCallback((e) => {
     if (e) e.stopPropagation();
     if (isAnimatingRef.current || effectiveSlides.length === 0) return;
+    stopAllVideos();
     setActiveSlide((prev) => {
       isAnimatingRef.current = true;
       setTimeout(() => {
@@ -152,11 +191,12 @@ export default function GalleryPostModal({
       }, 460);
       return prev > 0 ? prev - 1 : effectiveSlides.length - 1;
     });
-  }, [effectiveSlides.length]);
+  }, [effectiveSlides.length, stopAllVideos]);
 
   const handleNextSlide = useCallback((e) => {
     if (e) e.stopPropagation();
     if (isAnimatingRef.current || effectiveSlides.length === 0) return;
+    stopAllVideos();
     setActiveSlide((prev) => {
       isAnimatingRef.current = true;
       setTimeout(() => {
@@ -164,7 +204,7 @@ export default function GalleryPostModal({
       }, 460);
       return prev < effectiveSlides.length - 1 ? prev + 1 : 0;
     });
-  }, [effectiveSlides.length]);
+  }, [effectiveSlides.length, stopAllVideos]);
 
   const handleTouchStart = (e) => {
     if (!e.touches?.[0]) return;
@@ -251,22 +291,22 @@ export default function GalleryPostModal({
   const handleKeyDown = useCallback(
     (e) => {
       if (e.key === "Escape") {
-        onClose();
+        handleClose();
       } else if (e.key === "ArrowLeft") {
         if (isCarousel && effectiveSlides.length > 1) {
-          setActiveSlide((prev) => (prev > 0 ? prev - 1 : effectiveSlides.length - 1));
+          handlePrevSlide();
         } else if (hasPrev) {
-          onPrev();
+          handlePrevPost();
         }
       } else if (e.key === "ArrowRight") {
         if (isCarousel && effectiveSlides.length > 1) {
-          setActiveSlide((prev) => (prev < effectiveSlides.length - 1 ? prev + 1 : 0));
+          handleNextSlide();
         } else if (hasNext) {
-          onNext();
+          handleNextPost();
         }
       }
     },
-    [onClose, onPrev, onNext, hasPrev, hasNext, isCarousel, effectiveSlides.length]
+    [handleClose, handlePrevSlide, handleNextSlide, handlePrevPost, handleNextPost, hasPrev, hasNext, isCarousel, effectiveSlides.length]
   );
 
   // Body scroll lock on modal mount / clean restore on unmount
@@ -304,7 +344,7 @@ export default function GalleryPostModal({
         <button
           type="button"
           className="gallery-modal-close"
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close post viewer"
         >
           <svg
@@ -321,32 +361,6 @@ export default function GalleryPostModal({
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
-        </button>
-      )}
-
-      {!embedded && hasPrev && (
-        <button
-          type="button"
-          className="gallery-modal-post-nav gallery-modal-post-prev"
-          onClick={onPrev}
-          aria-label="Previous post"
-          title="Previous post"
-        >
-          <span className="post-nav-arrow">←</span>
-          <span className="post-nav-text">Prev Post</span>
-        </button>
-      )}
-
-      {!embedded && hasNext && (
-        <button
-          type="button"
-          className="gallery-modal-post-nav gallery-modal-post-next"
-          onClick={onNext}
-          aria-label="Next post"
-          title="Next post"
-        >
-          <span className="post-nav-text">Next Post</span>
-          <span className="post-nav-arrow">→</span>
         </button>
       )}
 
@@ -377,6 +391,7 @@ export default function GalleryPostModal({
                         {isVid ? (
                           <GalleryVideoPlayer
                             src={slide.src}
+                            isActive={idx === activeSlide}
                             className="gallery-modal-video"
                           />
                         ) : (
@@ -424,6 +439,7 @@ export default function GalleryPostModal({
                     }`}
                     onClick={(e) => {
                       e.stopPropagation();
+                      stopAllVideos();
                       goToSlide(idx);
                     }}
                     aria-label={`Go to slide ${idx + 1}`}
@@ -440,6 +456,7 @@ export default function GalleryPostModal({
               <GalleryVideoPlayer
                 key={currentSlideSrc}
                 src={currentSlideSrc}
+                isActive={true}
                 className="gallery-modal-video"
               />
             ) : (
@@ -599,7 +616,54 @@ export default function GalleryPostModal({
             <div className="ambient-gradient-overlay" />
           </div>
         )}
-        {dialog}
+        {/* Schema.org JSON-LD (Req #13: ImageObject & BreadcrumbList) */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "ImageObject",
+                "@id": `https://silachomka.vercel.app/gallery/${post.id || post.slug}#image`,
+                name: post.title || post.caption || "silachomka visual archive",
+                description: post.caption || post.title || "Visual archive post by silachomka",
+                contentUrl: absoluteUrl(currentSlideSrc || post.asset || post.src || "/og-image.png"),
+                author: {
+                  "@type": "Person",
+                  name: "silachomka",
+                  url: "https://silachomka.vercel.app",
+                },
+              },
+              {
+                "@type": "BreadcrumbList",
+                itemListElement: [
+                  {
+                    "@type": "ListItem",
+                    position: 1,
+                    name: "Home",
+                    item: "https://silachomka.vercel.app",
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 2,
+                    name: "Gallery",
+                    item: "https://silachomka.vercel.app/#gallery",
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 3,
+                    name: post.title || "Archive Post",
+                    item: `https://silachomka.vercel.app/gallery/${post.id || post.slug}`,
+                  },
+                ],
+              },
+            ],
+          }),
+        }}
+      />
+
+      {dialog}
       </div>
     );
   }
@@ -607,7 +671,7 @@ export default function GalleryPostModal({
   return (
     <div
       className="gallery-modal-backdrop"
-      onClick={onClose}
+      onClick={handleClose}
       role="dialog"
       aria-modal="true"
     >
@@ -631,6 +695,81 @@ export default function GalleryPostModal({
           <div className="ambient-gradient-overlay" />
         </div>
       )}
+
+      {/* Outside Post Navigation Controls (Req #7) */}
+      {!embedded && hasPrev && (
+        <button
+          type="button"
+          className="gallery-modal-post-nav gallery-modal-post-prev"
+          onClick={handlePrevPost}
+          aria-label="Previous post"
+          title="Previous post"
+        >
+          <span className="post-nav-arrow">←</span>
+          <span className="post-nav-text">Prev Post</span>
+        </button>
+      )}
+
+      {!embedded && hasNext && (
+        <button
+          type="button"
+          className="gallery-modal-post-nav gallery-modal-post-next"
+          onClick={handleNextPost}
+          aria-label="Next post"
+          title="Next post"
+        >
+          <span className="post-nav-text">Next Post</span>
+          <span className="post-nav-arrow">→</span>
+        </button>
+      )}
+
+      {/* Schema.org JSON-LD (Req #13: ImageObject & BreadcrumbList) */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "ImageObject",
+                "@id": `https://silachomka.vercel.app/gallery/${post.id || post.slug}#image`,
+                name: post.title || post.caption || "silachomka visual archive",
+                description: post.caption || post.title || "Visual archive post by silachomka",
+                contentUrl: absoluteUrl(currentSlideSrc || post.asset || post.src || "/og-image.png"),
+                author: {
+                  "@type": "Person",
+                  name: "silachomka",
+                  url: "https://silachomka.vercel.app",
+                },
+              },
+              {
+                "@type": "BreadcrumbList",
+                itemListElement: [
+                  {
+                    "@type": "ListItem",
+                    position: 1,
+                    name: "Home",
+                    item: "https://silachomka.vercel.app",
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 2,
+                    name: "Gallery",
+                    item: "https://silachomka.vercel.app/#gallery",
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 3,
+                    name: post.title || "Archive Post",
+                    item: `https://silachomka.vercel.app/gallery/${post.id || post.slug}`,
+                  },
+                ],
+              },
+            ],
+          }),
+        }}
+      />
+
       {dialog}
     </div>
   );

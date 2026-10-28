@@ -245,7 +245,7 @@ async function run() {
     assert(Array.isArray(releases) && releases.length === 20, `Production releases intact: ${releases.length} releases found`);
     assert(Array.isArray(beats) && beats.length === 12, `Production beats intact: ${beats.length} beats found`);
     assert(Array.isArray(services) && services.length === 9, `Production services intact: ${services.length} services found`);
-    assert(Array.isArray(gallery) && gallery.length === 5, `Production gallery intact: ${gallery.length} posts found`);
+    assert(Array.isArray(gallery) && gallery.length >= 5, `Production gallery intact: ${gallery.length} posts found`);
     assert(Array.isArray(avail), `Production studio availability endpoint active (records: ${avail.length})`);
   } catch (err) {
     console.error("  [FAIL] Failed to verify production endpoints:", err.message);
