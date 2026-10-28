@@ -63,17 +63,60 @@ export default function SharePageButton({
     }
   };
 
-  return (
-    <button
-      type="button"
-      onClick={handleShare}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={`share-page-btn studio-pill-btn ${className}`}
-      aria-label="Share this page"
-      style={{
+  const isSecondary = className.includes("secondary-button");
+  const isPrimary = className.includes("primary-button");
+  const isActionBtn = isSecondary || isPrimary;
+
+  const btnClasses = [
+    "share-page-btn",
+    isActionBtn ? "" : "studio-pill-btn",
+    className
+  ].filter(Boolean).join(" ");
+
+  const computedStyle = isSecondary
+    ? {
         display: "inline-flex",
         alignItems: "center",
+        justifyContent: "center",
+        gap: "8px",
+        minHeight: "48px",
+        height: "48px",
+        padding: "0 24px",
+        borderRadius: "3px",
+        border: copied
+          ? "1px solid var(--gold)"
+          : isHovered
+          ? "1px solid var(--gold)"
+          : "1px solid rgba(223, 194, 125, 0.35)",
+        background: copied
+          ? "linear-gradient(135deg, rgba(223, 194, 125, 0.22) 0%, rgba(20, 18, 14, 0.9) 100%)"
+          : isHovered
+          ? "rgba(223, 194, 125, 0.15)"
+          : "rgba(255, 255, 255, 0.04)",
+        boxShadow: copied
+          ? "0 0 18px rgba(223, 194, 125, 0.3)"
+          : isHovered
+          ? "0 0 25px rgba(223, 194, 125, 0.25)"
+          : "none",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        color: copied || isHovered ? "#ffffff" : "var(--text)",
+        fontSize: "11px",
+        fontWeight: 700,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        cursor: "pointer",
+        lineHeight: 1,
+        verticalAlign: "middle",
+        boxSizing: "border-box",
+        transform: isHovered ? "translateY(-3px)" : "none",
+        transition: "all 0.28s cubic-bezier(0.22, 1, 0.36, 1)",
+        ...style,
+      }
+    : {
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
         gap: "8px",
         padding: "7px 16px",
         borderRadius: "999px",
@@ -97,12 +140,34 @@ export default function SharePageButton({
         fontWeight: 650,
         letterSpacing: "0.06em",
         cursor: "pointer",
+        lineHeight: 1,
+        verticalAlign: "middle",
+        boxSizing: "border-box",
         transform: isHovered ? "translateY(-1px)" : "none",
         transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
         ...style,
-      }}
+      };
+
+  return (
+    <button
+      type="button"
+      onClick={handleShare}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={btnClasses}
+      aria-label="Share this page"
+      style={computedStyle}
     >
-      <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center" }}>
+      <span
+        aria-hidden="true"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          lineHeight: 1,
+          flexShrink: 0
+        }}
+      >
         {copied ? (
           <svg
             width="13"
@@ -135,7 +200,15 @@ export default function SharePageButton({
           </svg>
         )}
       </span>
-      <span>{copied ? "Link Copied!" : label}</span>
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          lineHeight: 1,
+        }}
+      >
+        {copied ? "Link Copied!" : label}
+      </span>
     </button>
   );
 }

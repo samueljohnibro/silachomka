@@ -148,8 +148,8 @@ function SiteHeader({
   beatsPage = false,
 }) {
   const { events = [] } = useChomkaStore();
-  const hasActiveEvents = useMemo(() => {
-    return Array.isArray(events) && events.some(e => Boolean(e.is_published) && (e.status === 'UPCOMING' || e.status === 'RECENT' || e.isFuture));
+  const hasEvents = useMemo(() => {
+    return Array.isArray(events) && events.some(e => Boolean(e.is_published));
   }, [events]);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -215,12 +215,14 @@ function SiteHeader({
               Services
             </Link>
 
-            <Link
-              to="/events"
-              className={location.pathname.startsWith("/events") ? "is-active" : ""}
-            >
-              Events
-            </Link>
+            {hasEvents && (
+              <Link
+                to="/events"
+                className={location.pathname.startsWith("/events") ? "is-active" : ""}
+              >
+                Events
+              </Link>
+            )}
 
             <Link
               to="/calendar"
@@ -289,9 +291,11 @@ function SiteHeader({
               Services
             </Link>
 
-            <Link to="/events" onClick={closeMobileMenu} className={location.pathname.startsWith("/events") ? "active" : ""}>
-              Events
-            </Link>
+            {hasEvents && (
+              <Link to="/events" onClick={closeMobileMenu} className={location.pathname.startsWith("/events") ? "active" : ""}>
+                Events
+              </Link>
+            )}
 
             <Link to="/calendar" onClick={closeMobileMenu} className={location.pathname.startsWith("/calendar") ? "active" : ""}>
               Calendar
@@ -352,9 +356,14 @@ function SiteHeader({
             Services
           </Link>
 
-          <Link to="/events">
-            Events
-          </Link>
+          {hasEvents && (
+            <Link
+              to="/events"
+              className={location.pathname.startsWith("/events") ? "is-active" : ""}
+            >
+              Events
+            </Link>
+          )}
 
           <Link to="/calendar">
             Calendar
@@ -420,9 +429,11 @@ function SiteHeader({
             Services
           </Link>
 
-          <Link to="/events" onClick={closeMobileMenu}>
-            Events
-          </Link>
+          {hasEvents && (
+            <Link to="/events" onClick={closeMobileMenu}>
+              Events
+            </Link>
+          )}
 
           <Link to="/calendar" onClick={closeMobileMenu}>
             Calendar
@@ -718,8 +729,8 @@ function HeroSlideshow() {
 
 function HomeHero() {
   const { events = [] } = useChomkaStore();
-  const hasActiveEvents = useMemo(() => {
-    return Array.isArray(events) && events.some(e => Boolean(e.is_published) && (e.status === 'UPCOMING' || e.status === 'RECENT' || e.isFuture));
+  const hasEvents = useMemo(() => {
+    return Array.isArray(events) && events.some(e => Boolean(e.is_published));
   }, [events]);
 
   return (
@@ -772,26 +783,19 @@ function HomeHero() {
             Explore services
           </Link>
 
-          <Link
-            to="/events"
-            className="secondary-button"
-          >
-            Explore events
-          </Link>
+          {hasEvents && (
+            <Link
+              to="/events"
+              className="secondary-button"
+            >
+              Explore events
+            </Link>
+          )}
 
           <SharePageButton
             title="silachomka — Official Home"
             label="Share Page"
             className="secondary-button"
-            style={{
-              minHeight: "48px",
-              height: "48px",
-              padding: "0 24px",
-              borderRadius: "3px",
-              fontSize: "11px",
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-            }}
           />
         </div>
       </div>
@@ -1039,18 +1043,18 @@ const UpcomingReleaseSection = ({ release }) => {
 function HomepageEventsSection() {
   const { events = [] } = useChomkaStore();
 
-  const activeEvents = useMemo(() => {
-    return (events || []).filter(
-      (e) => Boolean(e.is_published) && (e.status === "UPCOMING" || e.status === "RECENT" || e.isFuture)
-    );
+  const publishedEvents = useMemo(() => {
+    return (events || []).filter((e) => Boolean(e.is_published));
   }, [events]);
 
-  // If there are no active/recent events, this section completely disappears!
-  if (activeEvents.length === 0) return null;
+  const activeEvents = useMemo(() => {
+    return publishedEvents.filter(
+      (e) => e.status === "UPCOMING" || e.status === "RECENT" || e.isFuture || !e.status
+    );
+  }, [publishedEvents]);
 
-  const publishedEventsCount = Array.isArray(events)
-    ? events.filter((e) => Boolean(e.is_published)).length
-    : 0;
+  // When there are no events uploaded from the admin section, this section goes completely blank!
+  if (publishedEvents.length === 0 || activeEvents.length === 0) return null;
 
   return (
     <section id="events" className="home-events-section">
@@ -1060,7 +1064,7 @@ function HomepageEventsSection() {
           <h2>Live Gatherings & Tour Dates</h2>
         </div>
         <Link to="/events" className="section-link">
-          Explore All Events ({publishedEventsCount}) →
+          Explore All Events ({publishedEvents.length}) →
         </Link>
       </div>
 

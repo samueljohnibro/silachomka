@@ -391,14 +391,38 @@ export default function CalendarPage() {
         };
       } else if (targetActId) {
         suppressScroll();
-        const el = document.getElementById(`cal-act-${targetActId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        const highlightElement = () => {
+          const cleanId = String(targetActId).trim();
+          const rawId = cleanId.replace(/^(gal|rel|beat|evt)-/, "");
+          const el =
+            document.getElementById(`cal-act-${cleanId}`) ||
+            document.getElementById(`cal-act-gal-${rawId}`) ||
+            document.getElementById(`cal-act-${rawId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.classList.add("is-calendar-targeted");
+            setTimeout(() => {
+              try {
+                el.classList.remove("is-calendar-targeted");
+              } catch {}
+            }, 3600);
+            return true;
+          }
+          return false;
+        };
+
+        if (!highlightElement()) {
+          const t1 = setTimeout(highlightElement, 80);
+          const t2 = setTimeout(highlightElement, 260);
+          return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+          };
         }
         targetActIdRef.current = null;
       }
     }
-  }, [loading]);
+  }, [loading, selectedDateStr, viewMode]);
 
   // Month navigation handlers
   const handlePrevMonth = () => {

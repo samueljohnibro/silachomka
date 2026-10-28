@@ -1,14 +1,35 @@
-import { UpRightArrowIcon, RightArrowIcon } from "../components/Icons";
+import { UpRightArrowIcon, RightArrowIcon } from "./Icons";
 // src/components/GalleryPostModal.jsx
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import ShareLinkBox from "./ShareLinkBox";
 import SocialPostEmbed from "./SocialPostEmbed";
 import GalleryVideoPlayer from "./GalleryVideoPlayer";
 import { absoluteUrl, canonicalUrl, DEFAULT_SOURCE } from "../data/credits";
 import { formatGalleryDate } from "../utils/dateFormatter";
+import { buildCalendarUrl, getSavedCalendarState } from "../utils/calendarNavigation";
+
+function extractPostIsoDate(post) {
+  if (!post) return null;
+  const candidates = [post.date, post.post_date, post.displayDate];
+  for (const c of candidates) {
+    if (!c || typeof c !== "string") continue;
+    const m = c.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+  }
+  if (post.displayDate && typeof post.displayDate === "string") {
+    const d = new Date(post.displayDate);
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dt = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dt}`;
+    }
+  }
+  return null;
+}
 
 function isVideoSrc(src, slideObj, post, slideCount = 1) {
   if (
@@ -340,6 +361,44 @@ export default function GalleryPostModal({
     };
   }, [handleKeyDown, embedded]);
 
+  const location = useLocation();
+
+  const postLocation = useMemo(() => {
+    if (!post) return null;
+    if (post.location && typeof post.location === "string" && post.location.trim()) {
+      return post.location.trim();
+    }
+    if (post.tags && typeof post.tags === "object" && !Array.isArray(post.tags) && post.tags.location) {
+      return String(post.tags.location).trim();
+    }
+    return null;
+  }, [post?.location, post?.tags]);
+
+  const postIsoDate = useMemo(() => {
+    return extractPostIsoDate(post);
+  }, [post?.date, post?.post_date, post?.displayDate]);
+
+  const savedCal = useMemo(() => getSavedCalendarState(), []);
+  const effectiveViewMode = useMemo(() => {
+    const raw = location?.state?.viewMode || savedCal?.viewMode || "GRID";
+    return String(raw).toUpperCase() === "TIMELINE" ? "TIMELINE" : "GRID";
+  }, [location?.state?.viewMode, savedCal]);
+
+  const calendarUrl = useMemo(() => {
+    const d = postIsoDate ? new Date(postIsoDate) : null;
+    const validDate = d && !isNaN(d.getTime()) ? d : null;
+    return buildCalendarUrl({
+      viewMode: effectiveViewMode,
+      currentDate: validDate,
+      selectedDateStr: postIsoDate || null,
+      actId: `gal-${post?.id || post?.slug || ""}`,
+    });
+  }, [effectiveViewMode, postIsoDate, post?.id, post?.slug]);
+
+  const formattedDate = useMemo(() => {
+    return formatGalleryDate(post?.displayDate || post?.date || post?.post_date);
+  }, [post?.displayDate, post?.date, post?.post_date]);
+
   if (!post) return null;
 
   const externalSocialUrl = post.externalSocialUrl || post.external_social_url || null;
@@ -358,10 +417,11 @@ export default function GalleryPostModal({
           className="gallery-modal-close"
           onClick={handleClose}
           aria-label="Close post viewer"
+          title="Close viewer (Esc)"
         >
           <svg
-            width="14"
-            height="14"
+            width="15"
+            height="15"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -427,8 +487,21 @@ export default function GalleryPostModal({
                 className="carousel-slide-btn carousel-prev"
                 onClick={handlePrevSlide}
                 aria-label="Previous slide"
+                title="Previous slide"
               >
-                ‹
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
               </button>
 
               <button
@@ -436,8 +509,21 @@ export default function GalleryPostModal({
                 className="carousel-slide-btn carousel-next"
                 onClick={handleNextSlide}
                 aria-label="Next slide"
+                title="Next slide"
               >
-                ›
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
               </button>
 
               {/* Carousel Pagination Indicator & Dots */}
@@ -459,8 +545,17 @@ export default function GalleryPostModal({
                 ))}
               </div>
 
-              <div className="carousel-counter-badge">
-                {activeSlide + 1}/{effectiveSlides.length}
+              <div
+                className="carousel-counter-badge"
+                aria-label={`Slide ${activeSlide + 1} of ${effectiveSlides.length}`}
+              >
+                <span className="counter-num">
+                  {String(activeSlide + 1).padStart(2, "0")}
+                </span>
+                <span className="counter-sep">/</span>
+                <span className="counter-total">
+                  {String(effectiveSlides.length).padStart(2, "0")}
+                </span>
               </div>
             </div>
           ) : currentSlideSrc ? (
@@ -494,7 +589,7 @@ export default function GalleryPostModal({
             POST INFO & CAPTION SIDEBAR (Swaggy Editorial Style)
             =============================================== */}
         <div className="gallery-modal-sidebar gallery-modal-sidebar-swag">
-          {/* Header / Author */}
+          {/* Header / Author & Creator Identity */}
           <div className="gallery-sidebar-header">
             <div className="gallery-author-info">
               <div className="gallery-author-avatar-crest">
@@ -529,18 +624,75 @@ export default function GalleryPostModal({
                   <span className="gallery-category-pill">
                     {post.category || "VISUAL ARCHIVE"}
                   </span>
-                  {post.location && (
-                    <span className="gallery-modal-location">
-                      <span aria-hidden="true">📍</span> {post.location}
-                    </span>
+                  {postLocation && (
+                    <div
+                      className="gallery-editorial-location"
+                      title={`Captured in ${postLocation}`}
+                    >
+                      <svg
+                        className="location-marker-glyph"
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                      <span className="location-name">{postLocation}</span>
+                    </div>
                   )}
                 </div>
               </div>
             </div>
-            <span className="gallery-modal-date">
-              {formatGalleryDate(post.displayDate || post.date)}
-            </span>
           </div>
+
+          {/* Date as Functional Calendar Gateway */}
+          <Link
+            to={calendarUrl}
+            state={{
+              from: "gallery",
+              viewMode: effectiveViewMode,
+              actId: `gal-${post.id || post.slug}`,
+              selectedDateStr: postIsoDate,
+            }}
+            className="gallery-date-gateway"
+            title="Explore this milestone in Chomka Calendar"
+            aria-label={`View ${formattedDate} in Chomka Calendar`}
+            onClick={() => {
+              if (onClose) onClose();
+            }}
+          >
+            <div className="date-gateway-left">
+              <span className="date-gateway-icon" aria-hidden="true">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+              </span>
+              <span className="date-gateway-text">{formattedDate}</span>
+            </div>
+            <div className="date-gateway-right">
+              <span className="date-gateway-pill">CALENDAR</span>
+              <span className="date-gateway-arrow" aria-hidden="true">↗</span>
+            </div>
+          </Link>
 
           {/* Editorial Spec Strip */}
           <div className="gallery-editorial-specs">
