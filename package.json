@@ -8,6 +8,7 @@
     "dev:staging": "node scripts/dev-staging.js",
     "worker:staging": "npm --prefix worker run dev:staging",
     "test:security": "npm --prefix worker run test:security",
+    "test:regression:events": "node scripts/test-homepage-events-regression.cjs",
     "build": "vite build && node scripts/generate-social-pages.js",
     "build:app": "vite build",
     "generate:social-pages": "node scripts/generate-social-pages.js",

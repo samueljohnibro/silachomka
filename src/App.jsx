@@ -149,7 +149,7 @@ function SiteHeader({
 }) {
   const { events = [] } = useChomkaStore();
   const hasEvents = useMemo(() => {
-    return Array.isArray(events) && events.some(e => Boolean(e.is_published));
+    return Array.isArray(events) && events.some(e => Boolean(e?.is_published));
   }, [events]);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -730,7 +730,7 @@ function HeroSlideshow() {
 function HomeHero() {
   const { events = [] } = useChomkaStore();
   const hasEvents = useMemo(() => {
-    return Array.isArray(events) && events.some(e => Boolean(e.is_published));
+    return Array.isArray(events) && events.some(e => Boolean(e?.is_published));
   }, [events]);
 
   return (
@@ -951,9 +951,12 @@ function UpcomingCountdownShowcase({ releases = [], events = [] }) {
   const upcomingItems = useMemo(() => {
     const items = [];
     const now = Date.now();
+    const safeReleases = Array.isArray(releases) ? releases : [];
+    const safeEvents = Array.isArray(events) ? events : [];
 
     // Future releases
-    (releases || []).forEach((r) => {
+    safeReleases.forEach((r) => {
+      if (!r) return;
       const d = new Date(r.release_date || r.date);
       if (!isNaN(d.getTime()) && d.getTime() > now) {
         items.push({
@@ -972,7 +975,8 @@ function UpcomingCountdownShowcase({ releases = [], events = [] }) {
     });
 
     // Future events
-    (events || []).forEach((e) => {
+    safeEvents.forEach((e) => {
+      if (!e) return;
       if (e.is_published && (e.status === "UPCOMING" || e.isFuture)) {
         const timePart = e.start_time ? `T${e.start_time}:00` : "T00:00:00";
         const d = new Date(`${e.event_date}${timePart}`);
@@ -1044,12 +1048,12 @@ function HomepageEventsSection() {
   const { events = [] } = useChomkaStore();
 
   const publishedEvents = useMemo(() => {
-    return (events || []).filter((e) => Boolean(e.is_published));
+    return (Array.isArray(events) ? events : []).filter((e) => Boolean(e?.is_published));
   }, [events]);
 
   const activeEvents = useMemo(() => {
     return publishedEvents.filter(
-      (e) => e.status === "UPCOMING" || e.status === "RECENT" || e.isFuture || !e.status
+      (e) => e && (e.status === "UPCOMING" || e.status === "RECENT" || e.isFuture || !e.status)
     );
   }, [publishedEvents]);
 
@@ -2417,13 +2421,18 @@ function SocialsSection() {
    ========================================================= */
 
 function HomePage() {
-  const { releases, events = [] } = useChomkaStore();
+  const { releases = [], events = [] } = useChomkaStore();
 
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const safeEvents = useMemo(
+    () => (Array.isArray(events) ? events : []),
+    [events]
+  );
 
   const sortedReleases = useMemo(
     () =>
@@ -2552,7 +2561,7 @@ function HomePage() {
 
         <UpcomingCountdownShowcase
           releases={sortedReleases}
-          events={events}
+          events={safeEvents}
         />
 
         {latestRelease && (
