@@ -9650,20 +9650,25 @@ select.studio-input,
   .chomka-magic-ai-sparkle {
     width: 41px;
     height: 41px;
-    font-size: 16px;
   }
   .chomka-magic-ai-trigger:hover,
   .chomka-magic-ai-trigger:focus-visible,
   .chomka-magic-ai-trigger.is-expanded {
-    padding: 0 14px;
+    padding: 0 16px 0 12px;
   }
   .chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle,
   .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle,
   .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle {
-    width: 16px;
-    height: 16px;
-    font-size: 14px;
-    margin-right: 7px;
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+  }
+  .chomka-magic-ai-sparkle svg,
+  .chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle svg,
+  .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle svg,
+  .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle svg {
+    width: 18px;
+    height: 18px;
   }
   .chomka-magic-ai-label {
     font-size: 10.5px;
@@ -9688,7 +9693,14 @@ select.studio-input,
     border-radius: 10px;
   }
   .chomka-ai-header {
-    padding: 16px 44px 14px 44px;
+    padding: 16px 48px 14px 48px;
+  }
+  .chomka-ai-title-row {
+    gap: 8px;
+  }
+  .chomka-ai-sparkle-icon {
+    width: 17px;
+    height: 17px;
   }
   .chomka-ai-header-actions {
     top: 12px;
@@ -9728,10 +9740,17 @@ select.studio-input,
 
 @media (max-width: 480px) {
   .chomka-ai-header {
-    padding: 14px 40px 12px 40px;
+    padding: 14px 42px 12px 42px;
+  }
+  .chomka-ai-title-row {
+    gap: 7px;
+  }
+  .chomka-ai-sparkle-icon {
+    width: 15px;
+    height: 15px;
   }
   .chomka-ai-title {
-    font-size: 11px;
+    font-size: 10.5px;
     letter-spacing: 0.06em;
   }
   .chomka-ai-mode-pills {
@@ -9749,12 +9768,21 @@ select.studio-input,
   .chomka-magic-ai-trigger:hover,
   .chomka-magic-ai-trigger:focus-visible,
   .chomka-magic-ai-trigger.is-expanded {
-    padding: 0 10px;
+    padding: 0 14px 0 10px;
   }
   .chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle,
   .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle,
   .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle {
-    margin-right: 5px;
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+  }
+  .chomka-magic-ai-sparkle svg,
+  .chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle svg,
+  .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle svg,
+  .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle svg {
+    width: 16px;
+    height: 16px;
   }
   .chomka-magic-ai-label {
     font-size: 9.5px;
@@ -9767,6 +9795,13 @@ select.studio-input,
   }
   .chomka-ai-header {
     padding: 12px 34px 10px 34px;
+  }
+  .chomka-ai-title-row {
+    gap: 6px;
+  }
+  .chomka-ai-sparkle-icon {
+    width: 14px;
+    height: 14px;
   }
   .chomka-ai-title {
     font-size: 9.5px;
@@ -9795,12 +9830,6 @@ select.studio-input,
   color: #fce79a;
 }
 
-.chomka-magic-ai-trigger.is-admin-mode:hover,
-.chomka-magic-ai-trigger.is-admin-mode:focus-visible,
-.chomka-magic-ai-trigger.is-admin-mode.is-expanded {
-  padding: 0 16px;
-}
-
 .chomka-magic-ai-trigger.is-admin-mode:hover {
   background: linear-gradient(135deg, #dfc27d, #b8860b);
   color: #0b0714;
@@ -9810,14 +9839,6 @@ select.studio-input,
   background: rgba(0, 0, 0, 0.25);
   color: #0b0714;
   border-color: rgba(0, 0, 0, 0.35);
-}
-
-@media (max-width: 768px) {
-  .chomka-magic-ai-trigger.is-admin-mode:hover,
-  .chomka-magic-ai-trigger.is-admin-mode:focus-visible,
-  .chomka-magic-ai-trigger.is-admin-mode.is-expanded {
-    padding: 0 14px;
-  }
 }
 
 .chomka-ai-mode-pills {
