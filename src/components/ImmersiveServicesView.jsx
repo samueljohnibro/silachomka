@@ -278,12 +278,14 @@ export default function ImmersiveServicesView({
 
                     <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: isSelected ? "var(--gold)" : "var(--text)" }}>
-                        {svc.isHourly
+                        {svc.slug === "buy-beats"
+                          ? "Instant Access ↗"
+                          : svc.isHourly
                           ? `₦${((svc.hourlyRateNgn || 25000) * (configurations[svc.slug]?.hours || 2)).toLocaleString()}`
                           : svc.basePriceNgn ? `₦${Number(svc.basePriceNgn).toLocaleString()}` : "Price upon request"}
                       </span>
                       <span style={{ fontSize: "10px", color: "var(--muted)" }}>
-                        {svc.turnaroundDays ? `⚡ ~${svc.turnaroundDays}d` : "Live session"}
+                        {svc.slug === "buy-beats" ? "Beat store" : svc.turnaroundDays ? `⚡ ~${svc.turnaroundDays}d` : "Live session"}
                       </span>
                     </div>
                   </div>

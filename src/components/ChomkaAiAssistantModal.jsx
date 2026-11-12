@@ -1457,7 +1457,17 @@ export default function ChomkaAiAssistantModal() {
                       )}
                     </span>
                     <h2 className="chomka-ai-title">
-                      {isAdminMode ? "CHOMKA ADMIN AI · EXECUTIVE CONSOLE" : "CHOMKA AI · CHOMKAMUSIC™"}
+                      {isAdminMode ? (
+                        <>
+                          <span>CHOMKA ADMIN AI</span>
+                          <span className="chomka-ai-title-sub"> · EXECUTIVE CONSOLE</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>CHOMKA AI</span>
+                          <span className="chomka-ai-title-sub"> · CHOMKAMUSIC™</span>
+                        </>
+                      )}
                     </h2>
                   </div>
                   <div className="chomka-ai-status">
@@ -1490,14 +1500,17 @@ export default function ChomkaAiAssistantModal() {
                 </div>
 
                 <div className="chomka-ai-header-actions">
-                  <span className="chomka-ai-esc-pill">ESC TO CLOSE</span>
                   <button
                     type="button"
                     className="chomka-ai-close-btn"
                     onClick={() => setIsOpen(false)}
-                    aria-label="Close search console"
+                    aria-label="Close search console (Press ESC)"
+                    title="Close console (ESC)"
                   >
-                    ✕
+                    <kbd className="chomka-ai-esc-kbd">ESC</kbd>
+                    <span className="chomka-ai-esc-label">TO CLOSE</span>
+                    <span className="chomka-ai-close-sep" aria-hidden="true" />
+                    <span className="chomka-ai-close-x" aria-hidden="true">✕</span>
                   </button>
                 </div>
               </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
 import StudioAmbientBackground from "../components/StudioAmbientBackground";
+import HeavenlySkyBackground from "../components/HeavenlySkyBackground";
 import SharePageButton from "../components/SharePageButton";
 import ImmersiveServicesView from "../components/ImmersiveServicesView";
 import { canonicalUrl } from "../data/siteConfig";
@@ -14,6 +15,7 @@ import {
   LeftArrowIcon,
   CheckIcon,
   TrashIcon,
+  UpRightArrowIcon,
 } from "../components/Icons";
 
 // Conversational Intent Options mapped 1:1 to authoritative services in Neon DB
@@ -28,6 +30,18 @@ const CONVERSATIONAL_SERVICES = [
     turnaroundDays: 5,
     tagline: "Custom beat made just for you and your style",
     plainExplanation: "Need a fresh beat? We build catchy melodies, hard-hitting bass, and drums made specifically for your song.",
+  },
+  {
+    slug: "buy-beats",
+    prompt: "I want to browse & buy beats",
+    title: "Buy Beats",
+    category: "CATALOG",
+    basePriceNgn: null,
+    isExternalLink: true,
+    linkTo: "/beats",
+    turnaroundDays: 0,
+    tagline: "Explore and license ready-made beats from our studio catalog",
+    plainExplanation: "Looking for pre-made beats? Browse our complete beat store with instant playback, stems, and direct licensing.",
   },
   {
     slug: "beat-mixing",
@@ -600,6 +614,12 @@ export default function ServicesPage() {
   // Load draft & recent orders on mount (Req #5 & Req #6)
   useEffect(() => {
     try {
+      const explicitService = routeSlug || searchParams.get("service");
+      if (explicitService) {
+        // Explicit service navigation via URL (e.g. from beats page) takes precedence over drafts
+        return;
+      }
+
       const savedDraft = localStorage.getItem("chomka_services_booking_draft_v1");
       if (savedDraft) {
         const parsed = JSON.parse(savedDraft);
@@ -750,7 +770,14 @@ export default function ServicesPage() {
   // Pre-select service if passed via URL (e.g. /services/beat-production or /services?service=beat-production)
   useEffect(() => {
     const targetSlug = routeSlug || searchParams.get("service");
-    if (targetSlug && selectedSlugs.length === 0) {
+    const requestedStep = searchParams.get("step");
+
+    if (targetSlug === "buy-beats" || targetSlug === "beats") {
+      navigate("/beats", { replace: true });
+      return;
+    }
+
+    if (targetSlug) {
       const match = CONVERSATIONAL_SERVICES.find((s) => s.slug === targetSlug);
       if (match) {
         setSelectedSlugs([match.slug]);
@@ -761,9 +788,15 @@ export default function ServicesPage() {
             [match.slug]: { hours: 2, ...prev[match.slug] },
           }));
         }
+        if (requestedStep === "details") {
+          setStep("details");
+          setHasPendingDraft(false);
+        }
       }
+    } else if (requestedStep === "details" && selectedSlugs.length > 0) {
+      setStep("details");
     }
-  }, [routeSlug, searchParams]);
+  }, [routeSlug, searchParams, navigate]);
 
   // Merge client catalogue with any DB price updates
   const activeServiceList = useMemo(() => {
@@ -789,6 +822,10 @@ export default function ServicesPage() {
 
   // Toggle service selection in conversational intent step
   const toggleService = (slug) => {
+    if (slug === "buy-beats" || slug === "beats") {
+      navigate("/beats");
+      return;
+    }
     setSelectedSlugs((prev) => {
       if (prev.includes(slug)) {
         return prev.filter((s) => s !== slug);
@@ -1057,16 +1094,58 @@ export default function ServicesPage() {
     return formatLongDate(d);
   }, [maxTurnaroundDays]);
 
+  // Integrated 4-Step Progress Navigation inside the floating modal card
+  const renderStepsNav = () => (
+    step !== "success" ? (
+      <nav className="celestial-steps-nav" aria-label="Booking Steps">
+        <button
+          type="button"
+          onClick={() => setStep("intent")}
+          className={`celestial-step-node ${step === "intent" ? "is-active" : (selectedSlugs.length > 0 ? "is-done" : "")}`}
+          style={{ background: "none", border: "none", cursor: "pointer" }}
+        >
+          <span className="celestial-step-dot">{selectedSlugs.length > 0 && step !== "intent" ? "✓" : "1"}</span>
+          <span>Services</span>
+        </button>
+        <div className={`celestial-step-line ${["details", "client", "summary"].includes(step) ? "is-done" : ""}`} />
+        <button
+          type="button"
+          onClick={() => { if (selectedSlugs.length > 0) setStep("details"); }}
+          disabled={selectedSlugs.length === 0}
+          className={`celestial-step-node ${step === "details" ? "is-active" : (["client", "summary"].includes(step) ? "is-done" : "")}`}
+          style={{ background: "none", border: "none", cursor: selectedSlugs.length > 0 ? "pointer" : "not-allowed" }}
+        >
+          <span className="celestial-step-dot">{["client", "summary"].includes(step) ? "✓" : "2"}</span>
+          <span>Project Details</span>
+        </button>
+        <div className={`celestial-step-line ${["client", "summary"].includes(step) ? "is-done" : ""}`} />
+        <button
+          type="button"
+          onClick={() => { if (selectedSlugs.length > 0) setStep("client"); }}
+          disabled={selectedSlugs.length === 0}
+          className={`celestial-step-node ${step === "client" ? "is-active" : (step === "summary" ? "is-done" : "")}`}
+          style={{ background: "none", border: "none", cursor: selectedSlugs.length > 0 ? "pointer" : "not-allowed" }}
+        >
+          <span className="celestial-step-dot">{step === "summary" ? "✓" : "3"}</span>
+          <span>Contact Info</span>
+        </button>
+        <div className={`celestial-step-line ${step === "summary" ? "is-done" : ""}`} />
+        <button
+          type="button"
+          onClick={() => { if (selectedSlugs.length > 0 && customerName && customerEmail) setStep("summary"); }}
+          disabled={selectedSlugs.length === 0 || !customerName || !customerEmail}
+          className={`celestial-step-node ${step === "summary" ? "is-active" : ""}`}
+          style={{ background: "none", border: "none", cursor: (selectedSlugs.length > 0 && customerName && customerEmail) ? "pointer" : "not-allowed" }}
+        >
+          <span className="celestial-step-dot">4</span>
+          <span>Review Booking</span>
+        </button>
+      </nav>
+    ) : null
+  );
+
   return (
-    <main
-      className="services-page-view"
-      style={{
-        minHeight: "100vh",
-        position: "relative",
-        padding: "60px 6vw 140px",
-        background: "transparent",
-      }}
-    >
+    <main className="services-page-view">
       <SeoHead
         title="chomkaMUSIC™ Studio Services | silachomka"
         description="Book professional music production, vocal recording, mixing, mastering, and artist collaborations directly with chomkaMUSIC™ Studios."
@@ -1105,11 +1184,17 @@ export default function ServicesPage() {
       {/* Atmospheric Starry Background (Reused smiley / beats-image.png via StudioAmbientBackground) */}
       <StudioAmbientBackground image="/beats-image.png" />
 
-      <div style={{ maxWidth: "860px", margin: "0 auto", position: "relative", zIndex: 1 }}>
+      {/* Soft Ethereal Drifting Clouds in the Background */}
+      <HeavenlySkyBackground soft={true} />
+
+      {/* Atmospheric Spotlight Scrim to Isolate the Floating Centered Modal */}
+      <div className="services-modal-backdrop-scrim" aria-hidden="true" />
+
+      <div className="services-modal-wrapper">
         {/* =========================================================
-            HEADER / TRACKING / BREADCRUMB INDICATOR
+            HEADER / TRACKING / BREADCRUMB INDICATOR (Subdued Ambient)
             ========================================================= */}
-        <div style={{ marginBottom: "28px", textAlign: "left" }}>
+        <header className="services-ambient-header">
           <div
             style={{
               display: "flex",
@@ -1301,55 +1386,7 @@ export default function ServicesPage() {
               </div>
             </div>
           )}
-
-          {/* Studio Booking Steps Bar */}
-          {step !== "success" && (
-            <nav className="celestial-steps-nav" aria-label="Booking Steps">
-              <button
-                type="button"
-                onClick={() => setStep("intent")}
-                className={`celestial-step-node ${step === "intent" ? "is-active" : (selectedSlugs.length > 0 ? "is-done" : "")}`}
-                style={{ background: "none", border: "none", cursor: "pointer" }}
-              >
-                <span className="celestial-step-dot">{selectedSlugs.length > 0 && step !== "intent" ? "✓" : "1"}</span>
-                <span>Services</span>
-              </button>
-              <div className={`celestial-step-line ${["details", "client", "summary"].includes(step) ? "is-done" : ""}`} />
-              <button
-                type="button"
-                onClick={() => { if (selectedSlugs.length > 0) setStep("details"); }}
-                disabled={selectedSlugs.length === 0}
-                className={`celestial-step-node ${step === "details" ? "is-active" : (["client", "summary"].includes(step) ? "is-done" : "")}`}
-                style={{ background: "none", border: "none", cursor: selectedSlugs.length > 0 ? "pointer" : "not-allowed" }}
-              >
-                <span className="celestial-step-dot">{["client", "summary"].includes(step) ? "✓" : "2"}</span>
-                <span>Project Details</span>
-              </button>
-              <div className={`celestial-step-line ${["client", "summary"].includes(step) ? "is-done" : ""}`} />
-              <button
-                type="button"
-                onClick={() => { if (selectedSlugs.length > 0) setStep("client"); }}
-                disabled={selectedSlugs.length === 0}
-                className={`celestial-step-node ${step === "client" ? "is-active" : (step === "summary" ? "is-done" : "")}`}
-                style={{ background: "none", border: "none", cursor: selectedSlugs.length > 0 ? "pointer" : "not-allowed" }}
-              >
-                <span className="celestial-step-dot">{step === "summary" ? "✓" : "3"}</span>
-                <span>Contact Info</span>
-              </button>
-              <div className={`celestial-step-line ${step === "summary" ? "is-done" : ""}`} />
-              <button
-                type="button"
-                onClick={() => { if (selectedSlugs.length > 0 && customerName && customerEmail) setStep("summary"); }}
-                disabled={selectedSlugs.length === 0 || !customerName || !customerEmail}
-                className={`celestial-step-node ${step === "summary" ? "is-active" : ""}`}
-                style={{ background: "none", border: "none", cursor: (selectedSlugs.length > 0 && customerName && customerEmail) ? "pointer" : "not-allowed" }}
-              >
-                <span className="celestial-step-dot">4</span>
-                <span>Review Booking</span>
-              </button>
-            </nav>
-          )}
-        </div>
+        </header>
 
         {/* =========================================================
             STAGE 1: SERVICES SELECTION (Dropdown Modal Experience)
@@ -1359,6 +1396,7 @@ export default function ServicesPage() {
 
         {step === "intent" && (
           <section className="celestial-tablet">
+            {renderStepsNav()}
             <div style={{ marginBottom: "26px" }}>
               <div className="celestial-whisper">
                 <span>✦</span>
@@ -1577,6 +1615,82 @@ export default function ServicesPage() {
                     }}
                   >
                     {activeServiceList.map((svc) => {
+                      if (svc.slug === "buy-beats" || svc.isExternalLink) {
+                        return (
+                          <button
+                            key={svc.slug}
+                            type="button"
+                            onClick={() => navigate(svc.linkTo || "/beats")}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              textAlign: "left",
+                              padding: "14px 18px",
+                              borderRadius: "8px",
+                              border: "1px solid rgba(223, 194, 125, 0.4)",
+                              background: "rgba(223, 194, 125, 0.08)",
+                              cursor: "pointer",
+                              transition: "all 0.15s ease",
+                              gap: "16px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: "220px" }}>
+                              <div
+                                style={{
+                                  width: "22px",
+                                  height: "22px",
+                                  borderRadius: "4px",
+                                  border: "1px solid var(--gold)",
+                                  background: "rgba(223, 194, 125, 0.2)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  flexShrink: 0,
+                                  color: "var(--gold)",
+                                  fontSize: "12px",
+                                }}
+                              >
+                                🎵
+                              </div>
+                              <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <p style={{ margin: "0 0 2px", fontSize: "14px", fontWeight: 700, color: "var(--gold)" }}>
+                                    {svc.title}
+                                  </p>
+                                  <span
+                                    style={{
+                                      fontSize: "9px",
+                                      fontWeight: 800,
+                                      letterSpacing: "0.08em",
+                                      textTransform: "uppercase",
+                                      color: "#050507",
+                                      background: "var(--gold)",
+                                      borderRadius: "3px",
+                                      padding: "1px 6px",
+                                    }}
+                                  >
+                                    BEAT STORE
+                                  </span>
+                                </div>
+                                <p style={{ margin: "0 0 3px", fontSize: "12px", color: "var(--text)", lineHeight: 1.4 }}>
+                                  {svc.plainExplanation || svc.tagline}
+                                </p>
+                                <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>
+                                  "{svc.prompt}"
+                                </p>
+                              </div>
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--gold)", fontSize: "12px", fontWeight: 700, flexShrink: 0, marginLeft: "auto" }}>
+                              <span>Browse Beats</span>
+                              <UpRightArrowIcon size={14} color="var(--gold)" />
+                            </div>
+                          </button>
+                        );
+                      }
+
                       const isSelected = selectedSlugs.includes(svc.slug);
                       const hours = configurations[svc.slug]?.hours || 2;
                       const calculatedPrice = svc.isHourly
@@ -1720,6 +1834,29 @@ export default function ServicesPage() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Quick Option to Buy Ready-Made Beats */}
+            <div className="services-buy-beats-banner">
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div className="services-buy-beats-icon" aria-hidden="true">🎵</div>
+                <div>
+                  <h3 style={{ margin: "0 0 2px", fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>
+                    Looking to buy ready-made beats instead?
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)", lineHeight: 1.4 }}>
+                    Explore our studio beat catalog to stream original instrumentals, license stems, and get instant access.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/beats")}
+                className="services-buy-beats-btn"
+              >
+                <span>Browse & Buy Beats</span>
+                <RightArrowIcon size={13} color="#050507" />
+              </button>
             </div>
 
             {/* Selected Services Display (Immediate Visibility) */}
@@ -1867,6 +2004,7 @@ export default function ServicesPage() {
             ========================================================= */}
         {step === "confirm" && (
           <section className="celestial-tablet">
+            {renderStepsNav()}
             <div className="celestial-whisper">
               <span>✦</span>
               <span>STEP 1 SUMMARY • SELECTED SERVICES</span>
@@ -2011,6 +2149,7 @@ export default function ServicesPage() {
             ========================================================= */}
         {step === "details" && (
           <section className="celestial-tablet">
+            {renderStepsNav()}
             <div className="celestial-whisper">
               <span>✦</span>
               <span>STEP 2 OF 4 • PROJECT DETAILS</span>
@@ -2036,6 +2175,42 @@ export default function ServicesPage() {
               </p>
             </div>
 
+            {/* Custom Beat Production Highlight Banner */}
+            {selectedSlugs.includes("beat-production") && (
+              <div
+                style={{
+                  padding: "14px 18px",
+                  borderRadius: "8px",
+                  background: "rgba(223, 194, 125, 0.08)",
+                  border: "1px solid rgba(223, 194, 125, 0.35)",
+                  marginBottom: "24px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ color: "var(--gold)", fontSize: "16px" }}>✦</span>
+                  <div>
+                    <h2 style={{ margin: "0 0 2px", fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>
+                      Custom Beat Production
+                    </h2>
+                    <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)" }}>
+                      Please provide your genre, reference tracks, and creative vision below so we can craft your beat.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
+                  <span style={{ fontSize: "12px", color: "var(--muted)" }}>Turnaround: ~5 Days</span>
+                  <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--gold)", fontFamily: "var(--font-display)" }}>
+                    ₦{(activeServiceList.find((s) => s.slug === "beat-production")?.basePriceNgn || 80000).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Service-by-service tailored fields */}
             <div style={{ display: "flex", flexDirection: "column", gap: "28px", marginBottom: "36px" }}>
               {selectedServices.map((svc) => {
@@ -2058,29 +2233,69 @@ export default function ServicesPage() {
                         justifyContent: "space-between",
                         marginBottom: "16px",
                         borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
-                        paddingBottom: "10px",
+                        paddingBottom: "12px",
+                        flexWrap: "wrap",
+                        gap: "10px",
                       }}
                     >
-                      <h2
+                      <div>
+                        <h2
+                          style={{
+                            fontSize: "16px",
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            color: "var(--gold)",
+                            margin: "0 0 2px",
+                          }}
+                        >
+                          {svc.title}
+                        </h2>
+                        {svc.tagline && (
+                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                            {svc.tagline}
+                          </span>
+                        )}
+                      </div>
+
+                      <div
                         style={{
-                          fontSize: "16px",
-                          fontWeight: 700,
-                          letterSpacing: "0.04em",
-                          color: "var(--gold)",
-                          margin: 0,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          background: "rgba(223, 194, 125, 0.12)",
+                          border: "1px solid rgba(223, 194, 125, 0.35)",
+                          borderRadius: "6px",
+                          padding: "6px 14px",
                         }}
                       >
-                        {svc.title}
-                      </h2>
-                      <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 600 }}>
-                        {svc.isHourly
-                          ? `${cfg.hours || 2} hrs × ₦${(svc.hourlyRateNgn || 25000).toLocaleString()} = ₦${(
-                              (cfg.hours || 2) * (svc.hourlyRateNgn || 25000)
-                            ).toLocaleString()}`
-                          : svc.basePriceNgn === null
-                          ? "Price Upon Request"
-                          : `₦${svc.basePriceNgn.toLocaleString()}`}
-                      </span>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            letterSpacing: "0.1em",
+                            textTransform: "uppercase",
+                            color: "var(--muted)",
+                          }}
+                        >
+                          PRICE:
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "15px",
+                            color: "var(--gold)",
+                            fontWeight: 800,
+                            fontFamily: "var(--font-display)",
+                          }}
+                        >
+                          {svc.isHourly
+                            ? `${cfg.hours || 2} hrs × ₦${(svc.hourlyRateNgn || 25000).toLocaleString()} = ₦${(
+                                (cfg.hours || 2) * (svc.hourlyRateNgn || 25000)
+                              ).toLocaleString()}`
+                            : svc.basePriceNgn === null
+                            ? "Price Upon Request"
+                            : `₦${svc.basePriceNgn.toLocaleString()}`}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Specific Questions based on Service Slug */}
@@ -2309,6 +2524,30 @@ export default function ServicesPage() {
                               background: "rgba(10, 10, 16, 0.6)",
                               color: "var(--text)",
                               fontSize: "13px",
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <label style={{ display: "block", fontSize: "12px", color: "var(--muted)", marginBottom: "6px" }}>
+                            Beat Details & Creative Vision
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="Describe the beat you want: mood, tempo, instruments (e.g. guitar, horns, 808s), energy, or any specific ideas for silachomka..."
+                            value={cfg.details || ""}
+                            onChange={(e) => updateConfig(svc.slug, "details", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              borderRadius: "4px",
+                              border: "1px solid rgba(255, 255, 255, 0.1)",
+                              background: "rgba(10, 10, 16, 0.6)",
+                              color: "var(--text)",
+                              fontSize: "13px",
+                              resize: "vertical",
+                              fontFamily: "inherit",
+                              boxSizing: "border-box",
                             }}
                           />
                         </div>
@@ -2838,6 +3077,7 @@ export default function ServicesPage() {
             ========================================================= */}
         {step === "client" && (
           <section className="celestial-tablet">
+            {renderStepsNav()}
             <div className="celestial-whisper">
               <span>✦</span>
               <span>STEP 3 OF 4 • CONTACT INFORMATION</span>
@@ -3049,6 +3289,7 @@ export default function ServicesPage() {
             ========================================================= */}
         {step === "summary" && (
           <section className="celestial-tablet">
+            {renderStepsNav()}
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
               <div className="celestial-whisper">
                 <span>✦</span>
@@ -3119,6 +3360,11 @@ export default function ServicesPage() {
                         {cfg.genre && (
                           <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0 }}>
                             Genre: {cfg.genre} {cfg.bpmKey ? `· ${cfg.bpmKey}` : ""}
+                          </p>
+                        )}
+                        {cfg.details && (
+                          <p style={{ fontSize: "12px", color: "var(--gold)", margin: "3px 0 0" }}>
+                            Beat details: {cfg.details}
                           </p>
                         )}
                       </div>

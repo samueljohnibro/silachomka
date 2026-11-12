@@ -135,9 +135,13 @@ async function runTest() {
     const page = await browser.newPage();
     const consoleErrors = [];
     page.on("console", (msg) => {
+      console.log(`[BROWSER ${msg.type().toUpperCase()}]:`, msg.text());
       if (msg.type() === "error") {
         consoleErrors.push(msg.text());
       }
+    });
+    page.on("pageerror", (err) => {
+      console.error("[BROWSER PAGEERROR]:", err.message);
     });
 
     // 1. Desktop Viewport (1280 x 800)

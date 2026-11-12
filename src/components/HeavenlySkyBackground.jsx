@@ -5,6 +5,7 @@ import React, { useMemo } from "react";
 
 export default function HeavenlySkyBackground({
   intensity = "full", // "full" | "subtle"
+  soft = false,
   className = "",
   style = {},
   children,
@@ -23,31 +24,33 @@ export default function HeavenlySkyBackground({
 
   return (
     <div
-      className={`heavenly-sky-backdrop ${className}`}
+      className={`heavenly-sky-backdrop ${soft ? "is-soft-clouds" : ""} ${className}`}
       aria-hidden="true"
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 0,
+        zIndex: soft ? 1 : 0,
         pointerEvents: "none",
         overflow: "hidden",
         ...style,
       }}
     >
-      {/* 1. Divine Celestial Gradient Canvas */}
-      <div className="heavenly-gradient-base" />
+      {/* 1. Divine Celestial Gradient Canvas (Omitted when soft is true) */}
+      {!soft && <div className="heavenly-gradient-base" />}
 
-      {/* 2. Radiant God Rays (Volumetric Golden Light Beams) */}
-      <div className="heavenly-god-rays">
-        <div className="god-ray ray-1" />
-        <div className="god-ray ray-2" />
-        <div className="god-ray ray-3" />
-        <div className="god-ray ray-4" />
-        <div className="god-ray ray-5" />
-      </div>
+      {/* 2. Radiant God Rays (Volumetric Golden Light Beams - Omitted when soft is true) */}
+      {!soft && (
+        <div className="heavenly-god-rays">
+          <div className="god-ray ray-1" />
+          <div className="god-ray ray-2" />
+          <div className="god-ray ray-3" />
+          <div className="god-ray ray-4" />
+          <div className="god-ray ray-5" />
+        </div>
+      )}
 
-      {/* 3. Golden Celestial Halo (Ethereal Sun/Portal at Top) */}
-      <div className="heavenly-divine-portal" />
+      {/* 3. Golden Celestial Halo (Ethereal Sun/Portal at Top - Omitted when soft is true) */}
+      {!soft && <div className="heavenly-divine-portal" />}
 
       {/* 4. Layer 1 (Distant Background Clouds - Slow Drift) */}
       <div className="heavenly-clouds-track track-far">

@@ -38,6 +38,7 @@ import { useCurrency } from "../data/CurrencyContext";
 import BeatArtwork from "../components/BeatArtwork";
 import BeatHeroSlideshow from "../components/BeatHeroSlideshow";
 import ExclusiveBeatModal from "../components/ExclusiveBeatModal";
+import CustomBeatPromptModal from "../components/CustomBeatPromptModal";
 import SeoHead from "../components/SeoHead";
 import { getBeatProducer, getBeatSource } from "../data/credits";
 import { SITE_ORIGIN, canonicalUrl } from "../data/siteConfig";
@@ -1023,6 +1024,7 @@ function BeatReelPlayer({
    ========================================================= */
 
 export default function BeatsPage() {
+  const navigate = useNavigate();
   const { beats } = useChomkaStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -1033,6 +1035,44 @@ export default function BeatsPage() {
     playbackMode,
     setPlaybackMode,
   } = useCurrency();
+
+  // "Every once in a while" Custom Beat popup modal state & scheduler
+  const [isCustomBeatPromptOpen, setIsCustomBeatPromptOpen] = useState(false);
+
+  useEffect(() => {
+    if (isCustomBeatPromptOpen) return;
+    if (sessionStorage.getItem("chomka_custom_beat_ordered") === "true") return;
+
+    const COOLDOWN_MS = 2.5 * 60 * 1000; // 2.5 minutes
+    const INITIAL_DELAY_MS = 18 * 1000;   // 18 seconds on initial page visit
+
+    const lastDismissed = Number(sessionStorage.getItem("chomka_custom_beat_popup_last") || 0);
+    const now = Date.now();
+    const elapsed = now - lastDismissed;
+
+    let delay = INITIAL_DELAY_MS;
+    if (lastDismissed > 0) {
+      delay = elapsed < COOLDOWN_MS ? COOLDOWN_MS - elapsed : 10000;
+    }
+
+    const timer = setTimeout(() => {
+      setIsCustomBeatPromptOpen(true);
+      sessionStorage.setItem("chomka_custom_beat_popup_last", String(Date.now()));
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [isCustomBeatPromptOpen]);
+
+  const handleCloseCustomBeatPrompt = useCallback(() => {
+    setIsCustomBeatPromptOpen(false);
+    sessionStorage.setItem("chomka_custom_beat_popup_last", String(Date.now()));
+  }, []);
+
+  const handleProceedCustomBeat = useCallback(() => {
+    setIsCustomBeatPromptOpen(false);
+    sessionStorage.setItem("chomka_custom_beat_ordered", "true");
+    navigate("/services?service=beat-production&step=details");
+  }, [navigate]);
 
   const audioRef = useRef(null);
   const audioCleanupRef = useRef(null);
@@ -1776,6 +1816,31 @@ export default function BeatsPage() {
           </p>
 
           <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", justifyContent: "center", marginTop: "18px" }}>
+            <button
+              type="button"
+              onClick={() => navigate("/services?service=beat-production&step=details")}
+              className="beats-custom-cta-pill"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                minHeight: "38px",
+                height: "38px",
+                padding: "0 18px",
+                borderRadius: "30px",
+                fontSize: "11px",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                background: "rgba(223, 194, 125, 0.12)",
+                border: "1px solid var(--gold)",
+                color: "var(--gold)",
+                cursor: "pointer",
+              }}
+            >
+              Buy Custom Beat (₦80,000) <RightArrowIcon size={12} color="var(--gold)" />
+            </button>
+
             <a
               href="https://www.instagram.com/chomkamusicstudio/?__pwa=1"
               target="_blank"
@@ -1996,6 +2061,65 @@ export default function BeatsPage() {
       )}
 
       {/* =================================================
+          BUY YOUR CUSTOM BEAT SECTION
+          ================================================= */}
+      <div className="custom-beat-wrapper" id="custom-beat-section">
+        <section className="custom-beat-section">
+          <div className="celestial-whisper" style={{ justifyContent: "center", marginBottom: "12px" }}>
+            <span>✦</span>
+            <span>BESPOKE STUDIO PRODUCTION</span>
+          </div>
+
+          <p className="eyebrow">Custom Production</p>
+          <h2>Buy Your Custom Beat</h2>
+          <p className="custom-beat-desc">
+            Need an original, signature sound made just for you and your style?
+            Work directly with <strong>silachomka</strong> to build catchy melodies, hard-hitting
+            808s, and custom drums tailored to your exact tempo, musical key, and creative vision.
+          </p>
+
+          <div className="custom-beat-pricing-badge">
+            <div className="custom-beat-price-col">
+              <span className="custom-beat-price-label">Starting at</span>
+              <span className="custom-beat-price-amount">₦80,000</span>
+            </div>
+            <div className="custom-beat-price-divider" aria-hidden="true" />
+            <div className="custom-beat-price-info">
+              <span className="custom-beat-turnaround-badge">~5 Business Days Delivery</span>
+              <span className="custom-beat-deliverables">WAV • MP3 • Full Trackout Stems Included</span>
+            </div>
+          </div>
+
+          <div className="custom-beat-features">
+            <div className="custom-beat-feature-item">
+              <span className="custom-beat-feature-icon" aria-hidden="true">✦</span>
+              <span>100% Original Composition</span>
+            </div>
+            <div className="custom-beat-feature-item">
+              <span className="custom-beat-feature-icon" aria-hidden="true">✦</span>
+              <span>Custom BPM & Musical Key</span>
+            </div>
+            <div className="custom-beat-feature-item">
+              <span className="custom-beat-feature-icon" aria-hidden="true">✦</span>
+              <span>Trackout Stems & Mix Ready</span>
+            </div>
+            <div className="custom-beat-feature-item">
+              <span className="custom-beat-feature-icon" aria-hidden="true">✦</span>
+              <span>Full Commercial Rights</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="custom-beat-cta-btn"
+            onClick={() => navigate("/services?service=beat-production&step=details")}
+          >
+            Order Your Custom Beat <RightArrowIcon size={14} color="#050507" />
+          </button>
+        </section>
+      </div>
+
+      {/* =================================================
           EXCLUSIVE LICENSING CTA (Upgraded Glass Card)
           ================================================= */}
       <div className="exclusive-wrapper">
@@ -2022,6 +2146,12 @@ export default function BeatsPage() {
         isOpen={isExclusiveModalOpen}
         onClose={() => setIsExclusiveModalOpen(false)}
         beats={beats}
+      />
+
+      <CustomBeatPromptModal
+        isOpen={isCustomBeatPromptOpen}
+        onClose={handleCloseCustomBeatPrompt}
+        onProceed={handleProceedCustomBeat}
       />
     </main>
   );
