@@ -35,6 +35,37 @@ export function normalizeBeatGenre(raw) {
   }
 }
 
+// Media Cache Purge Helper using Hono Context execution context
+// Safely invalidates Cloudflare Workers Cache tags without module-level cloudflare:workers imports
+export function purgeMediaCache(c, tags) {
+  const rawList = Array.isArray(tags) ? tags : [tags]
+  const tagList = rawList.filter(Boolean)
+  if (!tagList.length) return
+
+  if (c?.executionCtx?.cache?.purge) {
+    try {
+      const purgePromise = Promise.resolve(c.executionCtx.cache.purge({ tags: tagList }))
+        .then((result) => {
+          if (result && result.success !== true) {
+            const errorDetails = Array.isArray(result.errors) && result.errors.length > 0
+              ? result.errors.map(e => (typeof e === 'object' && e ? e.message || JSON.stringify(e) : String(e))).join('; ')
+              : (result.error || 'Purge unsuccessful')
+            console.error(`[Cache] Failed to purge tags (${tagList.join(', ')}): ${errorDetails}`)
+          }
+          return result
+        })
+        .catch((err) => {
+          console.error(`[Cache] Failed to purge tags (${tagList.join(', ')}):`, err?.message || err)
+        })
+      if (c.executionCtx.waitUntil) {
+        c.executionCtx.waitUntil(purgePromise)
+      }
+    } catch (err) {
+      console.error(`[Cache] Failed to initiate cache purge (${tagList.join(', ')}):`, err?.message || err)
+    }
+  }
+}
+
 async function resolveUniqueReleaseSlug(sql, baseSlug, excludeId = null) {
   let candidate = baseSlug
   let suffix = 2
@@ -989,6 +1020,7 @@ adminApp.post('/media-assets', async (c) => {
       RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at
     `
     await logAudit(sql, c.get('user').sub, 'CREATE', 'media_assets', rows[0].id, null, rows[0])
+    purgeMediaCache(c, `media:${rows[0].id}`)
     return c.json({ ...rows[0], is_hero: Boolean(body.is_hero) }, 201)
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -1035,6 +1067,7 @@ adminApp.put('/media-assets/:id', async (c) => {
       RETURNING id, r2_key, original_filename, asset_type, mime_type, size_bytes, width, height, duration_seconds, alt_text, blurhash, asset_role, source_asset_id, original_size_bytes, original_mime_type, optimization_status, uploaded_by, created_at, updated_at
     `
     await logAudit(sql, c.get('user').sub, 'UPDATE', 'media_assets', id, existing[0], rows[0])
+    purgeMediaCache(c, `media:${id}`)
     return c.json({ ...rows[0], is_hero: isHero })
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -1144,6 +1177,7 @@ adminApp.post('/media-assets/upload', async (c) => {
           CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
       `
       await logAudit(sql, user?.sub, 'UPDATE', 'media_assets', existing[0].id, existing[0], updated[0])
+      purgeMediaCache(c, `media:${existing[0].id}`)
       const urlSuffix = detectedMime === 'image/gif' ? '?.gif' : ''
       return c.json({
         ...updated[0],
@@ -1162,6 +1196,7 @@ adminApp.post('/media-assets/upload', async (c) => {
         CASE WHEN file_data IS NOT NULL THEN true ELSE false END AS has_file_data
     `
     await logAudit(sql, user?.sub, 'CREATE', 'media_assets', inserted[0].id, null, inserted[0])
+    purgeMediaCache(c, `media:${inserted[0].id}`)
     const urlSuffix = detectedMime === 'image/gif' ? '?.gif' : ''
     return c.json({
       ...inserted[0],
@@ -1182,6 +1217,7 @@ adminApp.delete('/media-assets/:id', requireSuperadmin, async (c) => {
   try {
     await sql`UPDATE media_assets SET deleted_at = NOW() WHERE id = ${id}`
     await logAudit(sql, c.get('user').sub, 'DELETE', 'media_assets', id, existing[0], null)
+    purgeMediaCache(c, `media:${id}`)
     return c.json({ success: true })
   } catch (e) { return c.json({ error: e.message }, 400) }
 })
@@ -1431,6 +1467,7 @@ adminApp.post('/recycle-bin/restore', async (c) => {
         break
       case 'media_assets':
         rows = await sql`UPDATE media_assets SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`
+        purgeMediaCache(c, `media:${id}`)
         break
       case 'social_links':
         rows = await sql`UPDATE social_links SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`
@@ -1478,6 +1515,7 @@ adminApp.delete('/recycle-bin/permanent', requireSuperadmin, async (c) => {
         break
       case 'media_assets':
         await sql`DELETE FROM media_assets WHERE id = ${id} AND deleted_at IS NOT NULL`
+        purgeMediaCache(c, `media:${id}`)
         break
       case 'social_links':
         await sql`DELETE FROM social_links WHERE id = ${id} AND deleted_at IS NOT NULL`
@@ -1515,6 +1553,9 @@ adminApp.post('/recycle-bin/purge-expired', requireSuperadmin, async (c) => {
                   (r9.length || 0)
 
     await logAudit(sql, c.get('user').sub, 'PURGE_EXPIRED', 'recycle_bin', null, null, { purgedCount: total })
+    if (r6 && r6.length > 0) {
+      purgeMediaCache(c, 'media')
+    }
     return c.json({ success: true, count: total })
   } catch (err) {
     return c.json({ error: err.message }, 400)

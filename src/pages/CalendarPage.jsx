@@ -4,7 +4,6 @@ import { useChomkaStore } from "../data/store";
 import { fetchCalendarActivities } from "../data/api";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
-import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
 import CalendarAmbientBackground from "../components/CalendarAmbientBackground";
 import { suppressScroll } from "../App";
 import {
@@ -142,14 +141,21 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(initialDateAndMonth.currentDate);
   const [selectedDateStr, setSelectedDateStr] = useState(initialDateAndMonth.selectedDateStr);
 
-  // Target scroll position and targeted activity ID for restoration
+  // Target scroll position and targeted activity ID for restoration (only restored when returning from an item)
+  const isReturningFromActivity = Boolean(
+    searchParams.get("from") === "calendar" ||
+    location.state?.from === "calendar" ||
+    searchParams.get("scrollY") ||
+    location.state?.scrollY !== undefined
+  );
+
   const targetScrollYRef = useRef(
     searchParams.get("scrollY") ? parseInt(searchParams.get("scrollY"), 10) :
     location.state?.scrollY !== undefined ? location.state.scrollY :
-    savedState.scrollY !== undefined ? savedState.scrollY : null
+    (isReturningFromActivity && savedState.scrollY !== undefined) ? savedState.scrollY : null
   );
   const targetActIdRef = useRef(
-    searchParams.get("actId") || location.state?.actId || savedState.actId || null
+    searchParams.get("actId") || location.state?.actId || (isReturningFromActivity ? savedState.actId : null) || null
   );
 
   // Fetch activities from API, falling back to local store
@@ -405,7 +411,9 @@ export default function CalendarPage() {
             setTimeout(() => {
               try {
                 el.classList.remove("is-calendar-targeted");
-              } catch {}
+              } catch {
+                // ignore
+              }
             }, 3600);
             return true;
           }
@@ -908,10 +916,7 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {/* Newsletter */}
-        <div style={{ marginTop: "60px" }}>
-          <SubscriberNewsletterBox />
-        </div>
+        {/* Main Calendar Content end */}
       </main>
     </div>
   );

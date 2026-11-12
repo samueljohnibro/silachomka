@@ -150,10 +150,10 @@ a:focus-visible {
 
   border-bottom: 1px solid var(--line);
 
-  background: rgba(5, 5, 7, 0.88);
+  background: rgba(5, 5, 7, 0.96);
 
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 
   transition: border-color var(--transition-base) ease, background var(--transition-base) ease;
 }
@@ -3677,6 +3677,8 @@ video.gallery-card-image,
    ========================================================= */
 
 .site-footer {
+  position: relative;
+  z-index: 10;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3687,7 +3689,14 @@ video.gallery-card-image,
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  border-top: 0;
+  border-top: 1px solid rgba(223, 194, 125, 0.16);
+  background: linear-gradient(180deg, rgba(4, 4, 7, 0) 0%, rgba(4, 4, 7, 0.85) 20%, rgba(4, 4, 7, 0.98) 100%);
+}
+
+.site-footer .newsletter-box {
+  width: 100%;
+  flex: 1 1 100%;
+  box-sizing: border-box;
 }
 
 .site-footer > div,
@@ -6960,7 +6969,7 @@ select.studio-input,
 .event-detail-view {
   min-height: 100vh;
   padding-top: 80px;
-  padding-bottom: 120px;
+  padding-bottom: 48px;
   background: transparent;
   color: var(--text);
   position: relative;
@@ -8445,14 +8454,18 @@ select.studio-input,
 
 .chomka-magic-ai-trigger {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: max(24px, env(safe-area-inset-bottom, 24px));
+  right: max(24px, env(safe-area-inset-right, 24px));
   z-index: 998;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   height: 48px;
-  width: 48px;
+  /* Width hugs content: the label's max-width animation drives expansion,
+     so the pill always fits its text exactly at any screen size. */
+  width: auto;
+  min-width: 48px;
+  max-width: calc(100vw - 32px);
   padding: 0;
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(20, 16, 32, 0.94), rgba(10, 8, 16, 0.96));
@@ -8467,7 +8480,8 @@ select.studio-input,
   user-select: none;
   overflow: hidden;
   white-space: nowrap;
-  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+  box-sizing: border-box;
+  transition: padding 0.35s cubic-bezier(0.16, 1, 0.3, 1),
               background 0.25s ease,
               color 0.25s ease,
               transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
@@ -8478,7 +8492,7 @@ select.studio-input,
 .chomka-magic-ai-trigger:hover,
 .chomka-magic-ai-trigger:focus-visible,
 .chomka-magic-ai-trigger.is-expanded {
-  width: 216px;
+  padding: 0 16px 0 14px;
 }
 
 .chomka-magic-ai-trigger.is-expanded {
@@ -8488,13 +8502,20 @@ select.studio-input,
 }
 
 .chomka-magic-ai-trigger:hover {
-  transform: translateY(-2px) scale(1.03);
+  transform: translateY(-2px) scale(1.02);
   background: var(--gold);
   color: #050507;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 35px var(--gold-glow);
 }
 
-.chomka-magic-ai-trigger:hover .chomka-magic-ai-badge {
+.chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-badge {
+  background: rgba(223, 194, 125, 0.18);
+  color: var(--gold);
+  border-color: rgba(223, 194, 125, 0.45);
+}
+
+.chomka-magic-ai-trigger:hover .chomka-magic-ai-badge,
+.chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-badge {
   background: rgba(0, 0, 0, 0.2);
   color: #050507;
   border-color: rgba(0, 0, 0, 0.3);
@@ -8515,24 +8536,46 @@ select.studio-input,
 }
 
 .chomka-magic-ai-sparkle {
-  width: 48px;
-  height: 48px;
+  /* Fills the inner box (48px - 2 × 1.5px border) so the icon is dead-centre when collapsed */
+  width: 45px;
+  height: 45px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 18px;
-  line-height: 1;
   color: inherit;
   animation: spinSlow 8s linear infinite;
-  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), padding 0.35s ease;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  transform-origin: 50% 50%;
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              height 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              margin 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chomka-magic-ai-sparkle svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex-shrink: 0;
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle,
 .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle,
 .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle {
-  width: 38px;
-  padding-left: 6px;
+  width: 20px;
+  height: 20px;
+  margin-right: 9px;
+}
+
+.chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle svg,
+.chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle svg,
+.chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle svg {
+  width: 20px;
+  height: 20px;
 }
 
 @keyframes spinSlow {
@@ -8541,40 +8584,63 @@ select.studio-input,
 }
 
 .chomka-magic-ai-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 8px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   opacity: 0;
   max-width: 0;
   overflow: hidden;
   white-space: nowrap;
   pointer-events: none;
+  margin: 0;
+  padding: 0;
   transform: translateX(-4px);
-  transition: opacity 0.22s ease, max-width 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s ease;
+  box-sizing: border-box;
+  transition: opacity 0.22s ease,
+              max-width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.3s ease;
+}
+
+.chomka-magic-ai-label span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
 }
 
 .chomka-magic-ai-trigger:hover .chomka-magic-ai-label,
 .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-label,
 .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-label {
   opacity: 1;
-  max-width: 175px;
+  max-width: 260px;
   pointer-events: auto;
   transform: translateX(0);
-  padding-right: 14px;
 }
 
 .chomka-magic-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  line-height: 1;
   font-family: monospace;
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 0 5px;
   border-radius: 4px;
   background: rgba(223, 194, 125, 0.15);
   border: 1px solid rgba(223, 194, 125, 0.3);
   color: inherit;
+  box-sizing: border-box;
 }
 
 /* Modal Overlay */
@@ -8607,44 +8673,89 @@ select.studio-input,
 
 /* Modal Header */
 .chomka-ai-header {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 18px 24px;
+  justify-content: center;
+  padding: 20px 120px 18px 120px;
   border-bottom: 1px solid rgba(223, 194, 125, 0.2);
-  background: rgba(18, 14, 30, 0.6);
+  background: rgba(18, 14, 30, 0.65);
+  text-align: center;
+  box-sizing: border-box;
 }
 
-.chomka-ai-header-brand {
+.chomka-ai-header-center {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+.chomka-ai-title-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 100%;
 }
 
 .chomka-ai-sparkle-icon {
-  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   color: var(--gold);
   line-height: 1;
-  filter: drop-shadow(0 0 8px var(--gold));
+  flex-shrink: 0;
+  animation: spinSlow 8s linear infinite;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 0 10px rgba(223, 194, 125, 0.6));
+}
+
+.chomka-ai-sparkle-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .chomka-ai-title {
   font-family: var(--font-display, "Syne", sans-serif);
-  font-size: 13px;
+  font-size: clamp(12px, 2.2vw, 14.5px);
   font-weight: 800;
   letter-spacing: 0.12em;
   color: #fff;
+  text-align: center;
+  line-height: 1.25;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
 }
 
 .chomka-ai-status {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: clamp(8.5px, 1.6vw, 9.5px);
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--gold);
-  margin-top: 2px;
+  margin-top: 5px;
+  text-align: center;
+  max-width: 100%;
+}
+
+.chomka-ai-status span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chomka-ai-status-dot {
@@ -8653,12 +8764,17 @@ select.studio-input,
   border-radius: 50%;
   background: #10b981;
   box-shadow: 0 0 8px #10b981;
+  flex-shrink: 0;
 }
 
 .chomka-ai-header-actions {
+  position: absolute;
+  top: 16px;
+  right: 18px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  z-index: 2;
 }
 
 .chomka-ai-esc-pill {
@@ -8671,6 +8787,7 @@ select.studio-input,
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #9ca3af;
+  white-space: nowrap;
 }
 
 .chomka-ai-close-btn {
@@ -8680,13 +8797,17 @@ select.studio-input,
   font-size: 18px;
   cursor: pointer;
   padding: 4px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
   display: grid;
   place-items: center;
-  transition: color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .chomka-ai-close-btn:hover {
   color: var(--gold);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Search Box */
@@ -8787,21 +8908,265 @@ select.studio-input,
   padding: 20px;
 }
 
+/* =========================================================
+   CHOMKA AI DIRECT CONCIERGE SMART ANSWER CARD
+   ========================================================= */
+.chomka-ai-smart-answer-card {
+  background: linear-gradient(135deg, rgba(32, 26, 48, 0.98), rgba(16, 12, 28, 0.98));
+  border: 1.5px solid var(--gold);
+  border-radius: 12px;
+  padding: 22px;
+  margin-bottom: 24px;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.7), 0 0 30px rgba(223, 194, 125, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.chomka-ai-smart-answer-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+
+.chomka-ai-answer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chomka-ai-answer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display, "Syne", sans-serif);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #050507;
+  background: var(--gold);
+  padding: 5px 12px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.chomka-ai-sparkle-dot {
+  font-size: 12px;
+}
+
+.chomka-ai-answer-verified {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--gold-light);
+  text-transform: uppercase;
+}
+
+.chomka-ai-answer-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.chomka-ai-answer-title {
+  font-family: var(--font-display, "Syne", sans-serif);
+  font-size: 19px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 4px 0;
+  letter-spacing: 0.04em;
+}
+
+.chomka-ai-answer-headline {
+  font-family: var(--font-display, "Syne", sans-serif);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+
+.chomka-ai-answer-summary {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #e5e7eb;
+  margin: 0 0 16px 0;
+}
+
+.chomka-ai-answer-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.chomka-ai-fact-pill {
+  display: flex;
+  flex-direction: column;
+  background: rgba(223, 194, 125, 0.08);
+  border: 1px solid rgba(223, 194, 125, 0.25);
+  border-radius: 6px;
+  padding: 6px 12px;
+  min-width: 120px;
+}
+
+.chomka-ai-fact-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.chomka-ai-fact-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  font-family: var(--font-display, monospace);
+}
+
+.chomka-ai-stream-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chomka-ai-stream-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #9ca3af;
+  text-transform: uppercase;
+}
+
+.chomka-ai-stream-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chomka-ai-stream-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.chomka-ai-stream-pill.spotify {
+  background: rgba(30, 215, 96, 0.12);
+  color: #1ed760;
+  border: 1px solid rgba(30, 215, 96, 0.35);
+}
+.chomka-ai-stream-pill.spotify:hover {
+  background: #1ed760;
+  color: #050507;
+}
+
+.chomka-ai-stream-pill.apple {
+  background: rgba(252, 60, 68, 0.12);
+  color: #fc3c44;
+  border: 1px solid rgba(252, 60, 68, 0.35);
+}
+.chomka-ai-stream-pill.apple:hover {
+  background: #fc3c44;
+  color: #fff;
+}
+
+.chomka-ai-stream-pill.youtube {
+  background: rgba(255, 0, 0, 0.12);
+  color: #ff4e45;
+  border: 1px solid rgba(255, 0, 0, 0.35);
+}
+.chomka-ai-stream-pill.youtube:hover {
+  background: #ff4e45;
+  color: #fff;
+}
+
+.chomka-ai-stream-pill.audiomack {
+  background: rgba(255, 145, 0, 0.12);
+  color: #ffa726;
+  border: 1px solid rgba(255, 145, 0, 0.35);
+}
+.chomka-ai-stream-pill.audiomack:hover {
+  background: #ffa726;
+  color: #050507;
+}
+
+.chomka-ai-stream-pill.boomplay {
+  background: rgba(0, 168, 255, 0.12);
+  color: #29b6f6;
+  border: 1px solid rgba(0, 168, 255, 0.35);
+}
+.chomka-ai-stream-pill.boomplay:hover {
+  background: #29b6f6;
+  color: #050507;
+}
+
+.chomka-ai-stream-pill.deezer {
+  background: rgba(162, 56, 255, 0.12);
+  color: #ce93d8;
+  border: 1px solid rgba(162, 56, 255, 0.35);
+}
+.chomka-ai-stream-pill.deezer:hover {
+  background: #ce93d8;
+  color: #050507;
+}
+
+.chomka-ai-answer-action-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-radius: 6px;
+  background: var(--gold);
+  border: none;
+  color: #050507;
+  font-family: var(--font-display, "Syne", sans-serif);
+  font-size: 11.5px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 18px rgba(223, 194, 125, 0.35);
+}
+
+.chomka-ai-answer-action-btn:hover {
+  background: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(223, 194, 125, 0.5);
+}
+
 /* Proposal Card */
 .chomka-ai-proposal-card {
-  background: linear-gradient(135deg, rgba(30, 24, 48, 0.95), rgba(16, 12, 28, 0.95));
+  background: linear-gradient(135deg, rgba(30, 24, 48, 0.98), rgba(16, 12, 28, 0.98));
   border: 1.5px solid var(--gold);
-  border-radius: 10px;
-  padding: 20px;
+  border-radius: 12px;
+  padding: 22px;
   margin-bottom: 24px;
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6), 0 0 25px rgba(223, 194, 125, 0.15);
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.7), 0 0 30px rgba(223, 194, 125, 0.18);
 }
 
 .chomka-ai-proposal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -8813,58 +9178,261 @@ select.studio-input,
   letter-spacing: 0.12em;
   color: #050507;
   background: var(--gold);
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 4px;
 }
 
 .chomka-ai-proposal-sub {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--gold-light);
   font-style: italic;
 }
 
 .chomka-ai-proposal-quote {
-  font-size: 13px;
-  color: #9ca3af;
+  font-size: 13.5px;
+  color: #d1d5db;
   margin: 0 0 16px;
   font-style: italic;
-  border-left: 2px solid var(--gold);
-  padding-left: 10px;
+  border-left: 3px solid var(--gold);
+  padding-left: 12px;
+  line-height: 1.5;
 }
 
-.chomka-ai-proposal-items {
+/* Schedule Card */
+.chomka-ai-proposal-schedule-card {
+  background: rgba(223, 194, 125, 0.08);
+  border: 1px solid rgba(223, 194, 125, 0.35);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.chomka-ai-schedule-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chomka-ai-schedule-chip {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  text-transform: uppercase;
+}
+
+.chomka-ai-schedule-status {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.chomka-ai-schedule-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chomka-ai-schedule-date-text {
+  font-family: var(--font-display, "Syne", sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.chomka-ai-schedule-time-text {
+  font-size: 12px;
+  color: #d1d5db;
+}
+
+.chomka-ai-schedule-time-text strong {
+  color: var(--gold);
+}
+
+.chomka-ai-schedule-slots-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.chomka-ai-slots-picker-label {
+  font-size: 11px;
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.chomka-ai-slots-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chomka-ai-slot-btn {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(223, 194, 125, 0.25);
+  background: rgba(0, 0, 0, 0.4);
+  color: #e5e7eb;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chomka-ai-slot-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.chomka-ai-slot-btn.is-selected {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #050507;
+  font-weight: 800;
+}
+
+/* Proposal Item Row — Flex constrained with zero overlap */
+.chomka-ai-proposal-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 18px;
 }
 
 .chomka-ai-proposal-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 14px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 18px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chomka-ai-proposal-item-info {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .chomka-ai-proposal-item-title {
   display: block;
-  font-size: 13px;
+  font-size: 13.5px;
+  font-weight: 700;
   color: #fff;
+  letter-spacing: 0.02em;
+  margin-bottom: 3px;
 }
 
 .chomka-ai-proposal-item-qty {
-  font-size: 11px;
+  display: block;
+  font-size: 11.5px;
   color: #9ca3af;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .chomka-ai-proposal-item-price {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-family: var(--font-display, monospace);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   color: var(--gold);
+  text-align: right;
+  padding-left: 8px;
+}
+
+/* Beats Strip */
+.chomka-ai-proposal-beats-strip {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(223, 194, 125, 0.2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.chomka-ai-beats-strip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chomka-ai-beats-strip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chomka-ai-beats-strip-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  gap: 12px;
+}
+
+.chomka-ai-beats-strip-item:hover {
+  background: rgba(223, 194, 125, 0.12);
+  border-color: var(--gold);
+  transform: translateX(2px);
+}
+
+.chomka-ai-beats-strip-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chomka-ai-beats-strip-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chomka-ai-beats-strip-genre {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chomka-ai-beats-strip-btn {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .chomka-ai-proposal-total-row {
@@ -9071,39 +9639,142 @@ select.studio-input,
 
 @media (max-width: 768px) {
   .chomka-magic-ai-trigger {
-    bottom: 88px; /* Elevated on mobile to stay above mobile bars */
-    right: 16px;
+    bottom: max(88px, env(safe-area-inset-bottom, 88px)); /* Elevated on mobile to stay above mobile bars */
+    right: max(16px, env(safe-area-inset-right, 16px));
     height: 44px;
-    width: 44px;
+    width: auto;
+    min-width: 44px;
     padding: 0;
+    max-width: calc(100vw - 32px);
   }
   .chomka-magic-ai-sparkle {
-    width: 44px;
-    height: 44px;
+    width: 41px;
+    height: 41px;
     font-size: 16px;
   }
   .chomka-magic-ai-trigger:hover,
   .chomka-magic-ai-trigger:focus-visible,
   .chomka-magic-ai-trigger.is-expanded {
-    width: 164px;
+    padding: 0 14px;
   }
   .chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle,
   .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle,
   .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle {
-    width: 32px;
-    padding-left: 4px;
+    width: 16px;
+    height: 16px;
+    font-size: 14px;
+    margin-right: 7px;
   }
   .chomka-magic-ai-label {
-    font-size: 11px;
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-align: center;
   }
   .chomka-magic-ai-badge {
     display: none;
   }
+  .chomka-magic-ai-trigger:hover .chomka-magic-ai-label,
+  .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-label,
+  .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-label {
+    max-width: calc(100vw - 76px);
+  }
+
+  /* Modal Dialog Responsive Polish */
+  .chomka-ai-modal-backdrop {
+    padding: 12px;
+  }
   .chomka-ai-modal-dialog {
-    max-height: 92vh;
+    max-height: 94vh;
+    border-radius: 10px;
+  }
+  .chomka-ai-header {
+    padding: 16px 44px 14px 44px;
+  }
+  .chomka-ai-header-actions {
+    top: 12px;
+    right: 12px;
   }
   .chomka-ai-esc-pill {
     display: none;
+  }
+  .chomka-ai-close-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+  .chomka-ai-title {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+  .chomka-ai-status {
+    font-size: 8.5px;
+    letter-spacing: 0.06em;
+  }
+  .chomka-ai-mode-pill {
+    font-size: 9px;
+    padding: 4px 8px;
+    letter-spacing: 0.05em;
+  }
+  .chomka-ai-footer {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 6px;
+    padding: 10px 14px;
+    font-size: 8.5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chomka-ai-header {
+    padding: 14px 40px 12px 40px;
+  }
+  .chomka-ai-title {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+  .chomka-ai-mode-pills {
+    margin-top: 8px;
+    gap: 2px;
+    padding: 2px;
+  }
+  .chomka-ai-mode-pill {
+    font-size: 8.5px;
+    padding: 3px 8px;
+  }
+}
+
+@media (max-width: 360px) {
+  .chomka-magic-ai-trigger:hover,
+  .chomka-magic-ai-trigger:focus-visible,
+  .chomka-magic-ai-trigger.is-expanded {
+    padding: 0 10px;
+  }
+  .chomka-magic-ai-trigger:hover .chomka-magic-ai-sparkle,
+  .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-sparkle,
+  .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-sparkle {
+    margin-right: 5px;
+  }
+  .chomka-magic-ai-label {
+    font-size: 9.5px;
+    letter-spacing: 0.03em;
+  }
+  .chomka-magic-ai-trigger:hover .chomka-magic-ai-label,
+  .chomka-magic-ai-trigger:focus-visible .chomka-magic-ai-label,
+  .chomka-magic-ai-trigger.is-expanded .chomka-magic-ai-label {
+    max-width: calc(100vw - 56px);
+  }
+  .chomka-ai-header {
+    padding: 12px 34px 10px 34px;
+  }
+  .chomka-ai-title {
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+  }
+  .chomka-ai-mode-pill {
+    font-size: 8px;
+    padding: 3px 6px;
   }
 }
 
@@ -9127,7 +9798,7 @@ select.studio-input,
 .chomka-magic-ai-trigger.is-admin-mode:hover,
 .chomka-magic-ai-trigger.is-admin-mode:focus-visible,
 .chomka-magic-ai-trigger.is-admin-mode.is-expanded {
-  width: 228px;
+  padding: 0 16px;
 }
 
 .chomka-magic-ai-trigger.is-admin-mode:hover {
@@ -9141,14 +9812,25 @@ select.studio-input,
   border-color: rgba(0, 0, 0, 0.35);
 }
 
+@media (max-width: 768px) {
+  .chomka-magic-ai-trigger.is-admin-mode:hover,
+  .chomka-magic-ai-trigger.is-admin-mode:focus-visible,
+  .chomka-magic-ai-trigger.is-admin-mode.is-expanded {
+    padding: 0 14px;
+  }
+}
+
 .chomka-ai-mode-pills {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(223, 194, 125, 0.25);
   border-radius: 999px;
-  padding: 2px;
-  gap: 2px;
+  padding: 3px;
+  gap: 4px;
+  margin-top: 10px;
+  max-width: 100%;
 }
 
 .chomka-ai-mode-pill {
@@ -9162,6 +9844,7 @@ select.studio-input,
   padding: 4px 10px;
   border-radius: 999px;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.2s ease;
 }
 
@@ -9400,6 +10083,140 @@ select.studio-input,
   color: var(--gold);
 }
 
+/* =========================================================
+   CHOMKA ADMIN AI EXECUTIVE CONSOLE ACTIONS & DANGER STATES
+   ========================================================= */
+.chomka-ai-process-card--danger {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: linear-gradient(135deg, rgba(45, 18, 28, 0.85), rgba(18, 12, 22, 0.95));
+  box-shadow: 0 8px 30px rgba(239, 68, 68, 0.15), 0 0 20px rgba(0, 0, 0, 0.6);
+}
+
+.chomka-ai-process-badge.is-danger {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f87171;
+}
+
+.chomka-ai-process-btn.is-danger {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.chomka-ai-process-btn.is-danger:hover:not(:disabled) {
+  background: #dc2626;
+  border-color: #dc2626;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+}
+
+.chomka-ai-confirm-box {
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+
+.chomka-ai-confirm-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chomka-ai-undo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--gold);
+  background: rgba(223, 194, 125, 0.18);
+  color: var(--gold);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.chomka-ai-undo-btn:hover:not(:disabled) {
+  background: var(--gold);
+  color: #0b0714;
+}
+
+.chomka-ai-action-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.chomka-ai-action-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chomka-ai-entity-row--action {
+  padding: 8px 12px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.chomka-ai-entity-row--action:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(223, 194, 125, 0.25);
+}
+
+.chomka-ai-row-delete-btn {
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.chomka-ai-row-delete-btn:hover:not(:disabled) {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+.chomka-ai-row-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chomka-ai-row-view-btn {
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 1px solid rgba(223, 194, 125, 0.35);
+  background: transparent;
+  color: var(--gold);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.chomka-ai-row-view-btn:hover {
+  background: rgba(223, 194, 125, 0.15);
+  border-color: var(--gold);
+}
+
 
 /* =========================================================
    HEAVENLY SKY & GAMIFIED SALES EXPERIENCE
@@ -9560,280 +10377,407 @@ select.studio-input,
 }
 
 /* =========================================================
-   GAME UI & RPG SYSTEM STYLES
+/* =========================================================
+   CELESTIAL FLOATING TABLET & MINIMAL GAME SANCTUARY STYLES
+   Minimalist, serene, otherworldly interface floating in the clouds
    ========================================================= */
 
-.game-hud-bar {
+/* The Floating Celestial Tablet Container */
+.celestial-tablet {
+  position: relative;
+  margin: 12px auto 44px;
+  max-width: 860px;
+  background: radial-gradient(130% 120% at 50% -10%, rgba(26, 20, 38, 0.88) 0%, rgba(13, 11, 20, 0.94) 55%, rgba(7, 6, 12, 0.98) 100%);
+  border: 1px solid rgba(223, 194, 125, 0.3);
+  border-radius: 24px;
+  padding: clamp(24px, 5vw, 44px);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow: 0 30px 85px rgba(0, 0, 0, 0.75), 0 0 50px rgba(223, 194, 125, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  animation: celestialTabletFloat 8s ease-in-out infinite;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  z-index: 2;
+  text-align: left;
+}
+
+/* Radiant Gold Crown Highlight on Top Edge of Tablet */
+.celestial-tablet::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(223, 194, 125, 0.7) 30%, rgba(254, 240, 138, 0.95) 50%, rgba(223, 194, 125, 0.7) 70%, transparent);
+  border-radius: 2px;
+  filter: drop-shadow(0 0 6px rgba(254, 240, 138, 0.5));
+  pointer-events: none;
+}
+
+@keyframes celestialTabletFloat {
+  0%, 100% {
+    transform: translateY(0px);
+    box-shadow: 0 30px 85px rgba(0, 0, 0, 0.75), 0 0 50px rgba(223, 194, 125, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+  50% {
+    transform: translateY(-7px);
+    box-shadow: 0 40px 105px rgba(0, 0, 0, 0.85), 0 0 68px rgba(223, 194, 125, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .celestial-tablet {
+    animation: none;
+  }
+}
+
+/* Minimal Game Journey Steps (Ethereal Path Indicators) */
+.celestial-steps-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(135deg, rgba(20, 18, 30, 0.92) 0%, rgba(35, 28, 48, 0.85) 100%);
-  border: 1px solid rgba(254, 240, 138, 0.35);
+  margin-bottom: 28px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(223, 194, 125, 0.15);
+  overflow-x: auto;
+  gap: 10px;
+}
+
+.celestial-step-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: all 0.25s ease;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+
+.celestial-step-node.is-active {
+  color: #fffdf5;
+  text-shadow: 0 0 12px rgba(254, 240, 138, 0.5);
+}
+
+.celestial-step-node.is-active .celestial-step-dot {
+  background: var(--gold);
+  border-color: #fef08a;
+  box-shadow: 0 0 10px rgba(223, 194, 125, 0.7);
+  color: #08070d;
+}
+
+.celestial-step-node.is-done {
+  color: var(--gold);
+}
+
+.celestial-step-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(223, 194, 125, 0.35);
+  background: rgba(10, 8, 16, 0.6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 800;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.celestial-step-node.is-done .celestial-step-dot {
+  background: rgba(223, 194, 125, 0.2);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.celestial-step-line {
+  flex: 1;
+  min-width: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(223, 194, 125, 0.25), rgba(223, 194, 125, 0.08));
+}
+
+/* Sacred Questioning Typography */
+.celestial-whisper {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.celestial-question {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  margin: 0 0 10px;
+  line-height: 1.25;
+}
+
+.celestial-subtext {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+
+/* Ethereal Floating Dropdown Trigger */
+.celestial-dropdown-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
   border-radius: 14px;
-  padding: 12px 20px;
+  border: 1px solid rgba(223, 194, 125, 0.35);
+  background: rgba(14, 12, 22, 0.78);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-align: left;
+}
+
+.celestial-dropdown-trigger:hover {
+  border-color: rgba(223, 194, 125, 0.7);
+  background: rgba(22, 18, 34, 0.88);
+  box-shadow: 0 0 25px rgba(223, 194, 125, 0.15);
+  transform: translateY(-1px);
+}
+
+.celestial-dropdown-trigger.is-open {
+  border-color: var(--gold);
+  background: rgba(22, 18, 34, 0.95);
+  box-shadow: 0 0 30px rgba(223, 194, 125, 0.25);
+}
+
+/* Celestial Dropdown Options Menu */
+.celestial-dropdown-menu {
+  margin-top: 10px;
+  background: rgba(10, 9, 16, 0.98);
+  border: 1px solid rgba(223, 194, 125, 0.4);
+  border-radius: 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 35px rgba(223, 194, 125, 0.12);
+  animation: fadeIn 0.2s ease-out;
+  max-height: 480px;
+  overflow: hidden;
+}
+
+.celestial-dropdown-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(16, 13, 26, 0.98);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(223, 194, 125, 0.25);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.celestial-dropdown-scroll {
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Dropdown Service Item Card */
+.celestial-service-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  flex-wrap: wrap;
+}
+
+.celestial-service-item:hover {
+  background: rgba(223, 194, 125, 0.08);
+  border-color: rgba(223, 194, 125, 0.35);
+  transform: translateX(2px);
+}
+
+.celestial-service-item.is-selected {
+  background: rgba(223, 194, 125, 0.12);
+  border-color: var(--gold);
+  box-shadow: inset 0 0 12px rgba(223, 194, 125, 0.08);
+}
+
+.celestial-checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(223, 194, 125, 0.4);
+  background: rgba(10, 8, 16, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #08070d;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.celestial-service-item.is-selected .celestial-checkbox {
+  background: var(--gold);
+  border-color: var(--gold);
+  box-shadow: 0 0 8px rgba(223, 194, 125, 0.5);
+}
+
+/* Selected Service Floating Chips */
+.celestial-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
   margin-bottom: 24px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(12px);
+}
+
+.celestial-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(223, 194, 125, 0.1);
+  border: 1px solid rgba(223, 194, 125, 0.35);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold);
+  transition: all 0.2s ease;
+}
+
+.celestial-chip:hover {
+  background: rgba(223, 194, 125, 0.18);
+  border-color: var(--gold);
+}
+
+.celestial-chip-remove {
+  background: none;
+  border: none;
+  color: var(--gold);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  line-height: 1;
+  font-weight: 800;
+}
+
+/* Top Subtle Atmospheric Bar */
+.celestial-presence-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
   flex-wrap: wrap;
   gap: 12px;
 }
 
-.game-hud-stat {
-  display: flex;
+.celestial-sanctuary-tag {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-.game-level-badge {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #050508;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.08em;
-  padding: 4px 10px;
-  border-radius: 6px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
-}
-
-.game-coins-counter {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 800;
-  color: #ffd700;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
-}
-
-.game-sound-toggle-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(254, 240, 138, 0.25);
-  border-radius: 8px;
   color: var(--gold);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+}
+
+.celestial-counter-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.game-sound-toggle-btn:hover {
-  background: rgba(254, 240, 138, 0.18);
-  border-color: var(--gold);
-  transform: scale(1.03);
-}
-
-/* Quest Stages Progress Bar */
-.game-quest-tracker {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  background: rgba(10, 10, 18, 0.7);
-  border: 1px solid rgba(254, 240, 138, 0.2);
-  border-radius: 12px;
-  padding: 10px 16px;
-  overflow-x: auto;
-  gap: 8px;
-}
-
-.game-quest-node {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--muted);
-  white-space: nowrap;
-  padding: 6px 12px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.game-quest-node.is-active {
-  color: #ffffff;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.15) 100%);
-  border: 1px solid rgba(254, 240, 138, 0.5);
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.25);
-}
-
-.game-quest-node.is-done {
   color: var(--gold);
-}
-
-/* Quick Combo Loadout Presets */
-.game-loadouts-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.game-loadout-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(254, 240, 138, 0.22);
+  background: rgba(223, 194, 125, 0.1);
+  border: 1px solid rgba(223, 194, 125, 0.25);
+  padding: 4px 12px;
   border-radius: 20px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 
-.game-loadout-btn:hover {
-  background: rgba(254, 240, 138, 0.15);
-  border-color: var(--gold);
-  color: var(--gold);
-  transform: translateY(-1px);
+/* =========================================================
+   SERVICES MODAL FLOW RESPONSIVE ALIGNMENT & MOBILE POLISH
+   ========================================================= */
+@media (max-width: 768px) {
+  .celestial-tablet {
+    border-radius: 18px;
+    padding: 22px 18px;
+    margin: 8px auto 30px;
+  }
+  .celestial-steps-nav {
+    padding-bottom: 14px;
+    margin-bottom: 22px;
+    gap: 8px;
+  }
+  .celestial-step-node {
+    font-size: 10px;
+    gap: 6px;
+    letter-spacing: 0.08em;
+  }
+  .celestial-step-dot {
+    width: 18px;
+    height: 18px;
+    font-size: 9px;
+  }
+  .celestial-step-line {
+    min-width: 8px;
+  }
+  .celestial-question {
+    font-size: 22px;
+  }
+  .celestial-subtext {
+    font-size: 13.5px;
+  }
+  .celestial-dropdown-trigger {
+    padding: 14px 16px;
+  }
 }
 
-.game-loadout-btn.is-active {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(254, 240, 138, 0.1) 100%);
-  border-color: var(--gold);
-  color: var(--gold);
+@media (max-width: 480px) {
+  .celestial-tablet {
+    padding: 18px 14px;
+    border-radius: 14px;
+  }
+  .celestial-steps-nav {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .celestial-step-node span:not(.celestial-step-dot) {
+    font-size: 9px;
+    letter-spacing: 0.04em;
+  }
 }
-
-/* Heavenly Game Item / Skill Cards Grid */
-.game-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
-  margin-bottom: 28px;
-}
-
-.game-skill-card {
-  position: relative;
-  background: linear-gradient(180deg, rgba(22, 20, 32, 0.9) 0%, rgba(14, 13, 20, 0.95) 100%);
-  border: 1px solid rgba(254, 240, 138, 0.2);
-  border-radius: 14px;
-  padding: 20px;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  animation: gameCardFloat 6s ease-in-out infinite alternate;
-}
-
-.game-skill-card:nth-child(2n) {
-  animation-delay: -2s;
-}
-
-.game-skill-card:nth-child(3n) {
-  animation-delay: -4s;
-}
-
-@keyframes gameCardFloat {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-6px); }
-}
-
-.game-skill-card:hover {
-  border-color: rgba(254, 240, 138, 0.6);
-  background: linear-gradient(180deg, rgba(30, 26, 44, 0.95) 0%, rgba(18, 16, 26, 0.98) 100%);
-  box-shadow: 0 12px 36px rgba(245, 158, 11, 0.2), 0 0 20px rgba(254, 240, 138, 0.15);
-  transform: translateY(-8px) scale(1.02);
-}
-
-.game-skill-card.is-equipped {
-  border-color: #ffd700;
-  background: linear-gradient(180deg, rgba(38, 30, 52, 0.95) 0%, rgba(20, 18, 30, 0.98) 100%);
-  box-shadow: 0 0 25px rgba(255, 215, 0, 0.3), inset 0 0 15px rgba(255, 215, 0, 0.08);
-}
-
-.game-card-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.game-rarity-badge {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  padding: 3px 8px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid currentColor;
-}
-
-.game-stat-tag {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 700;
-  color: #38bdf8;
-  letter-spacing: 0.04em;
-  background: rgba(56, 189, 248, 0.12);
-  padding: 2px 7px;
-  border-radius: 4px;
-  margin-top: 8px;
-}
-
-.game-equip-btn {
-  width: 100%;
-  margin-top: 14px;
-  padding: 9px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid rgba(254, 240, 138, 0.3);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
-}
-
-.game-equip-btn:hover {
-  background: rgba(254, 240, 138, 0.2);
-  border-color: var(--gold);
-  color: var(--gold);
-}
-
-.game-skill-card.is-equipped .game-equip-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #ffd700 100%);
-  color: #050508;
-  border-color: #ffd700;
-  box-shadow: 0 0 14px rgba(255, 215, 0, 0.4);
-}
-
-/* Floating XP particle feedback */
-@keyframes xpFloatUp {
-  0% { opacity: 0; transform: translateY(0) scale(0.8); }
-  30% { opacity: 1; transform: translateY(-10px) scale(1.1); }
-  100% { opacity: 0; transform: translateY(-30px) scale(0.9); }
-}
-
-.game-xp-feedback {
-  position: absolute;
-  top: 10px;
-  right: 15px;
-  color: #ffd700;
-  font-size: 11px;
-  font-weight: 800;
-  pointer-events: none;
-  animation: xpFloatUp 1s ease-out forwards;
-}
-
 
 /* =========================================================
    STAGE 40: UNIQUE LUXURY AMBIENT BACKDROPS

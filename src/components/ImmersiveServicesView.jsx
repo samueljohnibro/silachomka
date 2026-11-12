@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import { formatLongDate } from "../utils/dateFormatter";
 import { CheckIcon, LoadingSpinner, LeftArrowIcon, RightArrowIcon, TrashIcon } from "./Icons";
-import { playEquipSound, playUnequipSound, playLevelUpSound } from "../utils/heavenlySound";
+// Audio effects removed per minimalist design requirement
 
 /**
  * Gamified Heavenly Studio Concierge Experience
@@ -58,34 +58,29 @@ export default function ImmersiveServicesView({
     configurations[primarySlug]?.bookingTime || configurations["voice-recording"]?.bookingTime || "";
 
   const handleCardToggle = (slug) => {
-    if (selectedSlugs.includes(slug)) {
-      playUnequipSound();
-    } else {
-      playEquipSound();
-    }
     toggleService(slug);
   };
 
   const goToStep = (nextStep) => {
-    playLevelUpSound();
     setConvStep(nextStep);
   };
 
   return (
-    <section className="services-immersive-viewport" aria-label="Heavenly Studio Sound Quest">
+    <section className="services-immersive-viewport" aria-label="Celestial Studio Concierge">
       {/* Immersive Game Console Header */}
       <div className="services-immersive-header">
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <span
-            className="game-level-badge"
+            className="celestial-sanctuary-tag"
             style={{
-              letterSpacing: "0.12em",
+              letterSpacing: "0.14em",
               margin: 0,
               fontSize: "11px",
               fontWeight: 800,
             }}
           >
-            ☁️ HEAVEN SOUND REALM • LEVEL 99 QUEST
+            <span>✦</span>
+            <span>CHOMKAMUSIC™ STUDIOS</span>
           </span>
           <span style={{ fontSize: "11px", color: "var(--muted)", letterSpacing: "0.06em" }}>
             {convStep === "need" && "• Step 1: What do you need?"}
@@ -99,7 +94,7 @@ export default function ImmersiveServicesView({
         <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
           <div style={{ textAlign: "right" }}>
             <span style={{ fontSize: "9px", color: "var(--muted)", display: "block", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Total Quest Cost
+              Total Session Cost
             </span>
             <span style={{ fontSize: "15px", fontWeight: 800, color: "var(--gold)" }}>
               {hasPriceUponRequest && totalNgn === 0 ? "Custom Quote" : `₦${totalNgn.toLocaleString()}`}
@@ -118,9 +113,9 @@ export default function ImmersiveServicesView({
               border: "1px solid rgba(255, 255, 255, 0.15)",
               cursor: "pointer",
             }}
-            title="Exit Quest View (Escape)"
+            title="Exit Guided View (Escape)"
           >
-            ✕ Close View (Esc)
+            ✕ Close Guided View (Esc)
           </button>
         </div>
       </div>
@@ -133,11 +128,9 @@ export default function ImmersiveServicesView({
         {convStep === "need" && (
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                <span style={{ fontSize: "18px" }}>☁️</span>
-                <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  STAGE 1 • CHOOSE YOUR SKILLS
-                </span>
+              <div className="celestial-whisper">
+                <span>✦</span>
+                <span>SACRED CREATION</span>
               </div>
               <h2
                 style={{
@@ -152,7 +145,7 @@ export default function ImmersiveServicesView({
                 What do you need?
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Click any power card below to equip it to your track. Mix and match as many as you want!
+                Select the studio services you desire to bring into reality. Choose as many as you need.
               </p>
             </div>
 
@@ -166,7 +159,7 @@ export default function ImmersiveServicesView({
             >
               {activeServiceList.map((svc) => {
                 const isSelected = selectedSlugs.includes(svc.slug);
-                const badgeText = svc.gameBadge || "✦ SOUND SKILL";
+                const badgeText = svc.category || "STUDIO SERVICE";
                 return (
                   <div
                     key={svc.slug}
@@ -179,8 +172,8 @@ export default function ImmersiveServicesView({
                   >
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                        <span className="game-rarity-badge" style={{ color: "var(--gold)" }}>
-                          {badgeText}
+                        <span style={{ fontSize: "10px", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--gold)" }}>
+                          ✦ {badgeText}
                         </span>
                         <div
                           style={{
@@ -207,11 +200,7 @@ export default function ImmersiveServicesView({
                       <p style={{ fontSize: "12px", color: "var(--muted)", margin: 0, lineHeight: 1.4 }}>
                         {svc.plainExplanation || svc.description || svc.tagline}
                       </p>
-                      {svc.stats && (
-                        <span className="game-stat-tag" style={{ marginTop: "6px" }}>
-                          {svc.stats}
-                        </span>
-                      )}
+                      
                     </div>
 
                     {/* Live Duration Stepper right on card for hourly recording sessions */}
@@ -305,7 +294,7 @@ export default function ImmersiveServicesView({
             {/* Navigation Row */}
             <div className="services-immersive-nav">
               <span style={{ fontSize: "13px", color: "var(--muted)" }}>
-                {selectedSlugs.length === 0 ? "Select at least 1 skill to continue" : `🎮 ${selectedSlugs.length} skill(s) equipped`}
+                {selectedSlugs.length === 0 ? "Select at least 1 service to continue" : `${selectedSlugs.length} service(s) selected`}
               </span>
               <button
                 type="button"
@@ -334,10 +323,10 @@ export default function ImmersiveServicesView({
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                <span style={{ fontSize: "18px" }}>⏱️</span>
-                <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  STAGE 2 • SESSION SPECS
-                </span>
+                <div className="celestial-whisper">
+                  <span>✦</span>
+                  <span>SESSION SPECS</span>
+                </div>
               </div>
               <h2
                 style={{
@@ -352,7 +341,7 @@ export default function ImmersiveServicesView({
                 How much studio time do you need?
               </h2>
               <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0, lineHeight: 1.5 }}>
-                Choose your recording hours or check the details for each selected skill.
+                Specify recording hours or review the timeline for each selected service.
               </p>
             </div>
 
@@ -522,7 +511,7 @@ export default function ImmersiveServicesView({
                 className="primary-button"
                 style={{ height: "44px", padding: "0 24px", fontSize: "13px", fontWeight: 700 }}
               >
-                Next: Player Card & Notes →
+                Next: Contact Details & Notes →
               </button>
             </div>
           </div>
@@ -537,7 +526,7 @@ export default function ImmersiveServicesView({
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
                 <span style={{ fontSize: "18px" }}>📜</span>
                 <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  STAGE 4 • PLAYER CARD & AUDIO
+                  STAGE 4 • CONTACT DETAILS & AUDIO
                 </span>
               </div>
               <h2
@@ -727,10 +716,10 @@ export default function ImmersiveServicesView({
           <div style={{ animation: "fadeIn 0.25s ease-out" }}>
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                <span style={{ fontSize: "18px" }}>🏆</span>
-                <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  STAGE 5 • QUEST SUMMARY
-                </span>
+                <div className="celestial-whisper">
+                  <span>✦</span>
+                  <span>ORDER SUMMARY</span>
+                </div>
               </div>
               <h2
                 style={{
@@ -762,7 +751,7 @@ export default function ImmersiveServicesView({
             >
               <div style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.08)", paddingBottom: "14px", marginBottom: "14px" }}>
                 <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: "4px" }}>
-                  Player Contact
+                  Client Contact
                 </span>
                 <p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>
                   {customerName} <span style={{ color: "var(--muted)", fontWeight: 400 }}>({customerEmail} · {customerPhone})</span>
@@ -801,7 +790,7 @@ export default function ImmersiveServicesView({
 
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
                 <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                  Equipped Services
+                  Itemized Services
                 </span>
                 {selectedServices.map((svc) => {
                   const price = itemizedPrices[svc.slug];
@@ -906,7 +895,7 @@ export default function ImmersiveServicesView({
                   color: "#050507",
                 }}
               >
-                {isSubmitting ? "Locking in Session..." : "Confirm & Start Project →"}
+                {isSubmitting ? "Confirming Session..." : "Confirm & Seal Reservation →"}
               </button>
             </div>
           </div>

@@ -1,9 +1,8 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useChomkaStore } from "../data/store";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
-import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
 import EventsAmbientBackground from "../components/EventsAmbientBackground";
 import { canonicalUrl } from "../data/siteConfig";
 
@@ -361,11 +360,6 @@ export default function EventsPage() {
             </div>
           )}
         </section>
-
-        {/* Newsletter Box */}
-        <div style={{ marginTop: "60px" }}>
-          <SubscriberNewsletterBox />
-        </div>
       </main>
     </div>
   );

@@ -43,15 +43,38 @@ app.use('*', cors({
 app.onError((err, c) => {
   console.error('API Error:', err.message || err);
   const msg = String(err?.message || err || '');
+  let status = err.status || 500;
+  let body = { error: err.message || 'Internal Server Error' };
   if (msg.includes('exceeded the quota') || msg.includes('402')) {
-    return c.json({
+    status = 503;
+    body = {
       error: 'Database quota exceeded on Neon. Please log in to https://console.neon.tech to upgrade plan or restore limits.',
       code: 'DATABASE_QUOTA_EXCEEDED'
-    }, 503);
+    };
   }
-  return c.json({
-    error: err.message || 'Internal Server Error'
-  }, err.status || 500);
+  const res = c.json(body, status);
+  res.headers.set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  res.headers.delete('Cloudflare-CDN-Cache-Control');
+  res.headers.delete('Cache-Tag');
+  return res;
+})
+
+// Default Cache Protection Middleware:
+// Applies Cache-Control: private, no-store, no-cache, must-revalidate
+// ONLY when downstream routes have not explicitly set their own Cache-Control header.
+// Fail-closed: ensures all 500-class error responses or thrown errors are never cached.
+app.use('*', async (c, next) => {
+  try {
+    await next()
+  } finally {
+    if (c.res && c.res.status >= 500) {
+      c.res.headers.set('Cache-Control', 'private, no-store, no-cache, must-revalidate')
+      c.res.headers.delete('Cloudflare-CDN-Cache-Control')
+      c.res.headers.delete('Cache-Tag')
+    } else if (!c.res?.headers?.has('Cache-Control')) {
+      c.header('Cache-Control', 'private, no-store, no-cache, must-revalidate')
+    }
+  }
 })
 
 // Middleware to inject DB connection
@@ -62,6 +85,63 @@ app.use('*', async (c, next) => {
   c.set('sql', neon(c.env.DATABASE_URL))
   await next()
 })
+
+// ==========================================
+// Public Catalogue Cache Policies & Invalidation Helpers
+// ==========================================
+
+export const CACHE_POLICIES = {
+  CATALOGUE: 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400',
+  STATIC_PUBLIC: 'public, max-age=300, s-maxage=86400, stale-while-revalidate=86400',
+  AVAILABILITY: 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+}
+
+export function setPublicCacheHeaders(c, policy, tags = []) {
+  c.header('Cache-Control', policy)
+  const sMaxAgeMatch = policy.match(/s-maxage=(\d+)/)
+  const maxAgeMatch = policy.match(/max-age=(\d+)/)
+  const cdnAge = sMaxAgeMatch ? sMaxAgeMatch[1] : (maxAgeMatch ? maxAgeMatch[1] : '60')
+  const swrMatch = policy.match(/stale-while-revalidate=(\d+)/)
+  const swrDirective = swrMatch ? `, stale-while-revalidate=${swrMatch[1]}` : ''
+  c.header('Cloudflare-CDN-Cache-Control', `public, max-age=${cdnAge}${swrDirective}`)
+
+  const tagList = ['catalogue', ...(Array.isArray(tags) ? tags : [tags])].filter(Boolean)
+  if (tagList.length > 0) {
+    c.header('Cache-Tag', Array.from(new Set(tagList)).join(','))
+  }
+}
+
+export function purgeCatalogueCache(ctx, tags) {
+  const rawList = Array.isArray(tags) ? tags : [tags]
+  const tagList = rawList.filter(Boolean)
+  if (!tagList.length) return
+
+  const cache = ctx?.cache || ctx?.executionCtx?.cache
+  if (cache?.purge) {
+    try {
+      const purgePromise = Promise.resolve(cache.purge({ tags: tagList }))
+        .then((result) => {
+          if (result && result.success !== true) {
+            const errorDetails = Array.isArray(result.errors) && result.errors.length > 0
+              ? result.errors.map(e => (typeof e === 'object' && e ? e.message || JSON.stringify(e) : String(e))).join('; ')
+              : (result.error || 'Purge unsuccessful')
+            console.error(`[Cache] Failed to purge catalogue tags (${tagList.join(', ')}): ${errorDetails}`)
+          }
+          return result
+        })
+        .catch((err) => {
+          console.error(`[Cache] Failed to purge catalogue tags (${tagList.join(', ')}):`, err?.message || err)
+        })
+      if (ctx?.executionCtx?.waitUntil) {
+        ctx.executionCtx.waitUntil(purgePromise)
+      } else if (ctx?.waitUntil) {
+        ctx.waitUntil(purgePromise)
+      }
+    } catch (err) {
+      console.error(`[Cache] Failed to initiate catalogue cache purge (${tagList.join(', ')}):`, err?.message || err)
+    }
+  }
+}
 
 // ==========================================
 // Public API Routes
@@ -78,25 +158,135 @@ app.get('/api/health', (c) => {
 // ------------------------------------------
 // Geolocation & Currency Auto-Detection
 // ------------------------------------------
-app.get('/api/geo', (c) => {
-  const country = c.req.header('cf-ipcountry') || c.req.raw?.cf?.country || null
-  const countryCurrencyMap = {
-    NG: 'NGN',
-    GH: 'GHS',
-    KE: 'KES',
-    ZA: 'ZAR',
-    TZ: 'TZS',
-    UG: 'UGX',
-    RW: 'RWF',
-    ZM: 'ZMW',
-    CM: 'XAF', CF: 'XAF', TD: 'XAF', CG: 'XAF', GQ: 'XAF', GA: 'XAF',
-    BJ: 'XOF', BF: 'XOF', CI: 'XOF', GW: 'XOF', ML: 'XOF', NE: 'XOF', SN: 'XOF', TG: 'XOF',
-    GB: 'GBP'
+// ------------------------------------------
+// Authoritative Country & Currency Resolution Engine
+// ------------------------------------------
+const COUNTRY_TO_CURRENCY = {
+  NG: 'NGN',
+  GH: 'GHS',
+  KE: 'KES',
+  ZA: 'ZAR',
+  TZ: 'TZS',
+  UG: 'UGX',
+  RW: 'RWF',
+  ZM: 'ZMW',
+  CM: 'XAF', CF: 'XAF', TD: 'XAF', CG: 'XAF', GQ: 'XAF', GA: 'XAF',
+  BJ: 'XOF', BF: 'XOF', CI: 'XOF', GW: 'XOF', ML: 'XOF', NE: 'XOF', SN: 'XOF', TG: 'XOF',
+  GB: 'GBP',
+  US: 'USD',
+  CA: 'USD',
+  AU: 'USD'
+}
+
+// Edge proxy datacenter countries (Vercel, AWS Frankfurt/Dublin/Ashburn)
+const PROXY_SERVER_COUNTRIES = new Set(['DE', 'IE', 'FI', 'SE', 'NL'])
+
+// Fast in-memory cache for IP geo lookups (30 min TTL)
+const clientIpGeoCache = new Map()
+const IP_GEO_CACHE_TTL = 30 * 60 * 1000
+
+async function resolveCountryAndCurrency(c) {
+  // 1. Explicit override from query or header (e.g. testing or user manual toggle)
+  const queryOverride = (c.req.query('country') || c.req.header('x-client-country') || '').toUpperCase().trim()
+  if (queryOverride && COUNTRY_TO_CURRENCY[queryOverride]) {
+    return { country: queryOverride, currency: COUNTRY_TO_CURRENCY[queryOverride], source: 'explicit_override' }
   }
-  const detectedCurrency = country ? (countryCurrencyMap[country.toUpperCase()] || 'USD') : 'NGN'
+
+  // 2. Vercel native edge country header (authoritative when request enters Vercel Edge first)
+  const vercelCountry = (c.req.header('x-vercel-ip-country') || '').toUpperCase().trim()
+  if (vercelCountry && vercelCountry !== 'XX') {
+    const currency = COUNTRY_TO_CURRENCY[vercelCountry] || 'USD'
+    return { country: vercelCountry, currency, source: 'vercel_edge' }
+  }
+
+  // 3. Client device hints (Timezone and Locale)
+  const clientTz = (c.req.query('tz') || c.req.header('x-client-timezone') || '').trim()
+  const clientLang = (c.req.query('lang') || c.req.header('x-client-locale') || '').toLowerCase().trim()
+
+  const isNigeriaTz = clientTz.includes('Lagos') || clientTz.includes('Nigeria') || clientTz.includes('Kano') || clientTz.includes('Ibadan')
+  const isNigeriaLocale = /-ng\b/i.test(clientLang) || /^(yo|ig|ha|pcm)\b/i.test(clientLang)
+
+  if (isNigeriaTz || isNigeriaLocale) {
+    return { country: 'NG', currency: 'NGN', source: 'client_signals_nigeria' }
+  }
+
+  // Client timezone mappings for other supported African / international countries
+  if (clientTz.includes('Accra') || /-gh\b/i.test(clientLang)) return { country: 'GH', currency: 'GHS', source: 'client_signals' }
+  if (clientTz.includes('Nairobi') || /-ke\b/i.test(clientLang)) return { country: 'KE', currency: 'KES', source: 'client_signals' }
+  if (clientTz.includes('Johannesburg') || /-za\b/i.test(clientLang)) return { country: 'ZA', currency: 'ZAR', source: 'client_signals' }
+  if (clientTz.includes('London') || /-gb\b/i.test(clientLang)) return { country: 'GB', currency: 'GBP', source: 'client_signals' }
+  if (clientTz.includes('Kampala') || /-ug\b/i.test(clientLang)) return { country: 'UG', currency: 'UGX', source: 'client_signals' }
+  if (clientTz.includes('Dar_es_Salaam') || /-tz\b/i.test(clientLang)) return { country: 'TZ', currency: 'TZS', source: 'client_signals' }
+  if (clientTz.includes('Kigali') || /-rw\b/i.test(clientLang)) return { country: 'RW', currency: 'RWF', source: 'client_signals' }
+  if (clientTz.includes('Lusaka') || /-zm\b/i.test(clientLang)) return { country: 'ZM', currency: 'ZMW', source: 'client_signals' }
+  if (clientTz.includes('America') || clientTz.includes('New_York') || clientTz.includes('Chicago') || clientTz.includes('Los_Angeles') || /-us\b/i.test(clientLang)) {
+    return { country: 'US', currency: 'USD', source: 'client_signals' }
+  }
+
+  // 4. Client IP extraction (handles Vercel / Cloudflare / reverse proxy chains)
+  const xForwardedFor = c.req.header('x-vercel-forwarded-for') || c.req.header('x-forwarded-for') || ''
+  const clientIp = xForwardedFor.split(',')[0].trim() || c.req.header('x-real-ip') || c.req.header('cf-connecting-ip') || ''
+  const cfCountry = (c.req.header('cf-ipcountry') || c.req.raw?.cf?.country || '').toUpperCase().trim()
+  const isProxied = Boolean(xForwardedFor && xForwardedFor !== c.req.header('cf-connecting-ip'))
+
+  if (clientIp && !clientIp.startsWith('127.') && !clientIp.startsWith('10.') && !clientIp.startsWith('192.168.')) {
+    const cached = clientIpGeoCache.get(clientIp)
+    if (cached && (Date.now() - cached.timestamp < IP_GEO_CACHE_TTL)) {
+      return { country: cached.country, currency: cached.currency, source: 'ip_cache' }
+    }
+
+    // Heuristic: Major Nigerian mobile & broadband IP prefixes (MTN, Airtel, Glo, Spectranet, ipNX)
+    const isNigeriaIpRange = /^102\.(8[89]|9[01])\./.test(clientIp) ||
+                             /^105\.(11[2-9])\./.test(clientIp) ||
+                             /^197\.(21[0-5]|149|242)\./.test(clientIp) ||
+                             /^41\.(20[3-6]|220)\./.test(clientIp)
+
+    if (isNigeriaIpRange) {
+      clientIpGeoCache.set(clientIp, { country: 'NG', currency: 'NGN', timestamp: Date.now() })
+      return { country: 'NG', currency: 'NGN', source: 'ip_heuristic_nigeria' }
+    }
+
+    // If proxied (e.g. through Vercel in DE/US) or cfCountry is a datacenter, query authoritative IP service
+    if (isProxied || PROXY_SERVER_COUNTRIES.has(cfCountry)) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 1200)
+        const ipRes = await fetch(`https://api.country.is/${clientIp}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' }
+        })
+        clearTimeout(timeoutId)
+        if (ipRes.ok) {
+          const ipData = await ipRes.json()
+          const resolvedCountry = (ipData?.country || '').toUpperCase().trim()
+          if (resolvedCountry && resolvedCountry.length === 2) {
+            const currency = COUNTRY_TO_CURRENCY[resolvedCountry] || (resolvedCountry === 'NG' ? 'NGN' : 'USD')
+            clientIpGeoCache.set(clientIp, { country: resolvedCountry, currency, timestamp: Date.now() })
+            return { country: resolvedCountry, currency, source: 'ip_lookup_service' }
+          }
+        }
+      } catch (err) {
+        // Fall through
+      }
+    }
+  }
+
+  // 5. Cloudflare direct country (if not a European datacenter proxy)
+  if (cfCountry && cfCountry !== 'XX' && !PROXY_SERVER_COUNTRIES.has(cfCountry)) {
+    const currency = COUNTRY_TO_CURRENCY[cfCountry] || 'USD'
+    return { country: cfCountry, currency, source: 'cloudflare_cf_country' }
+  }
+
+  // 6. Authoritative default for silachomka (Nigeria)
+  return { country: 'NG', currency: 'NGN', source: 'authoritative_default_nigeria' }
+}
+
+app.get('/api/geo', async (c) => {
+  const geo = await resolveCountryAndCurrency(c)
   return c.json({
-    country,
-    currency: detectedCurrency
+    country: geo.country,
+    currency: geo.currency,
+    source: geo.source
   })
 })
 
@@ -166,6 +356,23 @@ function serveBinaryResponse(c, bytes, contentType) {
   })
 }
 
+function serveMediaAssetResponse(c, bytes, contentType, assetId) {
+  const total = bytes.length
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType || 'application/octet-stream',
+      'Content-Length': String(total),
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=300',
+      'Cloudflare-CDN-Cache-Control': 'public, max-age=2592000',
+      'Cache-Tag': `media,media:${assetId}`,
+      'Access-Control-Allow-Origin': '*',
+      'Cross-Origin-Resource-Policy': 'cross-origin'
+    }
+  })
+}
+
 app.get('/api/media/asset/:id', async (c) => {
   const sql = c.get('sql')
   const id = c.req.param('id')
@@ -180,7 +387,7 @@ app.get('/api/media/asset/:id', async (c) => {
 
   if (asset.file_hex) {
     const bytes = decodeHexToBytes(asset.file_hex)
-    return serveBinaryResponse(c, bytes, asset.mime_type || 'image/jpeg')
+    return serveMediaAssetResponse(c, bytes, asset.mime_type || 'image/jpeg', asset.id)
   }
 
   // Fallback: If bound to R2 bucket, stream from R2
@@ -189,10 +396,11 @@ app.get('/api/media/asset/:id', async (c) => {
       const object = await c.env.MEDIA_BUCKET.get(asset.r2_key)
       if (object) {
         const buf = await object.arrayBuffer()
-        return serveBinaryResponse(
+        return serveMediaAssetResponse(
           c,
           new Uint8Array(buf),
-          object.httpMetadata?.contentType || asset.mime_type || 'application/octet-stream'
+          object.httpMetadata?.contentType || asset.mime_type || 'application/octet-stream',
+          asset.id
         )
       }
     } catch (e) {
@@ -450,6 +658,7 @@ app.get('/api/releases', async (c) => {
       AND (r.status = 'PUBLISHED' OR r.status = 'SCHEDULED')
     ORDER BY r.release_date DESC
   `
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['releases'])
   return c.json(releases.map(enrichReleasePreviews))
 })
 
@@ -559,6 +768,7 @@ app.get('/api/releases/:slug', async (c) => {
   `
   
   if (releases.length === 0) return c.json({ error: 'Not found' }, 404)
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['releases', `release:${slug}`])
   return c.json(enrichReleasePreviews(releases[0]))
 })
 
@@ -584,6 +794,7 @@ app.get('/api/tracks/:id', async (c) => {
     WHERE t.id = ${id} AND t.deleted_at IS NULL
   `
   if (tracks.length === 0) return c.json({ error: 'Not found' }, 404)
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['releases', `track:${id}`])
   return c.json(tracks[0])
 })
 
@@ -596,14 +807,8 @@ const SELAR_CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes cache
 app.get('/api/beats/pricing', async (c) => {
   let reqCurrency = (c.req.query('currency') || 'NGN').toUpperCase().trim()
   if (reqCurrency === 'AUTO') {
-    const country = c.req.header('cf-ipcountry') || c.req.raw?.cf?.country || null
-    const countryCurrencyMap = {
-      NG: 'NGN', GH: 'GHS', KE: 'KES', ZA: 'ZAR', TZ: 'TZS', UG: 'UGX', RW: 'RWF', ZM: 'ZMW',
-      CM: 'XAF', CF: 'XAF', TD: 'XAF', CG: 'XAF', GQ: 'XAF', GA: 'XAF',
-      BJ: 'XOF', BF: 'XOF', CI: 'XOF', GW: 'XOF', ML: 'XOF', NE: 'XOF', SN: 'XOF', TG: 'XOF',
-      GB: 'GBP'
-    }
-    reqCurrency = country ? (countryCurrencyMap[country.toUpperCase()] || 'USD') : 'NGN'
+    const geo = await resolveCountryAndCurrency(c)
+    reqCurrency = geo.currency || 'NGN'
   }
   const cacheKey = reqCurrency
   const now = Date.now()
@@ -742,6 +947,7 @@ app.get('/api/beats', async (c) => {
       AND (b.status = 'PUBLISHED' OR (b.status = 'SCHEDULED' AND b.scheduled_at <= NOW()))
     ORDER BY b.created_at DESC
   `
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['beats'])
   return c.json(beats)
 })
 
@@ -779,6 +985,7 @@ app.get('/api/beats/:slug', async (c) => {
       AND (b.status = 'PUBLISHED' OR (b.status = 'SCHEDULED' AND b.scheduled_at <= NOW()))
   `
   if (beats.length === 0) return c.json({ error: 'Not found' }, 404)
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['beats', `beat:${slug}`])
   return c.json(beats[0])
 })
 
@@ -802,6 +1009,7 @@ app.get('/api/music-videos', async (c) => {
       AND (v.status = 'PUBLISHED' OR (v.status = 'SCHEDULED' AND v.scheduled_at <= NOW()))
     ORDER BY v.created_at DESC
   `
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['music-videos'])
   return c.json(videos)
 })
 
@@ -822,6 +1030,7 @@ app.get('/api/music-videos/:slug', async (c) => {
       AND (v.status = 'PUBLISHED' OR (v.status = 'SCHEDULED' AND v.scheduled_at <= NOW()))
   `
   if (videos.length === 0) return c.json({ error: 'Not found' }, 404)
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['music-videos', `music-video:${slug}`])
   return c.json(videos[0])
 })
 
@@ -836,6 +1045,7 @@ app.get('/api/social-links', async (c) => {
     WHERE is_active = true AND deleted_at IS NULL
     ORDER BY sort_order ASC
   `
+  setPublicCacheHeaders(c, CACHE_POLICIES.STATIC_PUBLIC, ['social-links'])
   return c.json({
     artist: links.filter(l => l.link_type === 'ARTIST'),
     ecosystem: links.filter(l => l.link_type === 'ECOSYSTEM'),
@@ -884,6 +1094,7 @@ app.get('/api/gallery/categories', async (c) => {
     }
   }
   const deduped = Array.from(labelMap.values()).sort((a, b) => a.label.localeCompare(b.label))
+  setPublicCacheHeaders(c, CACHE_POLICIES.STATIC_PUBLIC, ['gallery', 'gallery-categories'])
   return c.json(deduped)
 })
 
@@ -935,6 +1146,7 @@ app.get('/api/gallery', async (c) => {
       AND (g.status = 'PUBLISHED' OR (g.status = 'SCHEDULED' AND g.scheduled_at <= NOW()))
     ORDER BY g.post_date DESC, g.created_at DESC
   `
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['gallery'])
   return c.json(posts)
 })
 
@@ -988,6 +1200,7 @@ app.get('/api/gallery/:slug', async (c) => {
       AND (g.status = 'PUBLISHED' OR (g.status = 'SCHEDULED' AND g.scheduled_at <= NOW()))
   `
   if (posts.length === 0) return c.json({ error: 'Not found' }, 404)
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['gallery', `gallery:${slug}`])
   return c.json(posts[0])
 })
 
@@ -1049,6 +1262,7 @@ app.get('/api/events', async (c) => {
       CASE WHEN e.event_date >= CURRENT_DATE THEN e.event_date END ASC,
       CASE WHEN e.event_date < CURRENT_DATE THEN e.event_date END DESC
   `
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['events'])
   return c.json(rows)
 })
 
@@ -1104,6 +1318,7 @@ app.get('/api/events/:slug', async (c) => {
     LEFT JOIN media_assets m ON e.primary_artwork_id = m.id
     WHERE (e.slug = ${slug} OR e.id::text = ${slug}) 
       AND e.deleted_at IS NULL
+      AND e.is_published = true
     LIMIT 1
   `
   if (rows.length === 0) return c.json({ error: 'Event not found' }, 404)
@@ -1174,6 +1389,7 @@ app.get('/api/events/:slug', async (c) => {
     }
   }
 
+  setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['events', `event:${slug}`])
   return c.json({
     ...event,
     taggedGallery,
@@ -1255,6 +1471,7 @@ app.get('/api/services', async (c) => {
     WHERE is_active = true
     ORDER BY sort_order ASC, created_at ASC
   `
+  setPublicCacheHeaders(c, CACHE_POLICIES.STATIC_PUBLIC, ['services'])
   return c.json(rows)
 })
 
@@ -1268,6 +1485,7 @@ app.get('/api/services/availability', async (c) => {
     WHERE is_closed = false
     ORDER BY date_str ASC
   `
+  setPublicCacheHeaders(c, CACHE_POLICIES.AVAILABILITY, ['services', 'services-availability'])
   return c.json(rows)
 })
 
@@ -1282,6 +1500,7 @@ app.get('/api/services/:slug', async (c) => {
     WHERE slug = ${slug} AND is_active = true
   `
   if (rows.length === 0) return c.json({ error: 'Service not found' }, 404)
+  setPublicCacheHeaders(c, CACHE_POLICIES.STATIC_PUBLIC, ['services', `service:${slug}`])
   return c.json(rows[0])
 })
 
@@ -1990,6 +2209,7 @@ app.get('/api/share/:type/:slug', async (c) => {
         type: 'music.song',
         audio: b.audio ? resolvePublicMediaUrl(b.audio, workerOrigin, siteOrigin) : null
       })
+      setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['share', 'beats', `beat:${b.slug}`])
       return c.html(html)
     }
   }
@@ -2045,6 +2265,7 @@ app.get('/api/share/:type/:slug', async (c) => {
         type: 'music.album',
         audio: previewAudio ? resolvePublicMediaUrl(previewAudio, workerOrigin, siteOrigin) : null
       })
+      setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['share', 'releases', `release:${r.slug}`])
       return c.html(html)
     }
   }
@@ -2072,13 +2293,14 @@ app.get('/api/share/:type/:slug', async (c) => {
         image: resolvePublicMediaUrl(imagePath, workerOrigin, siteOrigin),
         type: 'article'
       })
+      setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['share', 'gallery', `gallery:${g.slug}`])
       return c.html(html)
     }
   }
 
   if (shareType === 'services' || shareType === 'service') {
     const rows = await sql`
-      SELECT title, tagline, description, category, base_price_ngn
+      SELECT slug, title, tagline, description, category, base_price_ngn
       FROM music_services
       WHERE slug = ${cleanSlug} AND is_active = true
     `
@@ -2092,17 +2314,18 @@ app.get('/api/share/:type/:slug', async (c) => {
         image: `${siteOrigin}/beats-image.png`,
         type: 'website'
       })
+      setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['share', 'services', `service:${s.slug || cleanSlug}`])
       return c.html(html)
     }
   }
 
   if (shareType === 'events' || shareType === 'event') {
     const rows = await sql`
-      SELECT e.id, e.title, e.subtitle, e.event_date::text as event_date, e.venue_name, e.city, e.country,
+      SELECT e.id, e.title, e.slug, e.subtitle, e.event_date::text as event_date, e.venue_name, e.city, e.country,
              e.description, COALESCE(e.primary_artwork_url, CASE WHEN m.id IS NOT NULL THEN '/api/media/asset/' || m.id ELSE '' END) as image
       FROM events e
       LEFT JOIN media_assets m ON e.primary_artwork_id = m.id
-      WHERE (e.slug = ${cleanSlug} OR e.id::text = ${cleanSlug}) AND e.deleted_at IS NULL
+      WHERE (e.slug = ${cleanSlug} OR e.id::text = ${cleanSlug}) AND e.deleted_at IS NULL AND e.is_published = true
       LIMIT 1
     `
     if (rows.length > 0) {
@@ -2118,11 +2341,13 @@ app.get('/api/share/:type/:slug', async (c) => {
         image: resolvePublicMediaUrl(imagePath, workerOrigin, siteOrigin),
         type: 'website'
       })
+      setPublicCacheHeaders(c, CACHE_POLICIES.CATALOGUE, ['share', 'events', `event:${e.slug || cleanSlug}`])
       return c.html(html)
     }
   }
 
-  // Fallback default share HTML
+  // Fallback default share HTML for missing records or unrecognised share types.
+  // Remains private and uncached per pre-deployment audit requirements.
   return c.html(buildShareHtml({
     title: 'silachomka — Artist, Producer & Sound Architect',
     description: 'Official artist platform, discography, beat store, and visual archive of silachomka.',
@@ -2225,6 +2450,37 @@ app.get('/api/admin/me', adminAuth, (c) => {
 
 import { adminApp, queueSubscriberNotifications } from './admin/crud.js'
 
+// Cache Invalidation Middleware for Admin Mutations
+app.use('/api/admin/*', async (c, next) => {
+  await next()
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(c.req.method) && c.res.status >= 200 && c.res.status < 300) {
+    const path = c.req.path || ''
+    const tags = []
+    if (path.includes('/releases') || path.includes('/tracks') || path.includes('/track-credits')) {
+      tags.push('releases')
+    } else if (path.includes('/beats')) {
+      tags.push('beats')
+    } else if (path.includes('/music-videos') || path.includes('/music-video-features')) {
+      tags.push('music-videos')
+    } else if (path.includes('/gallery-categories') || path.includes('/gallery-posts') || path.includes('/gallery-slides') || path.includes('/gallery')) {
+      tags.push('gallery', 'gallery-categories')
+    } else if (path.includes('/social-links')) {
+      tags.push('social-links')
+    } else if (path.includes('/events')) {
+      tags.push('events')
+    } else if (path.includes('/services/availability')) {
+      tags.push('services', 'services-availability')
+    } else if (path.includes('/services')) {
+      tags.push('services')
+    } else if (path.includes('/recycle-bin')) {
+      tags.push('catalogue', 'releases', 'beats', 'music-videos', 'gallery', 'events', 'services', 'social-links')
+    }
+    if (tags.length > 0) {
+      purgeCatalogueCache(c, tags)
+    }
+  }
+})
+
 // Mount the admin router under /api/admin
 // The adminApp router internally protects all its routes with adminAuth
 app.route('/api/admin', adminApp)
@@ -2233,7 +2489,7 @@ app.route('/api/admin', adminApp)
 // Scheduled Cron Handler (Publishing & 60-day Retention Purge)
 // ==========================================
 
-async function handleScheduledPublishing(env) {
+export async function handleScheduledPublishing(env, ctx) {
   if (!env.DATABASE_URL) return
   const sql = neon(env.DATABASE_URL)
 
@@ -2272,16 +2528,35 @@ async function handleScheduledPublishing(env) {
 
     // 5. Automated 60-day Recycle Bin purge
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
-    await Promise.all([
+    const results = await Promise.all([
       sql`DELETE FROM releases WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
       sql`DELETE FROM tracks WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
       sql`DELETE FROM beats WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
       sql`DELETE FROM music_videos WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
       sql`DELETE FROM gallery_posts WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
-      sql`DELETE FROM media_assets WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
+      sql`DELETE FROM media_assets WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo} RETURNING id`,
       sql`DELETE FROM social_links WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
       sql`DELETE FROM merchandise WHERE deleted_at IS NOT NULL AND deleted_at < ${sixtyDaysAgo}`,
     ])
+    const purgedMedia = results[5]
+    if (purgedMedia && purgedMedia.length > 0 && ctx?.cache?.purge) {
+      try {
+        const purgeRes = await ctx.cache.purge({ tags: ['media'] })
+        if (purgeRes && purgeRes.success !== true) {
+          const errorDetails = Array.isArray(purgeRes.errors) && purgeRes.errors.length > 0
+            ? purgeRes.errors.map(e => (typeof e === 'object' && e ? e.message || JSON.stringify(e) : String(e))).join('; ')
+            : (purgeRes.error || 'Purge unsuccessful')
+          console.error(`[Cache] Scheduled purge error for media tag: ${errorDetails}`)
+        }
+      } catch (purgeErr) {
+        console.error('[Cache] Scheduled purge error for media tag:', purgeErr?.message || purgeErr)
+      }
+    }
+
+    // 6. Automated purge of catalogue tags on scheduled publication / recycle bin purge
+    if (ctx) {
+      purgeCatalogueCache(ctx, ['catalogue', 'releases', 'beats', 'music-videos', 'gallery', 'social-links'])
+    }
   } catch (err) {
     console.error('Scheduled cron execution error:', err.message)
   }
@@ -2291,9 +2566,9 @@ export default {
   fetch: app.fetch,
   async scheduled(event, env, ctx) {
     if (ctx && ctx.waitUntil) {
-      ctx.waitUntil(handleScheduledPublishing(env))
+      ctx.waitUntil(handleScheduledPublishing(env, ctx))
     } else {
-      await handleScheduledPublishing(env)
+      await handleScheduledPublishing(env, ctx)
     }
   }
 }

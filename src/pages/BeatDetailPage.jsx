@@ -26,7 +26,6 @@ import { useCurrency } from "../data/CurrencyContext";
 import BeatArtwork from "../components/BeatArtwork";
 import SeoHead from "../components/SeoHead";
 import ShareLinkBox from "../components/ShareLinkBox";
-import HeavenlySkyBackground from "../components/HeavenlySkyBackground";
 import { getCalendarReturnUrl } from "../utils/calendarNavigation";
 import {
   absoluteUrl,
@@ -478,7 +477,6 @@ export default function BeatDetailPage() {
     basic: {
       name: "Basic MP3 License",
       short: "Basic",
-      gameBadge: "✦ COMMON SCROLL ✦",
       price: basicPriceFormatted,
       priceStatus: (
         <>
@@ -497,7 +495,6 @@ export default function BeatDetailPage() {
     premium: {
       name: "Premium WAV License",
       short: "Premium",
-      gameBadge: "⚡ EPIC TIER ⚡",
       price: premiumPriceFormatted,
       priceStatus: (
         <>
@@ -516,7 +513,6 @@ export default function BeatDetailPage() {
     ultimate: {
       name: "Trackout Stems License",
       short: "Ultimate",
-      gameBadge: "👑 LEGENDARY TIER 👑",
       price: ultimatePriceFormatted,
       priceStatus: (
         <>
@@ -536,7 +532,6 @@ export default function BeatDetailPage() {
     exclusive: {
       name: "Exclusive 100% Buyout",
       short: "Exclusive",
-      gameBadge: "🌟 MYTHIC / GOD TIER 🌟",
       price: "Private Studio Negotiation",
       priceStatus: (
         <>
@@ -676,9 +671,6 @@ export default function BeatDetailPage() {
 
   return (
     <main className="beat-detail-view">
-      {/* Heavenly Celestial Environment with Drifting Clouds, God Rays & Floating Stardust */}
-      <HeavenlySkyBackground />
-
       <SeoHead
         title={`${beat.title} — Beat by ${getBeatProducer(beat)} | silachomka`}
         description={shareDescription}
@@ -955,7 +947,6 @@ export default function BeatDetailPage() {
               gap: "8px",
             }}
           >
-            <span>🎮</span>
             <span>Choose Your License Level</span>
           </p>
 
@@ -1060,11 +1051,6 @@ export default function BeatDetailPage() {
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
                 <h3 className="license-type-name" style={{ margin: 0 }}>{activeLicenseData.name}</h3>
-                {activeLicenseData.gameBadge && (
-                  <span className="game-rarity-badge" style={{ color: "var(--gold)" }}>
-                    {activeLicenseData.gameBadge}
-                  </span>
-                )}
               </div>
 
               <div className="license-price-row">

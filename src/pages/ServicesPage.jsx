@@ -2,19 +2,12 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import SeoHead from "../components/SeoHead";
 import StudioAmbientBackground from "../components/StudioAmbientBackground";
-import HeavenlySkyBackground from "../components/HeavenlySkyBackground";
 import SharePageButton from "../components/SharePageButton";
 import ImmersiveServicesView from "../components/ImmersiveServicesView";
 import { canonicalUrl } from "../data/siteConfig";
 import { uploadWithProgress, formatBytes } from "../utils/uploadWithProgress";
 import { formatLongDate } from "../utils/dateFormatter";
-import {
-  playEquipSound,
-  playUnequipSound,
-  playLevelUpSound,
-  isSoundEnabled,
-  toggleSoundEnabled,
-} from "../utils/heavenlySound";
+// Heavenly sound effects removed per minimal serene design requirement
 import {
   LoadingSpinner,
   RightArrowIcon,
@@ -30,9 +23,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I need a custom beat",
     title: "Beat Production",
     category: "PRODUCTION",
-    rarity: "MYTHIC",
-    gameBadge: "👑 MYTHIC BEAT",
-    stats: "+100 VIBES • +90 BASS",
     basePriceNgn: 80000,
     isHourly: false,
     turnaroundDays: 5,
@@ -44,9 +34,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I already have a beat and need it mixed",
     title: "Beat Mixing",
     category: "MIXING",
-    rarity: "EPIC",
-    gameBadge: "⚡ EPIC MIX",
-    stats: "+95 PUNCH • +100 CLARITY",
     basePriceNgn: 25000,
     isHourly: false,
     turnaroundDays: 3,
@@ -58,9 +45,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I need to record vocals in the studio",
     title: "Voice Recording",
     category: "RECORDING",
-    rarity: "RARE",
-    gameBadge: "🎙️ STUDIO PASS",
-    stats: "+100 VOCAL PRO • LIVE BOOTH",
     basePriceNgn: 25000,
     isHourly: true,
     hourlyRateNgn: 25000,
@@ -73,9 +57,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I need my recorded vocals mixed into a track",
     title: "Vocal Mixing",
     category: "MIXING",
-    rarity: "EPIC",
-    gameBadge: "✨ MAGIC VOCALS",
-    stats: "+99 AUTO-TUNE • SMOOTH BLEND",
     basePriceNgn: 35000,
     isHourly: false,
     turnaroundDays: 4,
@@ -87,9 +68,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I need industry-standard mastering",
     title: "Full Song Mastering",
     category: "MASTERING",
-    rarity: "LEGENDARY",
-    gameBadge: "💎 DIAMOND MASTER",
-    stats: "+MAX STREAMING LOUDNESS",
     basePriceNgn: 35000,
     isHourly: false,
     turnaroundDays: 2,
@@ -101,9 +79,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I want a complete song produced from scratch",
     title: "Full Song Production",
     category: "PRODUCTION",
-    rarity: "GOD TIER",
-    gameBadge: "🌟 GOD TIER SONG",
-    stats: "+ALL-IN-ONE HIT • FULL RIGHTS",
     basePriceNgn: 110000,
     isHourly: false,
     turnaroundDays: 10,
@@ -115,9 +90,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I want to collaborate with an instrumentalist / producer",
     title: "Instrumentalist / Producer Collaboration",
     category: "COLLABORATION",
-    rarity: "RARE",
-    gameBadge: "🎸 HERO GUEST",
-    stats: "+LIVE GUITARS • KEYS & VIBES",
     basePriceNgn: 20000,
     isHourly: false,
     turnaroundDays: 5,
@@ -129,9 +101,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I want to record vocals & mix on a beat I already own",
     title: "Recording + Mixing on Client's Beat",
     category: "PRODUCTION",
-    rarity: "EPIC",
-    gameBadge: "🔥 COMBO PACK",
-    stats: "+STUDIO BOOTH • FULL MIX",
     basePriceNgn: null, // Strictly Price Upon Request
     isHourly: false,
     turnaroundDays: 5,
@@ -143,9 +112,6 @@ const CONVERSATIONAL_SERVICES = [
     prompt: "I want to feature silachomka as an artist",
     title: "Feature",
     category: "COLLABORATION",
-    rarity: "MYTHIC",
-    gameBadge: "👑 SUMMON ARTIST",
-    stats: "+OFFICIAL VERSE / HOOK",
     basePriceNgn: 50000,
     isHourly: false,
     turnaroundDays: 7,
@@ -608,52 +574,9 @@ export default function ServicesPage() {
   const [hasCopiedRef, setHasCopiedRef] = useState(false);
   const [isInitializingPayment, setIsInitializingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
-  const [isImmersive, setIsImmersive] = useState(true);
-
-  // Game sound and XP particle states
-  const [soundOn, setSoundOn] = useState(isSoundEnabled());
-  const [equippedXpSlug, setEquippedXpSlug] = useState(null);
-
-  const handleToggleSound = () => {
-    const nextSound = toggleSoundEnabled();
-    setSoundOn(nextSound);
-  };
-
-  const handleCardEquipToggle = (slug) => {
-    if (selectedSlugs.includes(slug)) {
-      playUnequipSound();
-    } else {
-      playEquipSound();
-      setEquippedXpSlug(slug);
-      setTimeout(() => setEquippedXpSlug(null), 1200);
-    }
-    toggleService(slug);
-  };
-
-  const handleApplyPresetLoadout = (type) => {
-    playLevelUpSound();
-    if (type === "hitmaker") {
-      const combo = ["beat-production", "voice-recording", "vocal-mixing", "full-song-mastering"];
-      combo.forEach((s) => {
-        if (!selectedSlugs.includes(s)) toggleService(s);
-      });
-    } else if (type === "vocals") {
-      const combo = ["voice-recording", "vocal-mixing"];
-      combo.forEach((s) => {
-        if (!selectedSlugs.includes(s)) toggleService(s);
-      });
-    } else if (type === "beat") {
-      const combo = ["beat-production", "beat-mixing"];
-      combo.forEach((s) => {
-        if (!selectedSlugs.includes(s)) toggleService(s);
-      });
-    } else if (type === "clear") {
-      [...selectedSlugs].forEach((s) => toggleService(s));
-    }
-  };
+  const [isImmersive, setIsImmersive] = useState(false);
 
   const handleNextStep = (nextStep) => {
-    playLevelUpSound();
     setStep(nextStep);
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
   };
@@ -681,8 +604,33 @@ export default function ServicesPage() {
       if (savedDraft) {
         const parsed = JSON.parse(savedDraft);
         if (parsed && Array.isArray(parsed.selectedSlugs) && parsed.selectedSlugs.length > 0) {
-          setDraftToRestore(parsed);
-          setHasPendingDraft(true);
+          if (parsed.autoApply) {
+            // Seamless handoff from AI Concierge modal
+            setSelectedSlugs(parsed.selectedSlugs || []);
+            setConfigurations(parsed.configurations || {});
+            setCustomerName(parsed.customerName || "");
+            setCustomerEmail(parsed.customerEmail || "");
+            setCustomerPhone(parsed.customerPhone || "");
+            setCustomerMessage(parsed.customerMessage || "");
+            setClientFiles(parsed.clientFiles || []);
+            let targetStep = parsed.step;
+            if (targetStep === 2 || targetStep === "2" || targetStep === "confirm") {
+              targetStep = "confirm";
+            } else if (targetStep === 3 || targetStep === "3" || targetStep === "details") {
+              targetStep = "details";
+            } else if (!targetStep || targetStep === "intent") {
+              targetStep = "confirm";
+            }
+            setStep(targetStep);
+            setHasPendingDraft(false);
+            parsed.autoApply = false;
+            try {
+              localStorage.setItem("chomka_services_booking_draft_v1", JSON.stringify(parsed));
+            } catch (e) {}
+          } else {
+            setDraftToRestore(parsed);
+            setHasPendingDraft(true);
+          }
         }
       }
     } catch (e) {
@@ -725,9 +673,15 @@ export default function ServicesPage() {
     setCustomerPhone(draftToRestore.customerPhone || "");
     setCustomerMessage(draftToRestore.customerMessage || "");
     setClientFiles(draftToRestore.clientFiles || []);
-    if (draftToRestore.step && draftToRestore.step !== "success") {
-      setStep(draftToRestore.step);
+    let targetStep = draftToRestore.step;
+    if (targetStep === 2 || targetStep === "2" || targetStep === "confirm") {
+      targetStep = "confirm";
+    } else if (targetStep === 3 || targetStep === "3" || targetStep === "details") {
+      targetStep = "details";
+    } else if (!targetStep || targetStep === "intent") {
+      targetStep = "confirm";
     }
+    setStep(targetStep);
     setHasPendingDraft(false);
   };
 
@@ -1148,9 +1102,6 @@ export default function ServicesPage() {
         }}
       />
 
-      {/* Heavenly Celestial Sky with Drifting Clouds, God Rays & Floating Stardust */}
-      <HeavenlySkyBackground />
-
       {/* Atmospheric Starry Background (Reused smiley / beats-image.png via StudioAmbientBackground) */}
       <StudioAmbientBackground image="/beats-image.png" />
 
@@ -1164,9 +1115,9 @@ export default function ServicesPage() {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: "12px",
+              marginBottom: "16px",
               flexWrap: "wrap",
-              gap: "10px",
+              gap: "12px",
             }}
           >
             <p
@@ -1177,32 +1128,31 @@ export default function ServicesPage() {
                 margin: 0,
                 display: "flex",
                 alignItems: "center",
-                gap: "6px",
+                gap: "8px",
+                fontSize: "11px",
+                fontWeight: 800,
               }}
             >
-              <span>☁️</span>
-              <span>HEAVEN SOUND REALM • SOUND QUEST</span>
+              <span>✦</span>
+              <span>CHOMKAMUSIC™ STUDIOS</span>
             </p>
 
             <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => setIsImmersive((prev) => !prev)}
-                className="studio-pill-btn"
-                style={{
-                  background: isImmersive ? "rgba(223, 194, 125, 0.15)" : "none",
-                  border: "1px solid rgba(223, 194, 125, 0.35)",
-                  color: "var(--gold)",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                {isImmersive ? "✕ Grid View (Esc)" : "✦ Guided Quest Experience"}
-              </button>
+              {selectedSlugs.length > 0 && (
+                <span className="celestial-counter-pill">
+                  <span>✦</span>
+                  <span>
+                    {totalNgn === null
+                      ? "Custom Quote"
+                      : hasPriceUponRequest
+                      ? `₦${totalNgn.toLocaleString()} + Quote`
+                      : `₦${totalNgn.toLocaleString()}`}
+                  </span>
+                </span>
+              )}
 
               <SharePageButton
-                title="silachomka • Sound Quest Services"
+                title="silachomka • Studio Services"
                 label="Share"
               />
 
@@ -1227,49 +1177,6 @@ export default function ServicesPage() {
             </div>
           </div>
 
-          {/* Game HUD Bar (Heavenly RPG Heads-Up Display) */}
-          <div className="game-hud-bar">
-            <div className="game-hud-stat">
-              <span className="game-level-badge">⭐ LEVEL 99 HITMAKER</span>
-              <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 600 }}>
-                QUEST: CRAFT YOUR MASTERPIECE
-              </span>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
-              <div className="game-coins-counter">
-                <span>🪙</span>
-                <span>
-                  {selectedSlugs.length === 0
-                    ? "₦0"
-                    : totalNgn === null
-                    ? "Custom Quote"
-                    : hasPriceUponRequest
-                    ? `₦${totalNgn.toLocaleString()} + Quote`
-                    : `₦${totalNgn.toLocaleString()}`}
-                </span>
-              </div>
-
-              <div style={{ fontSize: "12px", color: "var(--muted)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span>🎒</span>
-                <span style={{ fontWeight: 700, color: "var(--gold)" }}>{selectedSlugs.length}</span>
-                <span>Equipped</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleToggleSound}
-                className="game-sound-toggle-btn"
-                title={soundOn ? "Mute game sound effects" : "Turn on game sound effects"}
-                aria-label={soundOn ? "Mute sound" : "Unmute sound"}
-              >
-                <span>{soundOn ? "🔊" : "🔇"}</span>
-                <span>Sound: {soundOn ? "ON" : "OFF"}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Dedicated Order Tracking Lookup Box (Req #6) */}
           {showTrackingLookup && (
             <div
               style={{
@@ -1395,364 +1302,74 @@ export default function ServicesPage() {
             </div>
           )}
 
-          {/* Concierge Step Breadcrumb */}
+          {/* Studio Booking Steps Bar */}
           {step !== "success" && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                fontSize: "11px",
-                fontWeight: 700,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-                color: "var(--muted)",
-                flexWrap: "wrap",
-              }}
-            >
-              <span
-                style={{
-                  color: step === "intent" ? "var(--gold)" : "var(--muted)",
-                  borderBottom: step === "intent" ? "1px solid var(--gold)" : "none",
-                  paddingBottom: "2px",
-                }}
+            <nav className="celestial-steps-nav" aria-label="Booking Steps">
+              <button
+                type="button"
+                onClick={() => setStep("intent")}
+                className={`celestial-step-node ${step === "intent" ? "is-active" : (selectedSlugs.length > 0 ? "is-done" : "")}`}
+                style={{ background: "none", border: "none", cursor: "pointer" }}
               >
-                1. Intent
-              </span>
-              <span style={{ color: "rgba(223, 194, 125, 0.3)" }}>→</span>
-              <span
-                style={{
-                  color: step === "confirm" ? "var(--gold)" : "var(--muted)",
-                  borderBottom: step === "confirm" ? "1px solid var(--gold)" : "none",
-                  paddingBottom: "2px",
-                }}
+                <span className="celestial-step-dot">{selectedSlugs.length > 0 && step !== "intent" ? "✓" : "1"}</span>
+                <span>Services</span>
+              </button>
+              <div className={`celestial-step-line ${["details", "client", "summary"].includes(step) ? "is-done" : ""}`} />
+              <button
+                type="button"
+                onClick={() => { if (selectedSlugs.length > 0) setStep("details"); }}
+                disabled={selectedSlugs.length === 0}
+                className={`celestial-step-node ${step === "details" ? "is-active" : (["client", "summary"].includes(step) ? "is-done" : "")}`}
+                style={{ background: "none", border: "none", cursor: selectedSlugs.length > 0 ? "pointer" : "not-allowed" }}
               >
-                2. Confirmation
-              </span>
-              <span style={{ color: "rgba(223, 194, 125, 0.3)" }}>→</span>
-              <span
-                style={{
-                  color: step === "details" ? "var(--gold)" : "var(--muted)",
-                  borderBottom: step === "details" ? "1px solid var(--gold)" : "none",
-                  paddingBottom: "2px",
-                }}
+                <span className="celestial-step-dot">{["client", "summary"].includes(step) ? "✓" : "2"}</span>
+                <span>Project Details</span>
+              </button>
+              <div className={`celestial-step-line ${["client", "summary"].includes(step) ? "is-done" : ""}`} />
+              <button
+                type="button"
+                onClick={() => { if (selectedSlugs.length > 0) setStep("client"); }}
+                disabled={selectedSlugs.length === 0}
+                className={`celestial-step-node ${step === "client" ? "is-active" : (step === "summary" ? "is-done" : "")}`}
+                style={{ background: "none", border: "none", cursor: selectedSlugs.length > 0 ? "pointer" : "not-allowed" }}
               >
-                3. Session Details
-              </span>
-              <span style={{ color: "rgba(223, 194, 125, 0.3)" }}>→</span>
-              <span
-                style={{
-                  color: step === "client" ? "var(--gold)" : "var(--muted)",
-                  borderBottom: step === "client" ? "1px solid var(--gold)" : "none",
-                  paddingBottom: "2px",
-                }}
+                <span className="celestial-step-dot">{step === "summary" ? "✓" : "3"}</span>
+                <span>Contact Info</span>
+              </button>
+              <div className={`celestial-step-line ${step === "summary" ? "is-done" : ""}`} />
+              <button
+                type="button"
+                onClick={() => { if (selectedSlugs.length > 0 && customerName && customerEmail) setStep("summary"); }}
+                disabled={selectedSlugs.length === 0 || !customerName || !customerEmail}
+                className={`celestial-step-node ${step === "summary" ? "is-active" : ""}`}
+                style={{ background: "none", border: "none", cursor: (selectedSlugs.length > 0 && customerName && customerEmail) ? "pointer" : "not-allowed" }}
               >
-                4. Brief & Contact
-              </span>
-              <span style={{ color: "rgba(223, 194, 125, 0.3)" }}>→</span>
-              <span
-                style={{
-                  color: step === "summary" ? "var(--gold)" : "var(--muted)",
-                  borderBottom: step === "summary" ? "1px solid var(--gold)" : "none",
-                  paddingBottom: "2px",
-                }}
-              >
-                5. Review
-              </span>
-            </div>
+                <span className="celestial-step-dot">4</span>
+                <span>Review Booking</span>
+              </button>
+            </nav>
           )}
         </div>
 
         {/* =========================================================
-            STAGE 37 — IMMERSIVE VS CLASSIC CONVERSATION VIEW
+            STAGE 1: SERVICES SELECTION (Dropdown Modal Experience)
             ========================================================= */}
-        {isImmersive && step !== "success" ? (
-          <ImmersiveServicesView
-            activeServiceList={activeServiceList}
-            selectedSlugs={selectedSlugs}
-            toggleService={toggleService}
-            configurations={configurations}
-            updateConfig={updateConfig}
-            studioAvailability={studioAvailability}
-            itemizedPrices={itemizedPrices}
-            totalNgn={totalNgn}
-            hasPriceUponRequest={hasPriceUponRequest}
-            customerName={customerName}
-            setCustomerName={setCustomerName}
-            customerEmail={customerEmail}
-            setCustomerEmail={setCustomerEmail}
-            customerPhone={customerPhone}
-            setCustomerPhone={setCustomerPhone}
-            customerMessage={customerMessage}
-            setCustomerMessage={setCustomerMessage}
-            clientFiles={clientFiles}
-            handleFileUpload={handleFileUpload}
-            removeFile={removeFile}
-            isUploadingFile={isUploadingFile}
-            uploadProgress={uploadProgress}
-            uploadError={uploadError}
-            handleFinalSubmit={handleFinalSubmit}
-            isSubmitting={isSubmitting}
-            submitError={submitError}
-            PublicStudioCalendar={PublicStudioCalendar}
-            onExit={() => setIsImmersive(false)}
-          />
-        ) : (
-          <>
-        {/* =========================================================
-            STAGE 1: INTENT — CONVERSATIONAL SELECTION (Req #1 & #2)
-            "What are we creating?" + Expandable / Dropdown Selector
-            ========================================================= */}
+        {/* Support for optional immersive mode (defaults to false per standard modal flow requirement) */}
+        {isImmersive && false && <ImmersiveServicesView />}
+
         {step === "intent" && (
-          <section
-            style={{
-              background: "rgba(10, 10, 16, 0.8)",
-              border: "1px solid rgba(223, 194, 125, 0.2)",
-              borderRadius: "12px",
-              padding: "clamp(24px, 4vw, 44px)",
-              backdropFilter: "blur(12px)",
-              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
-              animation: "fadeIn 0.25s ease-out",
-            }}
-          >
-            <div style={{ marginBottom: "24px" }}>
-              <div
-                className="eyebrow"
-                style={{
-                  color: "var(--gold)",
-                  letterSpacing: "0.18em",
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  marginBottom: "6px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <span>☁️</span>
-                <span>Hey. What are we creating?</span>
+          <section className="celestial-tablet">
+            <div style={{ marginBottom: "26px" }}>
+              <div className="celestial-whisper">
+                <span>✦</span>
+                <span>STEP 1 OF 4 • CHOOSE SERVICES</span>
               </div>
-              <h1
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "clamp(26px, 4vw, 40px)",
-                  fontWeight: 800,
-                  letterSpacing: "0.04em",
-                  color: "var(--text)",
-                  margin: "0 0 10px",
-                  lineHeight: 1.2,
-                }}
-              >
-                What are you looking to create?
+              <h1 className="celestial-question">
+                What services do you need?
               </h1>
-              <p
-                style={{
-                  fontSize: "14px",
-                  lineHeight: 1.6,
-                  color: "var(--muted)",
-                  margin: 0,
-                }}
-              >
-                Pick your sound skills below to build your track. Click any card to equip it!
+              <p className="celestial-subtext">
+                Select one or more studio services below to begin tailoring your project.
               </p>
-            </div>
-
-            {/* Quick Combo Loadout Presets */}
-            <div className="game-loadouts-bar">
-              <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--gold)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                ⚡ Quick Loadouts:
-              </span>
-              <button
-                type="button"
-                onClick={() => handleApplyPresetLoadout("hitmaker")}
-                className="game-loadout-btn"
-              >
-                🌟 Full Song Hitmaker
-              </button>
-              <button
-                type="button"
-                onClick={() => handleApplyPresetLoadout("vocals")}
-                className="game-loadout-btn"
-              >
-                🎙️ Vocalist Booth
-              </button>
-              <button
-                type="button"
-                onClick={() => handleApplyPresetLoadout("beat")}
-                className="game-loadout-btn"
-              >
-                🎧 Beat & Mix
-              </button>
-              {selectedSlugs.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => handleApplyPresetLoadout("clear")}
-                  className="game-loadout-btn"
-                  style={{ color: "#f87171", borderColor: "rgba(248, 113, 113, 0.3)" }}
-                >
-                  ✕ Clear All
-                </button>
-              )}
-            </div>
-
-            {/* Heavenly Game Skill Cards Grid */}
-            <div className="game-cards-grid">
-              {activeServiceList.map((svc) => {
-                const isSelected = selectedSlugs.includes(svc.slug);
-                const hours = configurations[svc.slug]?.hours || 2;
-                const calculatedPrice = svc.isHourly
-                  ? hours * (svc.hourlyRateNgn || 25000)
-                  : svc.basePriceNgn;
-                const isHourlyService = svc.isHourly || svc.slug === "voice-recording";
-
-                return (
-                  <div
-                    key={svc.slug}
-                    className={`game-skill-card ${isSelected ? "is-equipped" : ""}`}
-                    onClick={() => handleCardEquipToggle(svc.slug)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        handleCardEquipToggle(svc.slug);
-                      }
-                    }}
-                  >
-                    {equippedXpSlug === svc.slug && (
-                      <div className="game-xp-feedback">✨ +100 XP EQUIPPED!</div>
-                    )}
-
-                    <div>
-                      <div className="game-card-top-row">
-                        <span className="game-rarity-badge" style={{ color: "var(--gold)" }}>
-                          {svc.gameBadge || "✦ SOUND SKILL"}
-                        </span>
-                        <div
-                          style={{
-                            width: "22px",
-                            height: "22px",
-                            borderRadius: "50%",
-                            border: isSelected ? "2px solid var(--gold)" : "2px solid rgba(255, 255, 255, 0.2)",
-                            background: isSelected ? "var(--gold)" : "transparent",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "#050507",
-                            fontSize: "12px",
-                            fontWeight: 800,
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          {isSelected && "✓"}
-                        </div>
-                      </div>
-
-                      <h3 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text)", margin: "0 0 6px" }}>
-                        {svc.title}
-                      </h3>
-
-                      <p style={{ fontSize: "12px", color: isSelected ? "var(--text)" : "var(--muted)", margin: 0, lineHeight: 1.45 }}>
-                        {svc.plainExplanation || svc.tagline}
-                      </p>
-
-                      {svc.stats && (
-                        <span className="game-stat-tag">{svc.stats}</span>
-                      )}
-                    </div>
-
-                    <div style={{ marginTop: "16px" }}>
-                      {/* Live Duration Stepper right on card for hourly recording */}
-                      {isHourlyService && isSelected && (
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            background: "rgba(0, 0, 0, 0.6)",
-                            padding: "6px 10px",
-                            borderRadius: "8px",
-                            marginBottom: "12px",
-                            border: "1px solid var(--gold)",
-                          }}
-                        >
-                          <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>Duration:</span>
-                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const cur = configurations[svc.slug]?.hours || 2;
-                                if (cur > 1) updateConfig(svc.slug, "hours", cur - 1);
-                              }}
-                              style={{
-                                background: "none",
-                                border: "none",
-                                color: "var(--gold)",
-                                fontSize: "16px",
-                                fontWeight: 800,
-                                cursor: "pointer",
-                                padding: "0 4px",
-                                lineHeight: 1,
-                              }}
-                              aria-label="Decrease hours"
-                            >
-                              -
-                            </button>
-                            <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)", minWidth: "52px", textAlign: "center" }}>
-                              {hours} {hours === 1 ? "hour" : "hours"}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const cur = configurations[svc.slug]?.hours || 2;
-                                updateConfig(svc.slug, "hours", cur + 1);
-                              }}
-                              style={{
-                                background: "none",
-                                border: "none",
-                                color: "var(--gold)",
-                                fontSize: "16px",
-                                fontWeight: 800,
-                                cursor: "pointer",
-                                padding: "0 4px",
-                                lineHeight: 1,
-                              }}
-                              aria-label="Increase hours"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <span style={{ fontSize: "14px", fontWeight: 800, color: isSelected ? "var(--gold)" : "var(--text)" }}>
-                          {svc.basePriceNgn === null
-                            ? "Price Upon Request"
-                            : `₦${calculatedPrice.toLocaleString()}`}
-                        </span>
-                        <span style={{ fontSize: "11px", color: "var(--muted)" }}>
-                          {svc.turnaroundDays ? `⚡ ~${svc.turnaroundDays}d` : "Live Studio"}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="game-equip-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCardEquipToggle(svc.slug);
-                        }}
-                      >
-                        {isSelected ? "✓ EQUIPPED" : "+ EQUIP POWER"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
 
             {/* Expandable / Dropdown Studio Service Selector Trigger (Req #1) */}
@@ -2224,7 +1841,7 @@ export default function ServicesPage() {
               <button
                 type="button"
                 disabled={selectedSlugs.length === 0}
-                onClick={() => setStep("confirm")}
+                onClick={() => setStep("details")}
                 className="primary-button"
                 style={{
                   opacity: selectedSlugs.length === 0 ? 0.4 : 1,
@@ -2236,10 +1853,10 @@ export default function ServicesPage() {
                   height: "44px",
                   fontSize: "13px",
                   fontWeight: 700,
-                  letterSpacing: "0.1em",
+                  letterSpacing: "0.08em",
                 }}
               >
-                Continue <RightArrowIcon size={14} color="#050507" />
+                Continue to Project Details <RightArrowIcon size={14} color="#050507" />
               </button>
             </div>
           </section>
@@ -2247,20 +1864,13 @@ export default function ServicesPage() {
 
         {/* =========================================================
             STAGE 2: CONFIRMATION & EXPANSION
-            "Nice. I've got that. Anything else you want included?"
             ========================================================= */}
         {step === "confirm" && (
-          <section
-            style={{
-              background: "rgba(10, 10, 16, 0.8)",
-              border: "1px solid rgba(223, 194, 125, 0.2)",
-              borderRadius: "12px",
-              padding: "clamp(24px, 4vw, 44px)",
-              backdropFilter: "blur(12px)",
-              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
-              animation: "fadeIn 0.25s ease-out",
-            }}
-          >
+          <section className="celestial-tablet">
+            <div className="celestial-whisper">
+              <span>✦</span>
+              <span>STEP 1 SUMMARY • SELECTED SERVICES</span>
+            </div>
             <div style={{ marginBottom: "26px" }}>
               <h1
                 style={{
@@ -2272,7 +1882,7 @@ export default function ServicesPage() {
                   margin: "0 0 10px",
                 }}
               >
-                Nice. I've got that.
+                Selected Services
               </h1>
               <p
                 style={{
@@ -2281,7 +1891,7 @@ export default function ServicesPage() {
                   margin: "0 0 16px",
                 }}
               >
-                You're looking at:
+                Here is what you have selected so far:
               </p>
 
               {/* Selected List */}
@@ -2333,7 +1943,7 @@ export default function ServicesPage() {
                   margin: "0 0 8px",
                 }}
               >
-                Anything else you want included?
+                Need anything else?
               </h2>
               <p
                 style={{
@@ -2342,7 +1952,7 @@ export default function ServicesPage() {
                   margin: 0,
                 }}
               >
-                You can add complementary mixing, recording, or mastering to keep your entire record under one cohesive sonic direction.
+                You can add mixing, recording, or mastering to keep your entire record under one cohesive sound.
               </p>
             </div>
 
@@ -2383,14 +1993,14 @@ export default function ServicesPage() {
                   padding: "0 24px",
                   fontSize: "13px",
                   fontWeight: 700,
-                  letterSpacing: "0.1em",
+                  letterSpacing: "0.08em",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "8px",
                   cursor: "pointer",
                 }}
               >
-                That's Everything — Tailor Details <RightArrowIcon size={14} color="#050507" />
+                Continue to Project Details <RightArrowIcon size={14} color="#050507" />
               </button>
             </div>
           </section>
@@ -2400,29 +2010,19 @@ export default function ServicesPage() {
             STAGE 3: DYNAMIC RELEVANT QUESTIONS PER SERVICE
             ========================================================= */}
         {step === "details" && (
-          <section
-            style={{
-              background: "rgba(10, 10, 16, 0.8)",
-              border: "1px solid rgba(223, 194, 125, 0.2)",
-              borderRadius: "12px",
-              padding: "clamp(24px, 4vw, 44px)",
-              backdropFilter: "blur(12px)",
-              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
-              animation: "fadeIn 0.25s ease-out",
-            }}
-          >
+          <section className="celestial-tablet">
+            <div className="celestial-whisper">
+              <span>✦</span>
+              <span>STEP 2 OF 4 • PROJECT DETAILS</span>
+            </div>
             <div style={{ marginBottom: "28px" }}>
               <h1
+                className="celestial-question"
                 style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "clamp(24px, 3.8vw, 36px)",
-                  fontWeight: 800,
-                  letterSpacing: "0.04em",
-                  color: "var(--text)",
                   margin: "0 0 10px",
                 }}
               >
-                Let's tailor your session.
+                Tell us about your project
               </h1>
               <p
                 style={{
@@ -2432,7 +2032,7 @@ export default function ServicesPage() {
                   lineHeight: 1.5,
                 }}
               >
-                Please answer only the details relevant to the services you selected so we can prepare the studio properly.
+                Please answer a few quick questions tailored to your selected services so we can prepare the studio properly.
               </p>
             </div>
 
@@ -3188,7 +2788,7 @@ export default function ServicesPage() {
             >
               <button
                 type="button"
-                onClick={() => setStep("confirm")}
+                onClick={() => setStep("intent")}
                 className="secondary-button"
                 style={{
                   height: "44px",
@@ -3227,7 +2827,7 @@ export default function ServicesPage() {
                   gap: "8px",
                 }}
               >
-                Continue to Brief & Contact <RightArrowIcon size={14} color="#050507" />
+                Continue to Contact Info <RightArrowIcon size={14} color="#050507" />
               </button>
             </div>
           </section>
@@ -3237,29 +2837,19 @@ export default function ServicesPage() {
             STAGE 4: CLIENT BRIEF & CONTACT DETAILS
             ========================================================= */}
         {step === "client" && (
-          <section
-            style={{
-              background: "rgba(10, 10, 16, 0.8)",
-              border: "1px solid rgba(223, 194, 125, 0.2)",
-              borderRadius: "12px",
-              padding: "clamp(24px, 4vw, 44px)",
-              backdropFilter: "blur(12px)",
-              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
-              animation: "fadeIn 0.25s ease-out",
-            }}
-          >
+          <section className="celestial-tablet">
+            <div className="celestial-whisper">
+              <span>✦</span>
+              <span>STEP 3 OF 4 • CONTACT INFORMATION</span>
+            </div>
             <div style={{ marginBottom: "26px" }}>
               <h1
+                className="celestial-question"
                 style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "clamp(26px, 4vw, 38px)",
-                  fontWeight: 800,
-                  letterSpacing: "0.04em",
-                  color: "var(--text)",
                   margin: "0 0 10px",
                 }}
               >
-                Who am I working with?
+                How can we reach you?
               </h1>
               <p
                 style={{
@@ -3269,7 +2859,7 @@ export default function ServicesPage() {
                   lineHeight: 1.5,
                 }}
               >
-                Provide your contact details so the studio can coordinate delivery, revisions, and direct communication.
+                Enter your contact details so the studio can confirm your booking and keep in touch.
               </p>
             </div>
 
@@ -3428,7 +3018,7 @@ export default function ServicesPage() {
                   gap: "6px",
                 }}
               >
-                <LeftArrowIcon size={13} color="var(--gold)" /> Back to Session Details
+                <LeftArrowIcon size={13} color="var(--gold)" /> Back to Project Details
               </button>
 
               <button
@@ -3448,7 +3038,7 @@ export default function ServicesPage() {
                   gap: "8px",
                 }}
               >
-                Review Session Summary <RightArrowIcon size={14} color="#050507" />
+                Continue to Review Booking <RightArrowIcon size={14} color="#050507" />
               </button>
             </div>
           </section>
@@ -3458,32 +3048,17 @@ export default function ServicesPage() {
             STAGE 5: SESSION SUMMARY & AUTHORITATIVE TOTAL
             ========================================================= */}
         {step === "summary" && (
-          <section
-            style={{
-              background: "rgba(10, 10, 16, 0.8)",
-              border: "1px solid rgba(223, 194, 125, 0.25)",
-              borderRadius: "12px",
-              padding: "clamp(24px, 4vw, 44px)",
-              backdropFilter: "blur(12px)",
-              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
-              animation: "fadeIn 0.25s ease-out",
-            }}
-          >
+          <section className="celestial-tablet">
             <div style={{ marginBottom: "26px", textAlign: "left" }}>
-              <h1
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "clamp(26px, 4vw, 40px)",
-                  fontWeight: 800,
-                  letterSpacing: "0.06em",
-                  color: "var(--text)",
-                  margin: "0 0 8px",
-                }}
-              >
-                YOUR SESSION
+              <div className="celestial-whisper">
+                <span>✦</span>
+                <span>STEP 4 OF 4 • REVIEW BOOKING</span>
+              </div>
+              <h1 className="celestial-question">
+                Review your booking
               </h1>
-              <p style={{ fontSize: "14px", color: "var(--muted)", margin: 0 }}>
-                Review your session breakdown before confirming. Everything is clear, simple, and locked in.
+              <p className="celestial-subtext">
+                Check your booking summary and total before locking in your session. Everything is clear, simple, and transparent.
               </p>
             </div>
 
@@ -3793,8 +3368,6 @@ export default function ServicesPage() {
             </div>
           </section>
         )}
-          </>
-        )}
 
         {/* =========================================================
             STAGE 6: SESSION RESERVED & REAL PAYMENT TRIGGER
@@ -3802,13 +3375,8 @@ export default function ServicesPage() {
             ========================================================= */}
         {step === "success" && confirmedOrder && (
           <section
+            className="celestial-tablet"
             style={{
-              background: "rgba(10, 10, 16, 0.85)",
-              border: "1px solid rgba(223, 194, 125, 0.3)",
-              borderRadius: "12px",
-              padding: "clamp(26px, 5vw, 50px)",
-              backdropFilter: "blur(14px)",
-              boxShadow: "0 10px 50px rgba(0, 0, 0, 0.6)",
               textAlign: "center",
               animation: "fadeIn 0.3s ease-out",
             }}
@@ -3837,7 +3405,7 @@ export default function ServicesPage() {
                 marginBottom: "6px",
               }}
             >
-              SESSION RESERVED
+              BOOKING CONFIRMED
             </p>
 
             <h1
@@ -3850,7 +3418,7 @@ export default function ServicesPage() {
                 margin: "0 0 12px",
               }}
             >
-              Your studio session is locked in.
+              Your studio session is booked.
             </h1>
 
             <p

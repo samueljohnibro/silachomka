@@ -4,7 +4,6 @@ import { useChomkaStore } from "../data/store";
 import { fetchEventBySlug } from "../data/api";
 import SeoHead from "../components/SeoHead";
 import SharePageButton from "../components/SharePageButton";
-import SubscriberNewsletterBox from "../components/SubscriberNewsletterBox";
 import EventsAmbientBackground from "../components/EventsAmbientBackground";
 import { canonicalUrl } from "../data/siteConfig";
 import { getCalendarReturnUrl } from "../utils/calendarNavigation";
@@ -552,10 +551,6 @@ export default function EventDetailPage() {
           <Link to="/calendar" className="secondary-button">
             📅 View Activity Calendar →
           </Link>
-        </div>
-
-        <div style={{ marginTop: "60px" }}>
-          <SubscriberNewsletterBox />
         </div>
       </main>
     </div>

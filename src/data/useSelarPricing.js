@@ -27,21 +27,92 @@ function detectInitialCurrency(override) {
     if (stored) return stored.toUpperCase();
   } catch {}
 
-  // Instant timezone-based geolocation heuristic
+  // Instant multi-signal heuristic (0ms, synchronous, zero network wait)
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    if (tz.includes("Lagos") || tz.includes("Nigeria")) return "NGN";
-    if (tz.includes("Accra") || tz.includes("Ghana")) return "GHS";
-    if (tz.includes("Nairobi") || tz.includes("Kenya")) return "KES";
-    if (tz.includes("Johannesburg") || tz.includes("South_Africa")) return "ZAR";
-    if (tz.includes("London")) return "GBP";
-    if (tz.includes("Kampala")) return "UGX";
-    if (tz.includes("Dar_es_Salaam")) return "TZS";
-    if (tz.includes("Kigali")) return "RWF";
-    if (tz.includes("Lusaka")) return "ZMW";
-    if (tz.includes("America") || tz.includes("New_York") || tz.includes("Chicago") || tz.includes("Los_Angeles")) return "USD";
+    const navLangs = Array.isArray(navigator.languages) ? navigator.languages : [navigator.language || ""];
+    const langStr = navLangs.join(",").toLowerCase();
+
+    // 1. Nigeria (primary artist market)
+    if (
+      tz.includes("Lagos") ||
+      tz.includes("Nigeria") ||
+      tz.includes("Kano") ||
+      tz.includes("Ibadan") ||
+      tz.includes("Porto-Novo") || // adjacent West Africa Time border
+      /-ng\b/i.test(langStr) ||
+      /\b(yo|ig|ha|pcm)\b/i.test(langStr)
+    ) {
+      return "NGN";
+    }
+
+    // 2. Ghana
+    if (tz.includes("Accra") || tz.includes("Ghana") || /-gh\b/i.test(langStr)) return "GHS";
+
+    // 3. Kenya
+    if (tz.includes("Nairobi") || tz.includes("Kenya") || /-ke\b/i.test(langStr)) return "KES";
+
+    // 4. South Africa
+    if (tz.includes("Johannesburg") || tz.includes("South_Africa") || /-za\b/i.test(langStr)) return "ZAR";
+
+    // 5. United Kingdom
+    if (tz.includes("London") || /-gb\b/i.test(langStr)) return "GBP";
+
+    // 6. Uganda
+    if (tz.includes("Kampala") || /-ug\b/i.test(langStr)) return "UGX";
+
+    // 7. Tanzania
+    if (tz.includes("Dar_es_Salaam") || /-tz\b/i.test(langStr)) return "TZS";
+
+    // 8. Rwanda
+    if (tz.includes("Kigali") || /-rw\b/i.test(langStr)) return "RWF";
+
+    // 9. Zambia
+    if (tz.includes("Lusaka") || /-zm\b/i.test(langStr)) return "ZMW";
+
+    // 10. Central Africa (CEMAC / XAF)
+    if (
+      tz.includes("Douala") ||
+      tz.includes("Kinshasa") ||
+      tz.includes("Brazzaville") ||
+      tz.includes("Bangui") ||
+      tz.includes("Malabo") ||
+      tz.includes("Libreville") ||
+      /-(cm|ga|cg|td|gq|cf)\b/i.test(langStr)
+    ) {
+      return "XAF";
+    }
+
+    // 11. West Africa (UEMOA / XOF)
+    if (
+      tz.includes("Abidjan") ||
+      tz.includes("Dakar") ||
+      tz.includes("Cotonou") ||
+      tz.includes("Lome") ||
+      tz.includes("Bamako") ||
+      tz.includes("Niamey") ||
+      tz.includes("Ouagadougou") ||
+      /-(ci|sn|bj|tg|ml|ne|bf)\b/i.test(langStr)
+    ) {
+      return "XOF";
+    }
+
+    // 12. United States & Americas
+    if (
+      tz.includes("America") ||
+      tz.includes("New_York") ||
+      tz.includes("Chicago") ||
+      tz.includes("Los_Angeles") ||
+      tz.includes("Denver") ||
+      tz.includes("Phoenix") ||
+      /-us\b/i.test(langStr)
+    ) {
+      return "USD";
+    }
   } catch {}
 
+  // Authoritative default baseline: silachomka is a Nigerian artist based in Nigeria.
+  // Default to NGN — NEVER default to USD.
   return "NGN";
 }
 
@@ -51,24 +122,65 @@ export function useSelarPricing(initialCurrency) {
   const activeCurrencyRef = useRef(currency);
   activeCurrencyRef.current = currency;
 
-  // Background geolocation detection from Worker CF headers if user has no manual override
+  // Background geolocation verification (query server with device signals)
   useEffect(() => {
     try {
-      const hasOverride = sessionStorage.getItem("chomka_preferred_currency") || localStorage.getItem("chomka_preferred_currency");
-      if (!hasOverride) {
-        fetch("/api/geo")
-          .then((r) => r.json())
-          .then((geo) => {
-            if (geo?.currency && geo.currency !== activeCurrencyRef.current) {
-              const matched = SUPPORTED_CURRENCIES.find((c) => c.code === geo.currency);
-              if (matched) {
-                activeCurrencyRef.current = geo.currency;
-                setCurrencyState(geo.currency);
-              }
+      // If user has explicitly picked a currency, preserve it completely
+      const userSelected =
+        sessionStorage.getItem("chomka_user_selected_currency") ||
+        localStorage.getItem("chomka_user_selected_currency");
+      if (userSelected) return;
+
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      const navLangs = Array.isArray(navigator.languages) ? navigator.languages : [navigator.language || ""];
+      const lang = navLangs[0] || "";
+
+      const queryParams = new URLSearchParams();
+      if (tz) queryParams.set("tz", tz);
+      if (lang) queryParams.set("lang", lang);
+
+      fetch(`/api/geo?${queryParams.toString()}`, {
+        headers: {
+          "x-client-timezone": tz,
+          "x-client-locale": lang,
+        },
+      })
+        .then((r) => r.json())
+        .then((geo) => {
+          if (!geo?.currency) return;
+
+          const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+          const localNavLangs = Array.isArray(navigator.languages) ? navigator.languages : [navigator.language || ""];
+          const localLangStr = localNavLangs.join(",").toLowerCase();
+
+          const isLocallyNigeria =
+            localTz.includes("Lagos") ||
+            localTz.includes("Nigeria") ||
+            localTz.includes("Kano") ||
+            localTz.includes("Ibadan") ||
+            localTz.includes("Porto-Novo") ||
+            /-ng\b/i.test(localLangStr) ||
+            /\b(yo|ig|ha|pcm)\b/i.test(localLangStr);
+
+          // IMMUNITY SHIELD:
+          // Never allow a proxy / CDN datacenter artifact (DE, US, IE, etc.) to flip a Nigerian device to USD!
+          if (isLocallyNigeria && geo.currency !== "NGN" && (geo.country === "DE" || geo.country === "US" || geo.country === "IE")) {
+            console.info("[Geo] Preserving authoritative Nigerian NGN against proxy geo misattribution:", geo.country);
+            return;
+          }
+
+          if (geo.currency !== activeCurrencyRef.current) {
+            const matched = SUPPORTED_CURRENCIES.find((c) => c.code === geo.currency);
+            if (matched) {
+              activeCurrencyRef.current = geo.currency;
+              setCurrencyState(geo.currency);
+              try {
+                sessionStorage.setItem("chomka_preferred_currency", geo.currency);
+              } catch {}
             }
-          })
-          .catch(() => {});
-      }
+          }
+        })
+        .catch(() => {});
     } catch {}
   }, []);
 
@@ -129,6 +241,8 @@ export function useSelarPricing(initialCurrency) {
     try {
       sessionStorage.setItem("chomka_preferred_currency", upper);
       localStorage.setItem("chomka_preferred_currency", upper);
+      sessionStorage.setItem("chomka_user_selected_currency", upper);
+      localStorage.setItem("chomka_user_selected_currency", upper);
     } catch {}
   };
 
