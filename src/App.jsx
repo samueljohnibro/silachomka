@@ -2277,13 +2277,15 @@ function WorldSection() {
   return (
     <section className="world-section" id="world">
       <div className="world-card">
-        <p className="eyebrow">THE ECOSYSTEM ARCHITECTURE</p>
+        <div className="world-card-header">
+          <p className="eyebrow">THE ECOSYSTEM ARCHITECTURE</p>
 
-        <h2>CHOMKA NATION</h2>
+          <h2>CHOMKA NATION</h2>
 
-        <p>
-          The overarching parent ecosystem. Multiple creative, music, software and athletic divisions.
-        </p>
+          <p className="world-card-subtitle">
+            The overarching parent ecosystem. Multiple creative, music, software and athletic divisions.
+          </p>
+        </div>
 
         <div className="ecosystem">
           {/* Pillar 1: chomkaMUSIC */}
